@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct Snoots_App: App {
+    @State private var store = SnootsStore()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(store: store)
         }
     }
 }
