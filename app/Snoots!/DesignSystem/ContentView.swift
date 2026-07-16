@@ -779,7 +779,12 @@ struct PlaceDetailSheet: View {
             }
             .navigationTitle("Place details")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.font(.snootsUI(15, weight: .semibold)) } }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .font(.snootsUI(15, weight: .semibold))
+                }
+            }
         }
     }
 }
