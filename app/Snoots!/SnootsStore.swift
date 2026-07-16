@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class SnootsStore {
     let profile = ParentProfile(name: "Amber", petName: "Nori", trustScore: 92, neighborhood: "Da’an District, Taipei")
@@ -14,6 +15,7 @@ final class SnootsStore {
     var isMatched = false
     var careStepIndex = 0
     var savedPlaceIDs: Set<String> = []
+    let mapPlaces = MapPlacesRepository()
 
     let socialPosts = [
         SocialPost(owner: "Yuna", petName: "Nori", timeAgo: "12 min", body: "First calm walk at Da’an Forest Park. Nori did beautifully with a long lead and lots of space.", declarations: ["Leash on", "Slow introductions", "Adult dogs"], likes: 48, comments: 8, kind: .photo, photoName: "Nori"),

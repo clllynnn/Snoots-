@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 
 struct ContentView: View {
@@ -459,6 +460,11 @@ private struct ClinicCard: View {
 struct MapsView: View {
     let store: SnootsStore
     @Binding var presentedSheet: SnootsSheet?
+    @State private var selectedCategory: MapPlace.Category?
+
+    private var visibleMapPlaces: [MapPlace] {
+        store.mapPlaces.places.filter { selectedCategory == nil || $0.category == selectedCategory }
+    }
 
     var body: some View {
         ScrollView {
@@ -475,9 +481,27 @@ struct MapsView: View {
                         .background(SnootsPalette.surface, in: Circle())
                 }
 
-                NeighborhoodMapCard(places: store.places)
+                NeighborhoodMapCard(places: visibleMapPlaces, isResolving: store.mapPlaces.isResolvingLocations)
                 EmergencyMapCard(clinic: store.clinic) { presentedSheet = .emergency }
-                Text("Pet-friendly nearby").font(.snootsSection())
+
+                Picker("Place type", selection: $selectedCategory) {
+                    Text("All").tag(MapPlace.Category?.none)
+                    ForEach(MapPlace.Category.allCases) { category in
+                        Label(category.title, systemImage: category.symbol).tag(Optional(category))
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text("Maps database · \(visibleMapPlaces.count) places").font(.snootsSection())
+                if let errorMessage = store.mapPlaces.errorMessage {
+                    ContentUnavailableView("Maps database unavailable", systemImage: "externaldrive.badge.exclamationmark", description: Text(errorMessage))
+                } else {
+                    ForEach(visibleMapPlaces) { place in
+                        DatabasePlaceRow(place: place)
+                    }
+                }
+
+                Text("Featured nearby").font(.snootsSection())
 
                 ForEach(store.places) { place in
                     PlaceRow(place: place, isSaved: store.isSaved(place), onOpen: { presentedSheet = .place(place.id) }, onToggleSave: { store.toggleSaved(place) })
@@ -487,6 +511,9 @@ struct MapsView: View {
         }
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
+        .task {
+            await store.mapPlaces.resolveLocationsIfNeeded()
+        }
     }
 }
 
@@ -525,34 +552,32 @@ private struct EmergencyMapCard: View {
 }
 
 private struct NeighborhoodMapCard: View {
-    let places: [Place]
+    let places: [MapPlace]
+    let isResolving: Bool
+    @State private var position = MapCameraPosition.region(
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5654),
+            span: MKCoordinateSpan(latitudeDelta: 0.16, longitudeDelta: 0.16)
+        )
+    )
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 20, style: .continuous).fill(SnootsPalette.lime)
-            Path { path in
-                path.move(to: CGPoint(x: 12, y: 48))
-                path.addCurve(to: CGPoint(x: 330, y: 175), control1: CGPoint(x: 98, y: 108), control2: CGPoint(x: 225, y: 78))
-                path.move(to: CGPoint(x: 34, y: 178))
-                path.addCurve(to: CGPoint(x: 330, y: 32), control1: CGPoint(x: 155, y: 132), control2: CGPoint(x: 214, y: 56))
+            Map(position: $position) {
+                ForEach(places) { place in
+                    if let coordinate = place.coordinate {
+                        Marker(place.name, systemImage: place.category.symbol, coordinate: coordinate)
+                            .tint(markerColor(for: place.category))
+                    }
+                }
             }
-            .stroke(.white, lineWidth: 7)
-
-            ForEach(Array(places.enumerated()), id: \.element.id) { index, place in
-                Label("\(index + 1)", systemImage: "mappin.and.ellipse")
-                    .font(.snootsChip())
-                    .foregroundStyle(.white)
-                    .padding(9)
-                    .background(index == 0 ? SnootsPalette.pink : SnootsPalette.careBlue, in: Capsule())
-                    .offset(x: index == 0 ? -94 : (index == 1 ? 55 : 95), y: index == 0 ? -32 : (index == 1 ? 42 : -64))
-                    .accessibilityLabel("\(place.name), location \(index + 1)")
-            }
+            .mapStyle(.standard(elevation: .realistic))
             VStack {
                 Spacer()
                 HStack {
-                    Label("Live rules", systemImage: "checkmark.seal.fill")
+                    Label(isResolving ? "Locating places…" : "\(places.filter { $0.coordinate != nil }.count) mapped", systemImage: "mappin.and.ellipse")
                     Spacer()
-                    Text("Da’an")
+                    Text("Taipei")
                 }
                 .font(.snootsChip())
                 .padding(12)
@@ -561,6 +586,62 @@ private struct NeighborhoodMapCard: View {
             .padding(12)
         }
         .frame(height: 190)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private func markerColor(for category: MapPlace.Category) -> Color {
+        switch category {
+        case .restaurant: SnootsPalette.pink
+        case .park: SnootsPalette.deepLilac
+        case .hospital: SnootsPalette.careBlue
+        }
+    }
+}
+
+private struct DatabasePlaceRow: View {
+    let place: MapPlace
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: place.category.symbol)
+                .font(.title3)
+                .foregroundStyle(categoryColor)
+                .frame(width: 40, height: 40)
+                .background(categoryColor.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 5) {
+                Text(place.name).font(.snootsCardTitle())
+                Text(place.category.title).font(.snootsMetadata()).foregroundStyle(categoryColor)
+                if !place.subtitle.isEmpty {
+                    Text(place.subtitle).font(.snootsMetadata()).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            if let appleMapsURL = place.appleMapsURL {
+                Button {
+                    openURL(appleMapsURL)
+                } label: {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.title3)
+                        .foregroundStyle(SnootsPalette.ink)
+                        .frame(width: 36, height: 36)
+                        .background(SnootsPalette.softPink, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(place.name) in Apple Maps")
+            }
+        }
+        .padding(14)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
+    }
+
+    private var categoryColor: Color {
+        switch place.category {
+        case .restaurant: SnootsPalette.pink
+        case .park: SnootsPalette.deepLilac
+        case .hospital: SnootsPalette.careBlue
+        }
     }
 }
 
