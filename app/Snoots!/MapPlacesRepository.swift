@@ -11,6 +11,7 @@ struct MapPlace: Identifiable {
     let location: String?
     let appleMapsURL: URL?
     let sourceURL: URL?
+    let ruleLabels: [String]
     var coordinate: CLLocationCoordinate2D?
 
     enum Category: String, CaseIterable, Identifiable {
@@ -89,14 +90,21 @@ final class MapPlacesRepository {
         defer { sqlite3_close(database) }
 
         let sql = """
-        SELECT category, source_id, name, area, location, apple_maps_url, source_url
+        SELECT category, source_id, name, area, location, apple_maps_url, source_url,
+               accepted_dog_size, ground_allowed, leash_required, free_roam
         FROM (
             SELECT 'pet_friendly_restaurant' AS category, id AS source_id, name, district AS area,
-                   address AS location, apple_maps_url, source_url FROM restaurants
+                   address AS location, apple_maps_url, source_url,
+                   accepted_dog_size, ground_allowed, leash_required, free_roam
+            FROM restaurants
             UNION ALL
-            SELECT 'pet_friendly_park', id, name, city, NULL, apple_maps_url, source_url FROM pet_parks
+            SELECT 'pet_friendly_park', id, name, city, NULL, apple_maps_url, source_url,
+                   NULL, NULL, leash_required, NULL
+            FROM pet_parks
             UNION ALL
-            SELECT 'animal_hospital', id, name, district, NULL, apple_maps_url, source_url FROM animal_hospitals
+            SELECT 'animal_hospital', id, name, district, NULL, apple_maps_url, source_url,
+                   NULL, NULL, NULL, NULL
+            FROM animal_hospitals
         )
         ORDER BY category, name COLLATE NOCASE
         """
@@ -124,6 +132,12 @@ final class MapPlacesRepository {
                     location: string(from: statement, column: 4),
                     appleMapsURL: string(from: statement, column: 5).flatMap(URL.init(string:)),
                     sourceURL: string(from: statement, column: 6).flatMap(URL.init(string:)),
+                    ruleLabels: ruleLabels(
+                        acceptedDogSize: string(from: statement, column: 7),
+                        groundAllowed: string(from: statement, column: 8),
+                        leashRequired: string(from: statement, column: 9),
+                        freeRoam: string(from: statement, column: 10)
+                    ),
                     coordinate: nil
                 )
             )
@@ -134,5 +148,27 @@ final class MapPlacesRepository {
     private func string(from statement: OpaquePointer?, column: Int32) -> String? {
         guard let value = sqlite3_column_text(statement, column) else { return nil }
         return String(cString: value)
+    }
+
+    private func ruleLabels(
+        acceptedDogSize: String?,
+        groundAllowed: String?,
+        leashRequired: String?,
+        freeRoam: String?
+    ) -> [String] {
+        let labels = [
+            acceptedDogSize.map { "體型：\($0)" },
+            groundAllowed,
+            leashRequired,
+            freeRoam
+        ]
+        var seenLabels = Set<String>()
+
+        return labels.compactMap { label in
+            guard let label else { return nil }
+            let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedLabel.isEmpty, seenLabels.insert(trimmedLabel).inserted else { return nil }
+            return trimmedLabel
+        }
     }
 }
