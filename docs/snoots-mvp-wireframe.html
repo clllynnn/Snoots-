@@ -248,6 +248,9 @@
     .detail-participants { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); cursor: pointer; text-align: left; }
     .detail-participants strong { display: block; margin-bottom: 2px; font-size: 10px; }
     .detail-participants span { color: var(--secondary); font-size: 9px; }
+    .detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .detail-actions button { margin-top: 0; }
+    .detail-action-status { margin-top: 8px; padding: 9px 11px; border-radius: 12px; background: var(--soft-pink); color: var(--pink-dark); font-size: 9px; line-height: 1.45; }
     .detail-cta { position: sticky; bottom: -100px; margin-top: 14px; padding-top: 10px; background: linear-gradient(transparent, var(--canvas) 24%); }
     .compare-intro { padding: 14px; border-radius: var(--radius-card); background: var(--sky-soft); border: 1px solid #bdddf8; }
     .compare-intro strong { display: block; margin-bottom: 4px; font-size: 12px; }
@@ -291,6 +294,23 @@
     .swipe-empty.is-visible { display: grid; }
     .swipe-empty h3 { margin-bottom: 5px; font-size: 22px; }
     .swipe-empty p { color: var(--secondary); font-size: 10px; line-height: 1.5; }
+    .swipe-status { margin: 10px 0 0; padding: 10px 11px; border-radius: 12px; background: var(--surface-soft); color: var(--secondary); font-size: 9px; line-height: 1.45; }
+    .swipe-status.is-success { background: var(--lime); color: var(--ink); }
+
+    .friends-intro { padding: 14px; border-radius: var(--radius-card); background: var(--lime); border: 1px solid rgba(20,20,26,.12); }
+    .friends-intro h2 { margin-bottom: 4px; font-size: 27px; }
+    .friends-intro p { margin-bottom: 0; color: #3f4c1b; font-size: 10px; line-height: 1.45; }
+    .friend-card, .chat-history { margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+    .friend-card { display: flex; align-items: center; gap: 11px; }
+    .friend-card img { width: 54px; height: 54px; flex: 0 0 auto; border-radius: 16px; object-fit: cover; }
+    .friend-card h3 { margin-bottom: 3px; font-size: 16px; }
+    .friend-card p, .chat-history p { margin-bottom: 0; color: var(--secondary); font-size: 9px; line-height: 1.5; }
+    .friend-card .info-chip { margin-left: auto; }
+    .chat-history h3 { margin-bottom: 8px; font-size: 15px; }
+    .chat-row { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 9px 0; border-top: 1px solid var(--line); }
+    .chat-row:first-of-type { border-top: 0; padding-top: 0; }
+    .chat-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+    .chat-row strong { display: block; margin-bottom: 2px; font-size: 10px; }
 
     .place-hero { width: 100%; height: 205px; object-fit: cover; border-radius: var(--radius-card); }
     .place-title { margin: 13px 0 0; }
@@ -459,6 +479,7 @@
           <button class="scene-button" data-scene="activity" type="button"><strong>活動詳情</strong><span>資訊與參加犬</span></button>
           <button class="scene-button" data-scene="compare" type="button"><strong>AI 比較</strong><span>排序與原因</span></button>
           <button class="scene-button" data-scene="swipe" type="button"><strong>參加犬</strong><span>左右滑</span></button>
+          <button class="scene-button" data-scene="friends" type="button"><strong>狗友頁</strong><span>配對與聊天</span></button>
           <button class="scene-button" data-scene="place" type="button"><strong>地點規則</strong><span>主要與次要</span></button>
         </nav>
       </section>
@@ -606,6 +627,11 @@
             </div>
           </section>
           <button class="detail-participants" id="activity-detail-participants" type="button" data-review-id="activity-detail-participants" data-review-label="活動參加犬入口" data-review-count="0"><div><strong>先看看會遇到的狗狗</strong><span>Mochi、Pudding 和其他參加犬</span></div><div class="mini-avatars"><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"></span><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg" alt="Pudding"></span></div></button>
+          <div class="detail-actions" data-review-id="activity-detail-response" data-review-label="活動詳情我有興趣與我要參加" data-review-count="0">
+            <button class="secondary-button" id="activity-detail-interest" type="button">我有興趣</button>
+            <button class="primary-button" id="activity-detail-join" type="button">我要參加</button>
+          </div>
+          <div class="detail-action-status" id="activity-detail-status" hidden>先表達興趣，等確認活動細節後再決定是否參加。</div>
           <div class="verify-note">報名前可先用 AI 與其他活動比較；實際參加仍請主人依狗狗當天狀態判斷。</div>
           <div class="detail-cta" data-review-id="activity-detail-cta" data-review-label="活動詳情加入 AI 比較按鈕" data-review-count="0"><button class="primary-button" id="activity-detail-select" type="button">加入 AI 比較</button></div>
         </section>
@@ -626,8 +652,17 @@
           <header class="screen-header" data-review-id="swipe-header" data-review-label="活動參加犬滑卡入口" data-review-count="0"><div><h2 id="swipe-title" data-copy-id="swipe-title" contenteditable="true">先認識會遇到的狗狗</h2><p>右滑喜歡，左滑略過；互相喜歡才會配對</p></div></header>
           <div class="swipe-context" id="swipe-context">來自：小型犬慢走團</div>
           <div class="swipe-deck" id="swipe-deck" data-review-id="swipe-card" data-review-label="左右滑狗狗卡片與資訊量" data-review-count="0"></div>
-          <div class="swipe-empty" id="swipe-empty"><div><h3>這場先看到這裡</h3><p>你留下的喜歡只有對方也喜歡時才會成立。第一次見面仍建議在公開活動進行。</p><button class="primary-button" data-open-screen="compare" type="button">回活動比較</button></div></div>
+          <div class="swipe-status" id="swipe-status" hidden></div>
+          <div class="swipe-empty" id="swipe-empty"><div><h3>這場先看到這裡</h3><p>你留下的喜歡只有對方也喜歡時才會成立。第一次見面仍建議在公開活動進行。</p><button class="primary-button" data-open-screen="friends" type="button">查看狗友頁</button><button class="secondary-button" data-open-screen="compare" type="button">回活動比較</button></div></div>
           <div class="swipe-actions" id="swipe-actions" data-review-id="swipe-actions" data-review-label="左滑略過與右滑喜歡操作" data-review-count="0"><button class="swipe-action" id="pass-dog" type="button" aria-label="略過這隻狗">×</button><button class="swipe-action like" id="like-dog" type="button" aria-label="喜歡這隻狗">♥</button></div>
+        </section>
+
+        <section class="app-screen" id="screen-friends" aria-labelledby="friends-title">
+          <header class="screen-header" data-review-id="friends-header" data-review-label="狗友頁標題與配對狀態" data-review-count="0"><div><h2 id="friends-title">狗友</h2><p>已配對的狗友與活動後的聊天紀錄</p></div></header>
+          <div class="friends-intro"><h2>先在線上認識，再到公開活動見面</h2><p>配對不會取代活動報名；你可以先確認彼此的相處方式，再決定要不要聊天或參加。</p></div>
+          <section class="friend-card" data-review-id="matched-friends" data-review-label="已配對狗友" data-review-count="0"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"><div><h3>Mochi · Elena</h3><p>小型犬慢走團 · 互相喜歡</p></div><span class="info-chip green">已配對</span></section>
+          <section class="chat-history" data-review-id="chat-history" data-review-label="狗友聊天紀錄" data-review-count="0"><h3>聊天紀錄</h3><div class="chat-row"><img class="chat-avatar" src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"><div><strong>Elena · 今天 18:42</strong><p>嗨！我們會先在 2 號出口集合，讓 Mochi 和 Nori 保持一點距離慢慢走。</p></div></div><div class="chat-row"><img class="chat-avatar" src="../app/Snoots!/Assets.xcassets/Nori.imageset/nori.jpg" alt="Nori"><div><strong>你 · 今天 18:45</strong><p>好，謝謝你先說明。我們也會提早到，先讓 Nori 熟悉環境。</p></div></div></section>
+          <button class="primary-button" data-open-screen="activity" type="button">回活動詳情</button>
         </section>
 
         <section class="app-screen" id="screen-place" aria-labelledby="place-title">
@@ -651,14 +686,14 @@
 
         <nav class="bottom-nav" aria-label="主要導覽">
           <button class="nav-button is-active" data-nav="discover" type="button"><span class="nav-icon"></span>探索</button>
-          <button class="nav-button" data-nav="swipe" type="button"><span class="nav-icon"></span>狗友</button>
+          <button class="nav-button" data-nav="friends" type="button"><span class="nav-icon"></span>狗友</button>
           <button class="nav-button" type="button" onclick="showToast('社群動態保留現況，本版不展開')"><span class="nav-icon"></span>社群</button>
           <button class="nav-button" type="button" onclick="showToast('這裡會回到 Nori 的狗狗檔案')"><span class="nav-icon"></span>我的</button>
         </nav>
 
         <div class="selection-dock" id="selection-dock" data-review-id="ai-compare-cta" data-review-label="活動勾選數量與 AI 比較按鈕" data-review-count="0"><div class="selection-summary"><strong id="selection-title">已選 2 場</strong><span id="selection-help">可以請 AI 開始比較</span></div><button class="compare-button" id="compare-selected" type="button">AI 比較</button></div>
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
-        <div class="modal-backdrop" id="match-modal" role="dialog" aria-modal="true" aria-labelledby="match-title"><div class="modal"><h2 id="match-title">你和 Mochi 都有興趣</h2><p>第一次見面先安排在「小型犬慢走團」。你們不用直接交換私人聯絡方式，也能在公開活動自然認識。</p><button class="primary-button" type="button" onclick="closeMatch(); showScreen('compare')">回活動查看</button><button class="secondary-button" type="button" onclick="closeMatch()">繼續看狗狗</button></div></div>
+        <div class="modal-backdrop" id="match-modal" role="dialog" aria-modal="true" aria-labelledby="match-title"><div class="modal"><h2 id="match-title">配對成功：你和 Mochi</h2><p>你們都對彼此有興趣。第一次見面先安排在「小型犬慢走團」，可以先在狗友頁保留活動後的聊天紀錄。</p><button class="primary-button" type="button" onclick="closeMatch(); showScreen('friends')">查看狗友頁</button><button class="secondary-button" type="button" onclick="closeMatch(); showScreen('activity')">回活動詳情</button></div></div>
       </div>
     </section>
 
@@ -699,6 +734,7 @@
     const feedbackPanel = document.getElementById('feedback-panel');
     const reviewState = { mode: 'interact', target: null, type: '修改', feedback: loadFeedback(), fileHandle: null };
     const selectedActivities = new Set(['slow-walk', 'indoor-meet']);
+    const activityResponseState = {};
     let aiTimer;
     let toastTimer;
     let swipeIndex = 0;
@@ -787,8 +823,31 @@
       document.getElementById('activity-detail-meeting').textContent = detail.meeting;
       document.getElementById('activity-detail-rules').textContent = detail.rules;
       document.getElementById('activity-detail-host').textContent = detail.host;
+      updateActivityResponse();
       updateActivityDetailButton();
       showScreen('activity');
+    }
+
+    function updateActivityResponse() {
+      const state = activityResponseState[currentActivityDetail];
+      const status = document.getElementById('activity-detail-status');
+      const interest = document.getElementById('activity-detail-interest');
+      const join = document.getElementById('activity-detail-join');
+      status.hidden = !state;
+      if (!state) {
+        interest.textContent = '我有興趣';
+        join.textContent = '我要參加';
+        return;
+      }
+      if (state === 'joined') {
+        interest.textContent = '已表達興趣';
+        join.textContent = '已報名這場';
+        status.textContent = '你已報名這場活動；活動前仍可在狗友頁先認識參加犬。';
+      } else {
+        interest.textContent = '已表達興趣';
+        join.textContent = '我要參加';
+        status.textContent = '已記下你的興趣。確認參加前，可以先看看這場會遇到的狗狗。';
+      }
     }
 
     function updateActivityDetailButton() {
@@ -843,10 +902,12 @@
         return `<article class="result-card ${index === 0 ? 'is-top' : ''}" data-review-id="ai-result-${id}" data-review-label="AI 比較結果：${activity.title}" data-review-count="0">
           <div class="result-top"><div><h3>${activity.title}</h3><p>${activity.description}</p></div><span class="result-badge ${activity.badge}">${activity.label}</span></div>
           <ul class="reason-list">${activity.reasons.map(reason => `<li>${reason}</li>`).join('')}</ul>
+          <button class="card-link" data-open-activity="${id}" type="button">查看活動詳情 →</button>
           <button class="participant-action" data-open-swipe="${id}" type="button"><div><strong>看看這場會遇到的狗狗</strong><br><span>Mochi、Pudding 和其他參加犬</span></div><div class="mini-avatars"><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"></span><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg" alt="Pudding"></span></div></button>
         </article>`;
       }).join('');
       document.querySelectorAll('[data-open-swipe]').forEach(button => button.addEventListener('click', () => openSwipe(button.dataset.openSwipe)));
+      document.querySelectorAll('#result-stack [data-open-activity]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); openActivityDetail(button.dataset.openActivity); }));
       updateReviewCounts();
     }
 
@@ -864,7 +925,11 @@
       const deck = document.getElementById('swipe-deck');
       const empty = document.getElementById('swipe-empty');
       const actions = document.getElementById('swipe-actions');
+      const status = document.getElementById('swipe-status');
       deck.innerHTML = '';
+      status.hidden = true;
+      status.classList.remove('is-success');
+      status.textContent = '';
       if (swipeIndex >= swipeDogs.length) {
         deck.style.display = 'none';
         empty.classList.add('is-visible');
@@ -921,8 +986,17 @@
       setTimeout(() => {
         swipeIndex += 1;
         renderSwipeDeck();
-        if (action === 'like' && dog.mutual) document.getElementById('match-modal').classList.add('is-visible');
-        else showToast(action === 'like' ? `已向 ${dog.name} 表達興趣` : `已略過 ${dog.name}`);
+        if (action === 'like' && dog.mutual) {
+          const status = document.getElementById('swipe-status');
+          status.hidden = false;
+          status.classList.add('is-success');
+          status.textContent = `配對成功：${dog.name} 也喜歡 Nori。現在可以到狗友頁保留聊天紀錄。`;
+          document.getElementById('match-modal').classList.add('is-visible');
+        } else if (action === 'like') {
+          const status = document.getElementById('swipe-status');
+          status.hidden = false;
+          status.textContent = `已向 ${dog.name} 表達興趣，等待對方回覆。對方喜歡你時才會配對成功。`;
+        } else showToast(`已略過 ${dog.name}`);
       }, 230);
     }
 
@@ -1008,7 +1082,7 @@
     }
 
     function buildTeamMarkdown() {
-      const screenLabels = { discover: '探索清單', activity: '活動詳情', compare: 'AI 比較', swipe: '參加犬滑卡', place: '地點規則', all: '整體流程' };
+      const screenLabels = { discover: '探索清單', activity: '活動詳情', compare: 'AI 比較', swipe: '參加犬滑卡', friends: '狗友頁', place: '地點規則', all: '整體流程' };
       const sections = [
         { type: '修改', title: '建議調整' },
         { type: '保留', title: '希望保留' },
@@ -1037,7 +1111,7 @@
 
     function buildCodexMarkdown() {
       const grouped = reviewState.feedback.reduce((result, item) => { (result[item.screen] ||= []).push(item); return result; }, {});
-      const screenLabels = { discover: '探索清單', activity: '活動詳情', compare: 'AI 比較', swipe: '參加犬滑卡', place: '地點規則', all: '整體' };
+      const screenLabels = { discover: '探索清單', activity: '活動詳情', compare: 'AI 比較', swipe: '參加犬滑卡', friends: '狗友頁', place: '地點規則', all: '整體' };
       const lines = ['# Snoots! MVP 畫面回饋', '', `產生時間：${new Date().toLocaleString('zh-TW')}`, '', '## 給下一個 Codex', '', '- 以本檔案作為畫面修改的主要依據。', '- 先讀 `docs/snoots-mvp-wireframe.html` 與本回饋，不要重新發明產品方向。', '- 完成後保留原型內的意見工具，讓下一輪可以繼續審稿。', ''];
       if (!reviewState.feedback.length) lines.push('## 區塊意見', '', '目前沒有已儲存的區塊意見。', '');
       else Object.entries(grouped).forEach(([screen, items]) => {
@@ -1139,6 +1213,16 @@
     document.getElementById('compare-selected').addEventListener('click', () => showScreen('compare'));
     document.getElementById('activity-detail-select').addEventListener('click', () => toggleActivity(currentActivityDetail));
     document.getElementById('activity-detail-participants').addEventListener('click', () => openSwipe(currentActivityDetail));
+    document.getElementById('activity-detail-interest').addEventListener('click', () => {
+      activityResponseState[currentActivityDetail] = 'interested';
+      updateActivityResponse();
+      showToast('已記下興趣；接下來可以看看參加犬');
+    });
+    document.getElementById('activity-detail-join').addEventListener('click', () => {
+      activityResponseState[currentActivityDetail] = 'joined';
+      updateActivityResponse();
+      showToast('已加入活動，仍可先到狗友頁聊天');
+    });
     document.getElementById('toggle-map').addEventListener('click', event => { const map = document.getElementById('compact-map'); map.classList.toggle('is-expanded'); event.currentTarget.textContent = map.classList.contains('is-expanded') ? '收合地圖' : '展開地圖'; });
     document.getElementById('pass-dog').addEventListener('click', () => swipeDog('pass'));
     document.getElementById('like-dog').addEventListener('click', () => swipeDog('like'));
