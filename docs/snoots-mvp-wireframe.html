@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Snoots! 一日 MVP 團隊 review 用互動原型">
-  <title>Snoots! MVP Review Prototype</title>
+  <meta name="description" content="Snoots! 一日 MVP 團隊審閱用互動原型">
+  <title>Snoots! MVP 團隊審閱原型</title>
   <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -396,9 +396,9 @@
 <body>
   <main class="review-shell">
     <aside class="review-panel" aria-labelledby="review-title">
-      <div class="eyebrow">Team review prototype</div>
+      <div class="eyebrow">團隊審閱原型</div>
       <h1 id="review-title">Snoots!</h1>
-      <p class="review-lede" data-pretext contenteditable="true">這不是最終視覺稿，而是一張讓三位組員共同確認產品主線、資訊層級與分工邊界的可操作原型。</p>
+      <p class="review-lede" data-pretext contenteditable="true">這不是最終視覺稿，而是一張讓全隊三人（包含 Dennis）共同確認產品主線、資訊層級與分工邊界的可操作原型。</p>
 
       <div class="flow-callout">
         <strong>一天只完成這個故事</strong>
@@ -408,7 +408,7 @@
       <nav class="scenario-list" aria-label="原型情境">
         <button class="scenario-button is-active" data-scenario="map" type="button"><strong>1. 核心流程</strong><span>地圖與活動</span></button>
         <button class="scenario-button" data-scenario="dogs" type="button"><strong>2. 滑卡入口</strong><span>配對接活動</span></button>
-        <button class="scenario-button" data-scenario="care" type="button"><strong>3. Care 圖層</strong><span>急診資訊</span></button>
+        <button class="scenario-button" data-scenario="care" type="button"><strong>3. 急診照護圖層</strong><span>急診資訊</span></button>
         <button class="scenario-button" data-scenario="place" type="button"><strong>4. 付費牆示意</strong><span>地點詳情</span></button>
       </nav>
 
@@ -417,13 +417,13 @@
         <ul>
           <li>地圖切入，線下見面是結果。</li>
           <li>滑卡保留，配對後接公開活動。</li>
-          <li>AI 只做活動適合度，不做拍照建檔與破冰文案。</li>
-          <li>Care 收進地圖，基本安全資訊不鎖付費牆。</li>
+          <li>AI 聚焦活動適合度與原因說明。</li>
+          <li>急診照護收進地圖，基本安全資訊不鎖付費牆。</li>
         </ul>
       </section>
 
       <section class="review-group">
-        <h2>請團隊 review</h2>
+        <h2>請團隊審閱</h2>
         <ul>
           <li>三種地圖標記是否一眼能分辨？</li>
           <li>適合度的理由是否夠可信、沒有過度承諾？</li>
@@ -450,7 +450,7 @@
             <button class="filter-chip is-active" data-layer="all" role="tab" aria-selected="true" type="button">全部</button>
             <button class="filter-chip" data-layer="event" role="tab" aria-selected="false" type="button">狗聚</button>
             <button class="filter-chip" data-layer="place" role="tab" aria-selected="false" type="button">地點</button>
-            <button class="filter-chip" data-layer="care" role="tab" aria-selected="false" type="button">Care</button>
+            <button class="filter-chip" data-layer="care" role="tab" aria-selected="false" type="button">急診</button>
           </div>
 
           <div class="map" aria-label="大安區示意地圖">
@@ -479,7 +479,7 @@
           </article>
 
           <article class="preview-card" id="preview-care">
-            <span class="demo-data">DEMO DATA</span>
+            <span class="demo-data">示意資料</span>
             <div class="preview-top"><div><h3>大安夜間動物醫院</h3><p>車程 8 分鐘 · 接受夜間急診，前往前請先電話確認</p></div></div>
             <button class="primary-button care" data-open-screen="care" type="button">查看電話與資訊</button>
           </article>
@@ -545,9 +545,9 @@
 
         <section class="app-screen" id="screen-care" aria-labelledby="care-title">
           <button class="back-button" data-open-screen="map" type="button">‹ 回地圖</button>
-          <header class="screen-header"><div><h2 id="care-title">Care</h2><p>附近可聯絡的動物醫療地點</p></div></header>
+          <header class="screen-header"><div><h2 id="care-title">急診照護</h2><p>附近可聯絡的動物醫療地點</p></div></header>
           <div class="clinic-card">
-            <span class="demo-data">DEMO DATA · 請勿作真實醫療使用</span>
+            <span class="demo-data">示意資料 · 請勿作真實醫療使用</span>
             <h3>大安夜間動物醫院</h3>
             <p>車程約 8 分鐘 · 接受夜間急診。營業與急診狀況可能變動，前往前請先電話確認。</p>
             <div class="rule-list">
@@ -555,9 +555,9 @@
               <div class="rule">地址：台北市大安區示意路 104 號</div>
               <div class="rule">最後確認：今天 18:40</div>
             </div>
-            <button class="primary-button care" type="button" onclick="showToast('Demo：這裡會開啟電話撥號')">先打電話確認</button>
+            <button class="primary-button care" type="button" onclick="showToast('展示模式：這裡會開啟電話撥號')">先打電話確認</button>
           </div>
-          <p class="review-hint">Care 的基本資訊不進付費牆；本版不提供症狀判斷、醫療建議或緊急派遣。</p>
+          <p class="review-hint">急診照護的基本資訊不進付費牆；本版不提供症狀判斷、醫療建議或緊急派遣。</p>
         </section>
 
         <section class="app-screen" id="screen-place" aria-labelledby="place-title">
@@ -594,7 +594,7 @@
         <div class="modal-backdrop" id="paywall-modal" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
           <div class="modal">
             <h2 id="paywall-title">付費牆位置待討論</h2>
-            <p>基本場地規則與 Care 保持免費。進階個人化分析、規則變動提醒與推薦時段，可作為未來付費方向。</p>
+            <p>基本場地規則與急診照護資訊保持免費。進階個人化分析、規則變動提醒與推薦時段，可作為未來付費方向。</p>
             <button class="primary-button" type="button" onclick="showToast('已記錄：這裡只做付費牆示意'); closePaywall()">了解概念</button>
             <button class="secondary-button" type="button" onclick="closePaywall()">返回地點</button>
           </div>
