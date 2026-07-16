@@ -185,9 +185,12 @@
     .listing-view { display: none; }
     .listing-view.is-visible { display: block; }
     .listing-stack { display: grid; gap: 10px; }
+    .place-category-row { display: flex; gap: 7px; margin: 0 0 10px; overflow-x: auto; scrollbar-width: none; }
+    .place-category-row::-webkit-scrollbar { display: none; }
 
     .activity-card, .place-card, .care-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); box-shadow: 0 4px 14px rgba(20,20,26,.05); }
-    .activity-card { display: grid; grid-template-columns: 86px 1fr; min-height: 146px; }
+    .activity-card { display: grid; grid-template-columns: 86px 1fr; min-height: 146px; cursor: pointer; }
+    .activity-card:hover { border-color: var(--pink); }
     .activity-card.is-selected { border: 2px solid var(--pink); box-shadow: 0 0 0 3px var(--soft-pink); }
     .activity-date { display: flex; flex-direction: column; justify-content: space-between; padding: 14px 11px; background: var(--surface-soft); border-right: 1px solid var(--line); }
     .activity-date strong { font-family: "Nunito"; font-size: 25px; line-height: .95; }
@@ -207,7 +210,12 @@
     .participant-line span { color: var(--secondary); font-size: 9px; }
 
     .place-card { display: grid; grid-template-columns: 104px 1fr; min-height: 154px; }
+    .place-card[hidden] { display: none; }
     .place-card > img { width: 100%; height: 100%; object-fit: cover; }
+    .place-card-media { min-height: 100%; display: grid; place-items: center; background: var(--lime); font-family: "Nunito", sans-serif; font-size: 34px; font-weight: 900; }
+    .place-card-media.park { background: #dff5cb; }
+    .place-card-media.sport { background: var(--sky-soft); }
+    .place-card-media.zone { background: var(--soft-pink); }
     .place-card-body { min-width: 0; padding: 13px; }
     .place-card h3 { margin-bottom: 3px; font-size: 16px; }
     .place-card p { margin-bottom: 9px; color: var(--secondary); font-size: 9px; line-height: 1.45; }
@@ -227,6 +235,20 @@
     .compare-button:disabled { background: #d6d6d1; color: #777; cursor: not-allowed; }
 
     .back-button { min-height: 42px; display: inline-flex; align-items: center; gap: 5px; margin: -5px 0 8px; padding: 0; border: 0; background: transparent; cursor: pointer; font-size: 11px; font-weight: 800; }
+    .activity-detail-hero { min-height: 162px; display: flex; flex-direction: column; justify-content: space-between; padding: 17px; border-radius: var(--radius-card); background: var(--lime); border: 1px solid rgba(20,20,26,.12); }
+    .activity-detail-hero span { width: fit-content; padding: 6px 9px; border-radius: 999px; background: white; font-size: 9px; font-weight: 800; }
+    .activity-detail-hero h2 { max-width: 8ch; margin-bottom: 4px; font-size: 30px; line-height: 1; }
+    .activity-detail-hero p { margin-bottom: 0; color: #3f4c1b; font-size: 10px; font-weight: 700; }
+    .detail-summary { margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+    .detail-summary p { margin-bottom: 0; color: var(--secondary); font-size: 10px; line-height: 1.55; }
+    .detail-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .detail-fact { min-height: 70px; padding: 11px; border-radius: 14px; background: var(--surface-soft); }
+    .detail-fact span { display: block; margin-bottom: 4px; color: var(--secondary); font-size: 8px; }
+    .detail-fact strong { font-size: 10px; line-height: 1.4; }
+    .detail-participants { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); cursor: pointer; text-align: left; }
+    .detail-participants strong { display: block; margin-bottom: 2px; font-size: 10px; }
+    .detail-participants span { color: var(--secondary); font-size: 9px; }
+    .detail-cta { position: sticky; bottom: -100px; margin-top: 14px; padding-top: 10px; background: linear-gradient(transparent, var(--canvas) 24%); }
     .compare-intro { padding: 14px; border-radius: var(--radius-card); background: var(--sky-soft); border: 1px solid #bdddf8; }
     .compare-intro strong { display: block; margin-bottom: 4px; font-size: 12px; }
     .compare-intro p { margin-bottom: 0; color: #315d83; font-size: 10px; line-height: 1.5; }
@@ -363,12 +385,16 @@
       .mobile-feedback-toggle { min-height: 42px; display: inline-flex; align-items: center; padding: 0 13px; border: 0; border-radius: 999px; background: var(--pink); color: white; cursor: pointer; font-size: 10px; font-weight: 800; }
     }
 
-    @media (max-width: 760px) {
+    @media (max-width: 1024px) {
+      .prototype-stage { padding-right: 18px; padding-left: 18px; }
+    }
+
+    @media (max-width: 768px) {
       .review-app { grid-template-columns: 1fr; }
       .workspace-nav { height: auto; position: relative; padding: 18px; border-right: 0; border-bottom: 1px solid var(--line); }
       .workspace-lede, .decision-list, .file-card { display: none; }
       .workspace-section { margin-top: 14px; }
-      .scene-list { grid-template-columns: repeat(4, minmax(110px, 1fr)); overflow-x: auto; }
+      .scene-list { grid-template-columns: repeat(5, minmax(110px, 1fr)); overflow-x: auto; }
       .scene-button { min-width: 110px; }
       .prototype-stage { min-height: auto; padding: 22px 12px 38px; }
       .phone { height: 780px; }
@@ -387,6 +413,11 @@
       .phone::before { display: none; }
       .app-screen { padding-top: 18px; }
       .feedback-panel { top: 0; height: 100vh; }
+    }
+
+    @media (max-width: 375px) {
+      .screen-header h2 { font-size: 28px; }
+      .activity-detail-hero h2 { font-size: 27px; }
     }
 
     @media (min-width: 1440px) { .prototype-stage { padding: 44px; } }
@@ -414,6 +445,7 @@
         <h2>快速跳到畫面</h2>
         <nav class="scene-list" aria-label="原型畫面">
           <button class="scene-button is-active" data-scene="discover" type="button"><strong>探索清單</strong><span>勾選活動</span></button>
+          <button class="scene-button" data-scene="activity" type="button"><strong>活動詳情</strong><span>資訊與參加犬</span></button>
           <button class="scene-button" data-scene="compare" type="button"><strong>AI 比較</strong><span>排序與原因</span></button>
           <button class="scene-button" data-scene="swipe" type="button"><strong>參加犬</strong><span>左右滑</span></button>
           <button class="scene-button" data-scene="place" type="button"><strong>地點規則</strong><span>主要與次要</span></button>
@@ -427,6 +459,7 @@
           <li>使用者勾選 2 至 3 場活動，再由 AI 比較。</li>
           <li>從 AI 結果的參加犬頭像進入左右滑。</li>
           <li>店家卡片先顯示體型、落地方式與牽繩規則。</li>
+          <li>地點可依餐廳、咖啡廳與三種戶外空間篩選。</li>
         </ul>
       </section>
 
@@ -449,10 +482,10 @@
             <button class="avatar-button" type="button" aria-label="查看 Nori 的檔案"><img src="../app/Snoots!/Assets.xcassets/Nori.imageset/nori.jpg" alt="Nori"></button>
           </header>
 
-          <div class="content-tabs" role="tablist" aria-label="探索內容" data-review-id="content-tabs" data-review-label="狗聚、地點與急診分類" data-review-count="0">
+          <div class="content-tabs" role="tablist" aria-label="探索內容" data-review-id="content-tabs" data-review-label="狗聚、地點與狗狗醫院分類" data-review-count="0">
             <button class="content-tab is-active" data-content-tab="activities" role="tab" aria-selected="true" type="button">狗聚</button>
             <button class="content-tab" data-content-tab="places" role="tab" aria-selected="false" type="button">地點</button>
-            <button class="content-tab" data-content-tab="care" role="tab" aria-selected="false" type="button">急診</button>
+            <button class="content-tab" data-content-tab="care" role="tab" aria-selected="false" type="button">狗狗醫院</button>
           </div>
 
           <div class="filter-row" data-review-id="activity-filters" data-review-label="活動篩選條件" data-review-count="0">
@@ -477,7 +510,7 @@
           <section class="listing-view is-visible" id="listing-activities" data-listing="activities">
             <div class="list-heading"><h3>選活動讓 AI 比較</h3><span>最多選 3 場</span></div>
             <div class="listing-stack" id="activity-list">
-              <article class="activity-card is-selected" data-activity-id="slow-walk" data-review-id="activity-card-slow-walk" data-review-label="活動卡：小型犬慢走團" data-review-count="0">
+              <article class="activity-card is-selected" data-activity-id="slow-walk" data-open-activity="slow-walk" data-review-id="activity-card-slow-walk" data-review-label="活動卡：小型犬慢走團" data-review-count="0" role="button" tabindex="0" aria-label="查看小型犬慢走團詳情">
                 <div class="activity-date"><div><strong>16:00</strong><span>7 月 18 日・六</span></div><span>距離 0.8 km</span></div>
                 <div class="activity-body">
                   <div class="activity-title-row"><div><h3 data-copy-id="activity-slow-title" contenteditable="true">小型犬慢走團</h3><p class="activity-meta">大安森林公園 · 剩 2 組</p></div><button class="select-activity" data-select-activity="slow-walk" type="button" aria-label="取消選擇小型犬慢走團"></button></div>
@@ -486,7 +519,7 @@
                 </div>
               </article>
 
-              <article class="activity-card is-selected" data-activity-id="indoor-meet" data-review-id="activity-card-indoor" data-review-label="活動卡：室內慢熟犬見面會" data-review-count="0">
+              <article class="activity-card is-selected" data-activity-id="indoor-meet" data-open-activity="indoor-meet" data-review-id="activity-card-indoor" data-review-label="活動卡：室內慢熟犬見面會" data-review-count="0" role="button" tabindex="0" aria-label="查看室內慢熟犬見面會詳情">
                 <div class="activity-date"><div><strong>14:30</strong><span>7 月 19 日・日</span></div><span>距離 1.4 km</span></div>
                 <div class="activity-body">
                   <div class="activity-title-row"><div><h3 data-copy-id="activity-indoor-title" contenteditable="true">室內慢熟犬見面會</h3><p class="activity-meta">Companion Cafe · 剩 3 組</p></div><button class="select-activity" data-select-activity="indoor-meet" type="button" aria-label="取消選擇室內慢熟犬見面會"></button></div>
@@ -495,7 +528,7 @@
                 </div>
               </article>
 
-              <article class="activity-card" data-activity-id="grass-run" data-review-id="activity-card-grass" data-review-label="活動卡：草地跑跑交流團" data-review-count="0">
+              <article class="activity-card" data-activity-id="grass-run" data-open-activity="grass-run" data-review-id="activity-card-grass" data-review-label="活動卡：草地跑跑交流團" data-review-count="0" role="button" tabindex="0" aria-label="查看草地跑跑交流團詳情">
                 <div class="activity-date"><div><strong>10:00</strong><span>7 月 19 日・日</span></div><span>距離 1.9 km</span></div>
                 <div class="activity-body">
                   <div class="activity-title-row"><div><h3 data-copy-id="activity-grass-title" contenteditable="true">草地跑跑交流團</h3><p class="activity-meta">河濱狗公園 · 尚有 6 組</p></div><button class="select-activity" data-select-activity="grass-run" type="button" aria-label="選擇草地跑跑交流團"></button></div>
@@ -508,22 +541,62 @@
 
           <section class="listing-view" id="listing-places" data-listing="places">
             <div class="list-heading"><h3>附近可帶狗地點</h3><span>先看主要規則</span></div>
+            <div class="place-category-row" data-review-id="place-categories" data-review-label="餐廳、公園與狗活動區分類" data-review-count="0" aria-label="地點分類">
+              <button class="filter-chip is-active" data-place-category="all" type="button">全部</button>
+              <button class="filter-chip" data-place-category="restaurant" type="button">餐廳</button>
+              <button class="filter-chip" data-place-category="cafe" type="button">咖啡廳</button>
+              <button class="filter-chip" data-place-category="walk-park" type="button">可遛狗公園</button>
+              <button class="filter-chip" data-place-category="dog-park" type="button">狗運動公園</button>
+              <button class="filter-chip" data-place-category="dog-zone" type="button">狗活動區</button>
+            </div>
             <div class="listing-stack">
-              <article class="place-card" data-review-id="place-card-companion" data-review-label="地點卡：Companion Cafe 規則摘要" data-review-count="0">
+              <article class="place-card" data-place-category="cafe" data-review-id="place-card-companion" data-review-label="地點卡：Companion Cafe 規則摘要" data-review-count="0">
                 <img src="../app/Snoots!/Assets.xcassets/CompanionCafe.imageset/companion-cafe.jpg" alt="Companion Cafe">
                 <div class="place-card-body"><h3 contenteditable="true" data-copy-id="place-companion-title">Companion Cafe</h3><p>咖啡廳 · 步行 4 分鐘 · 今日確認</p><div class="chip-row"><span class="info-chip">15 kg 以下</span><span class="info-chip green">可落地</span><span class="info-chip pink">全程牽繩</span></div><button class="card-link" data-open-place type="button">查看完整規則 →</button></div>
               </article>
-              <article class="place-card" data-review-id="place-card-terrace" data-review-label="地點卡：Terrace Table 規則摘要" data-review-count="0">
+              <article class="place-card" data-place-category="restaurant" data-review-id="place-card-terrace" data-review-label="地點卡：Terrace Table 規則摘要" data-review-count="0">
                 <img src="../app/Snoots!/Assets.xcassets/TerraceTable.imageset/terrace-table.jpg" alt="Terrace Table">
                 <div class="place-card-body"><h3 contenteditable="true" data-copy-id="place-terrace-title">Terrace Table</h3><p>餐廳 · 步行 9 分鐘 · 昨日確認</p><div class="chip-row"><span class="info-chip">不限體型</span><span class="info-chip blue">室內需推車</span><span class="info-chip pink">戶外需牽繩</span></div><button class="card-link" data-open-place type="button">查看完整規則 →</button></div>
+              </article>
+              <article class="place-card" data-place-category="walk-park" data-review-id="place-card-daan-park" data-review-label="地點卡：大安森林公園規則摘要" data-review-count="0">
+                <div class="place-card-media park" aria-hidden="true">園</div>
+                <div class="place-card-body"><h3>大安森林公園</h3><p>可遛狗公園 · 步行 6 分鐘 · 今日確認</p><div class="chip-row"><span class="info-chip">不限體型</span><span class="info-chip green">可落地</span><span class="info-chip pink">全程牽繩</span></div><button class="card-link" type="button" onclick="showToast('展示模式：公園詳細規則頁待補')">查看完整規則 →</button></div>
+              </article>
+              <article class="place-card" data-place-category="dog-park" data-review-id="place-card-sport-park" data-review-label="地點卡：迎風狗運動公園規則摘要" data-review-count="0">
+                <div class="place-card-media sport" aria-hidden="true">跑</div>
+                <div class="place-card-body"><h3>迎風狗運動公園</h3><p>狗運動公園 · 車程 12 分鐘 · 昨日確認</p><div class="chip-row"><span class="info-chip">分體型區</span><span class="info-chip green">可自由活動</span><span class="info-chip">雙門設計</span></div><button class="card-link" type="button" onclick="showToast('展示模式：運動公園詳細規則頁待補')">查看完整規則 →</button></div>
+              </article>
+              <article class="place-card" data-place-category="dog-zone" data-review-id="place-card-community-zone" data-review-label="地點卡：社區狗狗活動區規則摘要" data-review-count="0">
+                <div class="place-card-media zone" aria-hidden="true">區</div>
+                <div class="place-card-body"><h3>社區狗狗活動區</h3><p>狗活動區 · 步行 14 分鐘 · 3 天前確認</p><div class="chip-row"><span class="info-chip">中小型犬</span><span class="info-chip green">可自由活動</span><span class="info-chip pink">進出需牽繩</span></div><button class="card-link" type="button" onclick="showToast('展示模式：活動區詳細規則頁待補')">查看完整規則 →</button></div>
               </article>
             </div>
           </section>
 
           <section class="listing-view" id="listing-care" data-listing="care">
-            <div class="list-heading"><h3>附近可聯絡的動物醫療</h3><span>前往前請先電話確認</span></div>
-            <article class="care-card" data-review-id="care-card" data-review-label="急診照護資訊卡" data-review-count="0"><h3>大安夜間動物醫院</h3><p>車程 8 分鐘 · 接受夜間急診 · 最後確認：今天 18:40</p><button class="tiny-button" type="button" onclick="showToast('展示模式：這裡會開啟電話撥號')">先打電話確認</button></article>
+            <div class="list-heading"><h3>附近狗狗醫院</h3><span>前往前請先電話確認</span></div>
+            <article class="care-card" data-review-id="care-card" data-review-label="狗狗醫院資訊卡" data-review-count="0"><h3>大安夜間動物醫院</h3><p>車程 8 分鐘 · 接受夜間急診 · 最後確認：今天 18:40</p><button class="tiny-button" type="button" onclick="showToast('展示模式：這裡會開啟電話撥號')">先打電話確認</button></article>
           </section>
+        </section>
+
+        <section class="app-screen" id="screen-activity" aria-labelledby="activity-detail-title">
+          <button class="back-button" data-open-screen="discover" type="button">‹ 回活動清單</button>
+          <div class="activity-detail-hero" data-review-id="activity-detail-hero" data-review-label="活動詳情主視覺與日期" data-review-count="0">
+            <span id="activity-detail-date">7 月 18 日（六）16:00</span>
+            <div><h2 id="activity-detail-title">小型犬慢走團</h2><p id="activity-detail-location">大安森林公園 · 距離 0.8 km</p></div>
+          </div>
+          <section class="detail-summary" data-review-id="activity-detail-info" data-review-label="活動介紹、名額與集合資訊" data-review-count="0">
+            <p id="activity-detail-description">讓慢熟的小型犬保持舒服距離，先一起散步，再視現場狀況短暫打招呼。</p>
+            <div class="detail-facts">
+              <div class="detail-fact"><span>報名狀況</span><strong id="activity-detail-capacity">6／8 組，剩 2 組</strong></div>
+              <div class="detail-fact"><span>集合方式</span><strong id="activity-detail-meeting">捷運站 2 號出口集合</strong></div>
+              <div class="detail-fact"><span>活動規則</span><strong id="activity-detail-rules">全程牽繩・不強迫接觸</strong></div>
+              <div class="detail-fact"><span>主揪人</span><strong id="activity-detail-host">Elena 與 Mochi</strong></div>
+            </div>
+          </section>
+          <button class="detail-participants" id="activity-detail-participants" type="button" data-review-id="activity-detail-participants" data-review-label="活動參加犬入口" data-review-count="0"><div><strong>先看看會遇到的狗狗</strong><span>Mochi、Pudding 和其他參加犬</span></div><div class="mini-avatars"><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"></span><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg" alt="Pudding"></span></div></button>
+          <div class="verify-note">報名前可先用 AI 與其他活動比較；實際參加仍請主人依狗狗當天狀態判斷。</div>
+          <div class="detail-cta" data-review-id="activity-detail-cta" data-review-label="活動詳情加入 AI 比較按鈕" data-review-count="0"><button class="primary-button" id="activity-detail-select" type="button">加入 AI 比較</button></div>
         </section>
 
         <section class="app-screen" id="screen-compare" aria-labelledby="compare-title">
@@ -609,11 +682,18 @@
     let swipeIndex = 0;
     let dragStartX = null;
     let dragDeltaX = 0;
+    let currentActivityDetail = 'slow-walk';
 
     const activities = {
       'slow-walk': { title: '小型犬慢走團', label: '最推薦', badge: '', description: '活動規模小、全程牽繩，對慢熟的 Nori 最容易掌握距離。', reasons: ['目前以小型犬為主，體型壓力較低', '6／8 組，人數不會過度擁擠', '可提早 10 分鐘到外圍熟悉環境'] },
       'indoor-meet': { title: '室內慢熟犬見面會', label: '可以參加', badge: 'caution', description: '活動主題適合慢熟犬，但室內空間較集中，需要留意 Nori 的壓力。', reasons: ['有慢速介紹流程', '雨天不受影響', '建議選靠出口座位並保留退場空間'] },
       'grass-run': { title: '草地跑跑交流團', label: '這次不建議', badge: 'caution', description: '自由活動且中大型犬較多，和 Nori 目前的偏好差距較大。', reasons: ['現場速度與刺激較高', '可能有大型犬快速靠近', '可以先從牽繩慢走團累積經驗'] }
+    };
+
+    const activityDetails = {
+      'slow-walk': { date: '7 月 18 日（六）16:00–17:30', location: '大安森林公園 · 距離 0.8 km', description: '讓慢熟的小型犬保持舒服距離，先一起散步，再視現場狀況短暫打招呼。', capacity: '6／8 組，剩 2 組', meeting: '捷運站 2 號出口集合', rules: '全程牽繩・不強迫接觸', host: 'Elena 與 Mochi' },
+      'indoor-meet': { date: '7 月 19 日（日）14:30–16:00', location: 'Companion Cafe · 距離 1.4 km', description: '給慢熟犬的室內小聚，採分區入場與慢速介紹，也保留可提早離開的彈性。', capacity: '5／8 組，剩 3 組', meeting: '店門口依時段分批入場', rules: '室內牽繩・保留安全距離', host: 'Yuna 與 Pudding' },
+      'grass-run': { date: '7 月 19 日（日）10:00–11:30', location: '河濱狗公園 · 距離 1.9 km', description: '喜歡奔跑與群體互動的狗狗交流團，現場以中大型犬和自由活動為主。', capacity: '10／16 組，剩 6 組', meeting: '狗公園雙門入口集合', rules: '場內可離繩・主人全程看顧', host: 'Kevin 與 Lucky' }
     };
 
     const swipeDogs = [
@@ -646,7 +726,7 @@
       clearTimeout(aiTimer);
       screens.forEach(screen => screen.classList.toggle('is-visible', screen.id === `screen-${name}`));
       sceneButtons.forEach(button => button.classList.toggle('is-active', button.dataset.scene === name));
-      navButtons.forEach(button => button.classList.toggle('is-active', button.dataset.nav === (name === 'place' || name === 'compare' ? 'discover' : name)));
+      navButtons.forEach(button => button.classList.toggle('is-active', button.dataset.nav === (['place', 'compare', 'activity'].includes(name) ? 'discover' : name)));
       const visible = document.querySelector('.app-screen.is-visible');
       if (visible) visible.scrollTop = 0;
       document.getElementById('selection-dock').hidden = name !== 'discover' || document.querySelector('[data-content-tab].is-active')?.dataset.contentTab !== 'activities';
@@ -665,6 +745,38 @@
       document.getElementById('selection-dock').hidden = name !== 'activities';
     }
 
+    function selectPlaceCategory(category) {
+      document.querySelectorAll('[data-place-category]').forEach(element => {
+        if (element.matches('button')) element.classList.toggle('is-active', element.dataset.placeCategory === category);
+        else element.hidden = category !== 'all' && element.dataset.placeCategory !== category;
+      });
+    }
+
+    function openActivityDetail(id) {
+      const activity = activities[id];
+      const detail = activityDetails[id];
+      if (!activity || !detail) return;
+      currentActivityDetail = id;
+      document.getElementById('activity-detail-title').textContent = activity.title;
+      document.getElementById('activity-detail-date').textContent = detail.date;
+      document.getElementById('activity-detail-location').textContent = detail.location;
+      document.getElementById('activity-detail-description').textContent = detail.description;
+      document.getElementById('activity-detail-capacity').textContent = detail.capacity;
+      document.getElementById('activity-detail-meeting').textContent = detail.meeting;
+      document.getElementById('activity-detail-rules').textContent = detail.rules;
+      document.getElementById('activity-detail-host').textContent = detail.host;
+      updateActivityDetailButton();
+      showScreen('activity');
+    }
+
+    function updateActivityDetailButton() {
+      const button = document.getElementById('activity-detail-select');
+      const selected = selectedActivities.has(currentActivityDetail);
+      button.textContent = selected ? '已加入 AI 比較・點擊取消' : '加入 AI 比較';
+      button.classList.toggle('secondary-button', selected);
+      button.classList.toggle('primary-button', !selected);
+    }
+
     function toggleActivity(id) {
       if (selectedActivities.has(id)) selectedActivities.delete(id);
       else if (selectedActivities.size < 3) selectedActivities.add(id);
@@ -676,6 +788,7 @@
         if (button) button.setAttribute('aria-label', `${selected ? '取消選擇' : '選擇'}${activities[card.dataset.activityId].title}`);
       });
       updateSelectionDock();
+      updateActivityDetailButton();
     }
 
     function updateSelectionDock() {
@@ -874,7 +987,7 @@
 
     function buildFeedbackMarkdown() {
       const grouped = reviewState.feedback.reduce((result, item) => { (result[item.screen] ||= []).push(item); return result; }, {});
-      const screenLabels = { discover: '探索清單', compare: 'AI 比較', swipe: '參加犬滑卡', place: '地點規則', all: '整體' };
+      const screenLabels = { discover: '探索清單', activity: '活動詳情', compare: 'AI 比較', swipe: '參加犬滑卡', place: '地點規則', all: '整體' };
       const lines = ['# Snoots! MVP 畫面回饋', '', `產生時間：${new Date().toLocaleString('zh-TW')}`, '', '## 給下一個 Codex', '', '- 以本檔案作為畫面修改的主要依據。', '- 先讀 `docs/snoots-mvp-wireframe.html` 與本回饋，不要重新發明產品方向。', '- 完成後保留原型內的意見工具，讓下一輪可以繼續審稿。', ''];
       if (!reviewState.feedback.length) lines.push('## 區塊意見', '', '目前沒有已儲存的區塊意見。', '');
       else Object.entries(grouped).forEach(([screen, items]) => {
@@ -961,9 +1074,16 @@
     navButtons.forEach(button => button.addEventListener('click', () => showScreen(button.dataset.nav)));
     document.querySelectorAll('[data-open-screen]').forEach(button => button.addEventListener('click', () => showScreen(button.dataset.openScreen)));
     document.querySelectorAll('[data-content-tab]').forEach(button => button.addEventListener('click', () => selectContentTab(button.dataset.contentTab)));
-    document.querySelectorAll('[data-select-activity]').forEach(button => button.addEventListener('click', () => toggleActivity(button.dataset.selectActivity)));
+    document.querySelectorAll('[data-place-category]').forEach(element => { if (element.matches('button')) element.addEventListener('click', () => selectPlaceCategory(element.dataset.placeCategory)); });
+    document.querySelectorAll('[data-open-activity]').forEach(card => {
+      card.addEventListener('click', event => { if (!event.target.closest('[contenteditable="true"]')) openActivityDetail(card.dataset.openActivity); });
+      card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openActivityDetail(card.dataset.openActivity); } });
+    });
+    document.querySelectorAll('[data-select-activity]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); toggleActivity(button.dataset.selectActivity); }));
     document.querySelectorAll('[data-open-place]').forEach(button => button.addEventListener('click', () => showScreen('place')));
     document.getElementById('compare-selected').addEventListener('click', () => showScreen('compare'));
+    document.getElementById('activity-detail-select').addEventListener('click', () => toggleActivity(currentActivityDetail));
+    document.getElementById('activity-detail-participants').addEventListener('click', () => openSwipe(currentActivityDetail));
     document.getElementById('toggle-map').addEventListener('click', event => { const map = document.getElementById('compact-map'); map.classList.toggle('is-expanded'); event.currentTarget.textContent = map.classList.contains('is-expanded') ? '收合地圖' : '展開地圖'; });
     document.getElementById('pass-dog').addEventListener('click', () => swipeDog('pass'));
     document.getElementById('like-dog').addEventListener('click', () => swipeDog('like'));
@@ -1019,6 +1139,7 @@
     setupCopyPersistence();
     renderFeedback();
     updateSelectionDock();
+    updateActivityDetailButton();
     renderAIResults();
     renderSwipeDeck();
     syncFeedbackPanelControls();
