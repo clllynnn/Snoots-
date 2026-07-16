@@ -1,5 +1,6 @@
 import MapKit
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     let store: SnootsStore
@@ -24,10 +25,7 @@ struct ContentView: View {
                 .tabItem { Label(AppTab.profile.title, systemImage: AppTab.profile.symbol) }
                 .tag(AppTab.profile)
         }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            SnootsBottomNavigation(selectedTab: $selectedTab)
-        }
+        .tint(SnootsPalette.lavender)
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .match:
@@ -40,6 +38,7 @@ struct ContentView: View {
                 }
             }
         }
+        .sensoryFeedback(.success, trigger: store.isMatched)
     }
 }
 
@@ -62,13 +61,6 @@ struct FeedView: View {
                             .font(.snootsUI(15))
                             .foregroundStyle(SnootsPalette.secondaryText)
                     }
-                    Spacer()
-                    Image(systemName: "bell.badge.fill")
-                        .font(.title3)
-                        .foregroundStyle(SnootsPalette.ink)
-                        .frame(width: 44, height: 44)
-                        .background(SnootsPalette.primary, in: Circle())
-                        .accessibilityLabel("Notifications")
                 }
 
                 TrustSummaryCard(profile: store.profile)
@@ -132,10 +124,6 @@ private struct TrustSummaryCard: View {
                     .font(.snootsMetadata())
                     .foregroundStyle(SnootsPalette.secondaryText)
             }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(SnootsPalette.ink.opacity(0.55))
         }
         .padding(14)
         .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
@@ -161,8 +149,6 @@ private struct PhotoPostCard: View {
                 Label("\(post.likes)", systemImage: "heart")
                 Label("\(post.comments)", systemImage: "bubble.right")
                 Spacer()
-                Image(systemName: "paperplane")
-                    .accessibilityLabel("Share post")
             }
             .font(.snootsUI(14, weight: .medium))
             .foregroundStyle(SnootsPalette.secondaryText)
@@ -222,10 +208,6 @@ private struct PostAuthorRow: View {
                     .font(.snootsMetadata())
                     .foregroundStyle(SnootsPalette.secondaryText)
             }
-            Spacer()
-            Image(systemName: "ellipsis")
-                .foregroundStyle(SnootsPalette.secondaryText)
-                .accessibilityLabel("Post options")
         }
     }
 }
@@ -395,6 +377,7 @@ struct CareView: View {
         }
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
+        .sensoryFeedback(.selection, trigger: store.careStepIndex)
     }
 }
 
@@ -408,22 +391,22 @@ private struct CareProgressCard: View {
             HStack {
                 Text("IN TRANSIT · STEP \(index + 1) OF \(total)")
                     .font(.snootsChip())
-                    .foregroundStyle(.white.opacity(0.86))
+                    .foregroundStyle(SnootsPalette.ink.opacity(0.78))
                 Spacer()
                 Image(systemName: step.symbol)
                     .font(.title2)
-                    .foregroundStyle(SnootsPalette.lime)
+                    .foregroundStyle(SnootsPalette.ink)
             }
             Text(step.title).font(.snootsCardTitle())
             Text(step.instruction).font(.snootsBody())
             HStack(spacing: 6) {
                 ForEach(0..<total, id: \.self) { item in
-                    Capsule().fill(item <= index ? SnootsPalette.lime : .white.opacity(0.28)).frame(height: 6)
+                    Capsule().fill(item <= index ? SnootsPalette.ink : SnootsPalette.ink.opacity(0.18)).frame(height: 6)
                 }
             }
         }
         .padding(18)
-        .foregroundStyle(.white)
+        .foregroundStyle(SnootsPalette.ink)
         .background(SnootsPalette.lavender, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
         .snootsCardShadow()
     }
@@ -598,7 +581,7 @@ private struct EmergencyMapCard: View {
                         .foregroundStyle(SnootsPalette.secondaryText)
                 }
                 Spacer()
-                Text("Open now")
+                Text("Demo guidance")
                     .font(.snootsChip())
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
@@ -731,6 +714,8 @@ private struct PlaceRow: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("View details for \(place.name)")
+            .accessibilityHint("Shows venue rules and save options")
             Button(action: onToggleSave) {
                 Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
                     .foregroundStyle(SnootsPalette.ink)
@@ -739,6 +724,7 @@ private struct PlaceRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isSaved ? "Remove \(place.name) from saved places" : "Save \(place.name)")
+            .accessibilityValue(isSaved ? "Saved" : "Not saved")
         }
         .padding(12)
         .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
@@ -772,8 +758,9 @@ struct PlaceDetailSheet: View {
                     Label("Rules confirmed \(place.verified)", systemImage: "checkmark.seal.fill")
                         .font(.snootsUI(14, weight: .semibold))
                         .foregroundStyle(SnootsPalette.deepLilac)
-                    Button(store.isSaved(place) ? "Saved for later" : "Save place") { store.toggleSaved(place) }
+                    Button(store.isSaved(place) ? "Remove saved place" : "Save place") { store.toggleSaved(place) }
                         .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.pink))
+                        .accessibilityValue(store.isSaved(place) ? "Saved" : "Not saved")
                 }
                 .padding(18)
             }
@@ -796,12 +783,6 @@ struct ProfileView: View {
                         Text("Profile").font(.snootsScreenTitle())
                         Text("Your dog’s trusted details.").font(.snootsBody()).foregroundStyle(SnootsPalette.secondaryText)
                     }
-                    Spacer()
-                    Image(systemName: "gearshape.fill")
-                        .font(.title3)
-                        .frame(width: 44, height: 44)
-                        .background(SnootsPalette.surface, in: Circle())
-                        .accessibilityLabel("Profile settings")
                 }
 
                 HStack(spacing: 14) {
@@ -850,6 +831,7 @@ struct ProfileView: View {
                             .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
                         }
                         .buttonStyle(.plain)
+                        .accessibilityHint("Shows venue rules and save options")
                     }
                 }
             }
@@ -983,13 +965,13 @@ private struct CircleActionStyle: ButtonStyle {
 }
 
 enum SnootsPalette {
-    static let background = Color(hex: 0xF7F7F4)
-    static let card = Color.white
-    static let ink = Color(hex: 0x222222)
-    static let inactive = Color(hex: 0x888888)
-    static let secondaryText = Color(hex: 0x666666)
-    static let placeholder = Color(hex: 0xA3A3A3)
-    static let divider = Color(hex: 0xECECEC)
+    static let background = Color(light: 0xF7F7F4, dark: 0x11110F)
+    static let card = Color(light: 0xFFFFFF, dark: 0x1C1C1E)
+    static let ink = Color(light: 0x222222, dark: 0xF2F2F7)
+    static let inactive = Color(light: 0x888888, dark: 0xA0A0A7)
+    static let secondaryText = Color(light: 0x666666, dark: 0xB0B0B8)
+    static let placeholder = Color(light: 0xA3A3A3, dark: 0x8E8E93)
+    static let divider = Color(light: 0xECECEC, dark: 0x38383A)
     static let primary = Color(hex: 0xD8FF45)
     static let primaryTint = primary.opacity(0.32)
     static let lavender = Color(hex: 0xB88EFF)
@@ -1012,6 +994,23 @@ enum SnootsPalette {
 private extension Color {
     init(hex: UInt) {
         self.init(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+
+    init(light: UInt, dark: UInt) {
+        self.init(uiColor: UIColor { traits in
+            UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
+        })
+    }
+}
+
+private extension UIColor {
+    convenience init(hex: UInt) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }
 
@@ -1037,15 +1036,22 @@ extension Font {
         .system(size: size, weight: .semibold, design: .rounded)
     }
 
-    static func snootsScreenTitle() -> Font { snootsHeading(34) }
-    static func snootsSection() -> Font { snootsHeading(20) }
-    static func snootsCardTitle() -> Font { snootsHeading(18) }
+    static func snootsScreenTitle() -> Font { .system(.largeTitle, design: .rounded).weight(.semibold) }
+    static func snootsSection() -> Font { .system(.title3, design: .rounded).weight(.semibold) }
+    static func snootsCardTitle() -> Font { .system(.headline, design: .rounded).weight(.semibold) }
     static func snootsUI(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .rounded)
+        let textStyle: Font.TextStyle
+        switch size {
+        case ..<13: textStyle = .caption
+        case ..<15: textStyle = .subheadline
+        case ..<18: textStyle = .body
+        default: textStyle = .title3
+        }
+        return .system(textStyle, design: .rounded).weight(weight)
     }
 
-    static func snootsBody() -> Font { snootsUI(16) }
-    static func snootsMetadata() -> Font { snootsUI(12, weight: .medium) }
-    static func snootsChip() -> Font { snootsUI(12, weight: .medium) }
-    static func snootsButton(_ size: CGFloat) -> Font { .system(size: size, weight: .bold, design: .rounded) }
+    static func snootsBody() -> Font { .system(.body, design: .rounded) }
+    static func snootsMetadata() -> Font { .system(.caption, design: .rounded).weight(.medium) }
+    static func snootsChip() -> Font { .system(.caption, design: .rounded).weight(.medium) }
+    static func snootsButton(_ size: CGFloat) -> Font { .system(.headline, design: .rounded).weight(.bold) }
 }
