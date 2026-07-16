@@ -256,8 +256,10 @@
     .detail-cta { position: sticky; bottom: -100px; margin-top: 14px; padding-top: 10px; background: linear-gradient(transparent, var(--canvas) 24%); }
     .compare-intro { padding: 14px; border-radius: var(--radius-card); background: var(--sky-soft); border: 1px solid #bdddf8; }
     .compare-intro strong { display: block; margin-bottom: 4px; font-size: 12px; }
-    .compare-toolbar { margin-top: 12px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
-    .compare-status { color: var(--secondary); font-size: 9px; line-height: 1.45; }
+    .compare-toolbar { margin-top: 12px; padding: 13px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-soft); }
+    .compare-toolbar-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+    .compare-toolbar-head strong { font-size: 12px; }
+    .compare-status { color: var(--secondary); font-size: 10px; line-height: 1.45; }
     .compare-status strong { color: var(--ink); }
     .compare-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 9px; }
     .compare-actions #adjust-comparison { grid-column: 1 / -1; }
@@ -654,7 +656,7 @@
           <button class="back-button" data-open-screen="discover" type="button">‹ 回活動清單</button>
           <header class="screen-header" data-review-id="compare-header" data-review-label="AI 活動比較頁標題" data-review-count="0"><div><h2 id="compare-title" data-copy-id="compare-title" contenteditable="true">Nori 適合哪一場？</h2><p>根據狗狗個性、參加犬與場地規則比較</p></div></header>
           <div class="compare-intro" data-review-id="ai-input-summary" data-review-label="AI 判讀使用的 Nori 資料摘要" data-review-count="0"><strong>這次用 Nori 的資料判斷</strong><p>5 kg、慢熟、害怕突然靠近的大型犬、不喜歡吵雜，適合牽繩慢走。</p></div>
-          <div class="compare-toolbar" id="compare-toolbar"><div class="compare-status" id="compare-status">尚未產生比較結果；先選 2–3 場活動，再按「AI 比較」。</div><div class="compare-actions"><button class="secondary-button" id="adjust-comparison" type="button">調整活動</button><button class="secondary-button" id="toggle-previous-comparison" type="button" hidden>上一輪比較</button></div></div>
+          <div class="compare-toolbar" id="compare-toolbar" data-review-id="compare-controls" data-review-label="AI 比較目前結果、上一輪結果與調整入口" data-review-count="0"><div class="compare-toolbar-head"><strong>AI 比較結果</strong><span class="info-chip blue" id="compare-view-chip">待比較</span></div><div class="compare-status" id="compare-status" aria-live="polite">尚未產生比較結果；先選 2–3 場活動，再按「AI 比較」。</div><div class="compare-actions"><button class="secondary-button" id="adjust-comparison" type="button">調整活動</button><button class="secondary-button" id="toggle-previous-comparison" type="button" hidden>上一輪比較</button></div></div>
           <div class="ai-loader" id="ai-loader" hidden aria-live="polite"><div><div class="spinner" aria-hidden="true"></div><strong>正在比較你選的活動…</strong><p style="margin:6px 0 0;color:var(--secondary);font-size:9px">同時檢查參加犬、活動方式與場地條件</p></div></div>
           <div class="ai-empty" id="ai-empty"><strong>先從活動清單按「AI 比較」</strong><span>這裡只呈現已主動啟動的比較結果，不會因為進入畫面就自動分析。</span></div>
           <div id="ai-results" hidden>
@@ -938,21 +940,29 @@
 
     function updateCompareControls() {
       const status = document.getElementById('compare-status');
+      const viewChip = document.getElementById('compare-view-chip');
       const previousButton = document.getElementById('toggle-previous-comparison');
-      if (!status || !previousButton) return;
+      if (!status || !viewChip || !previousButton) return;
       previousButton.hidden = !previousComparison;
       previousButton.textContent = comparisonView === 'previous' ? '回目前結果' : '上一輪比較';
       previousButton.parentElement.classList.toggle('has-history', Boolean(previousComparison));
       if (!currentComparison) {
+        viewChip.textContent = '待比較';
+        viewChip.className = 'info-chip blue';
         status.textContent = '尚未產生比較結果；先選 2–3 場活動，再按「AI 比較」。';
         return;
       }
       if (comparisonView === 'previous' && previousComparison) {
+        viewChip.textContent = '上一輪';
+        viewChip.className = 'info-chip pink';
         status.textContent = `上一輪比較：${formatActivityNames(previousComparison.ids)}`;
         return;
       }
       const selectedIds = getSelectedActivityIds();
-      status.textContent = sameActivityIds(selectedIds, currentComparison.ids)
+      const isCurrent = sameActivityIds(selectedIds, currentComparison.ids);
+      viewChip.textContent = isCurrent ? '目前結果' : '待更新';
+      viewChip.className = isCurrent ? 'info-chip green' : 'info-chip';
+      status.textContent = isCurrent
         ? `目前結果：${formatActivityNames(currentComparison.ids)}`
         : `已改選活動：${formatActivityNames(selectedIds) || '尚未選擇'}；按「AI 比較」更新結果`;
     }
@@ -977,7 +987,11 @@
       empty.hidden = true;
       loader.hidden = false;
       results.hidden = !currentComparison;
-      if (currentComparison) document.getElementById('compare-status').textContent = '正在更新比較；上一輪結果暫時保留。';
+      if (currentComparison) {
+        document.getElementById('compare-view-chip').textContent = '更新中';
+        document.getElementById('compare-view-chip').className = 'info-chip blue';
+        document.getElementById('compare-status').textContent = '正在更新比較；上一輪結果暫時保留。';
+      }
       aiTimer = setTimeout(() => {
         if (currentComparison) previousComparison = currentComparison;
         currentComparison = pendingComparison;
