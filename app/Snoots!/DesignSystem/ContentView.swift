@@ -9,22 +9,25 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack { PlaydatesView(store: store, presentedSheet: $presentedSheet) }
-                .tabItem { Label("Match", systemImage: "heart.fill").font(.snootsUI(11, weight: .medium)) }
+                .tabItem { Label(AppTab.match.title, systemImage: AppTab.match.symbol) }
                 .tag(AppTab.match)
 
             NavigationStack { MapsView(store: store, presentedSheet: $presentedSheet) }
-                .tabItem { Label("Maps", systemImage: "map.fill").font(.snootsUI(11, weight: .medium)) }
+                .tabItem { Label(AppTab.maps.title, systemImage: AppTab.maps.symbol) }
                 .tag(AppTab.maps)
 
             NavigationStack { FeedView(store: store) }
-                .tabItem { Label("Feed", systemImage: "bubble.left.and.bubble.right.fill").font(.snootsUI(11, weight: .medium)) }
+                .tabItem { Label(AppTab.feed.title, systemImage: AppTab.feed.symbol) }
                 .tag(AppTab.feed)
 
             NavigationStack { ProfileView(store: store, presentedSheet: $presentedSheet) }
-                .tabItem { Label("Profile", systemImage: "person.crop.circle.fill").font(.snootsUI(11, weight: .medium)) }
+                .tabItem { Label(AppTab.profile.title, systemImage: AppTab.profile.symbol) }
                 .tag(AppTab.profile)
         }
-        .tint(SnootsPalette.lime)
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            SnootsBottomNavigation(selectedTab: $selectedTab)
+        }
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .match:
@@ -38,10 +41,6 @@ struct ContentView: View {
             }
         }
     }
-}
-
-private enum AppTab: Hashable {
-    case match, maps, feed, profile
 }
 
 struct FeedView: View {
@@ -61,14 +60,14 @@ struct FeedView: View {
                             .font(.snootsScreenTitle())
                         Text("Your Taipei dog community.")
                             .font(.snootsUI(15))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SnootsPalette.secondaryText)
                     }
                     Spacer()
                     Image(systemName: "bell.badge.fill")
                         .font(.title3)
-                        .foregroundStyle(SnootsPalette.pink)
+                        .foregroundStyle(SnootsPalette.ink)
                         .frame(width: 44, height: 44)
-                        .background(SnootsPalette.softPink, in: Circle())
+                        .background(SnootsPalette.primary, in: Circle())
                         .accessibilityLabel("Notifications")
                 }
 
@@ -131,7 +130,7 @@ private struct TrustSummaryCard: View {
                     .font(.snootsCardTitle())
                 Text("ID, vet record and behavior card verified")
                     .font(.snootsMetadata())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SnootsPalette.secondaryText)
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
@@ -139,9 +138,9 @@ private struct TrustSummaryCard: View {
                 .foregroundStyle(SnootsPalette.ink.opacity(0.55))
         }
         .padding(14)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(SnootsPalette.lime, lineWidth: 2) }
-        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous).stroke(SnootsPalette.lime, lineWidth: 2) }
+        .snootsCardShadow()
     }
 }
 
@@ -166,11 +165,11 @@ private struct PhotoPostCard: View {
                     .accessibilityLabel("Share post")
             }
             .font(.snootsUI(14, weight: .medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SnootsPalette.secondaryText)
         }
         .padding(14)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
     }
 }
 
@@ -186,7 +185,7 @@ private struct DiscussionCard: View {
                 Spacer()
                 Text(post.timeAgo)
                     .font(.snootsMetadata())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SnootsPalette.secondaryText)
             }
             Text(post.body)
                 .font(.snootsCardTitle())
@@ -196,8 +195,8 @@ private struct DiscussionCard: View {
                 .foregroundStyle(SnootsPalette.pink)
         }
         .padding(16)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(SnootsPalette.lilac.opacity(0.35), lineWidth: 1) }
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous).stroke(SnootsPalette.lavender.opacity(0.35), lineWidth: 1) }
     }
 }
 
@@ -221,11 +220,11 @@ private struct PostAuthorRow: View {
                 }
                 Text("with \(post.petName) · \(post.timeAgo)")
                     .font(.snootsMetadata())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SnootsPalette.secondaryText)
             }
             Spacer()
             Image(systemName: "ellipsis")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SnootsPalette.secondaryText)
                 .accessibilityLabel("Post options")
         }
     }
@@ -244,7 +243,7 @@ struct PlaydatesView: View {
                         Text("Match").font(.snootsScreenTitle())
                         Text("Compatibility before chemistry.")
                             .font(.snootsBody())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SnootsPalette.secondaryText)
                     }
                     Spacer()
                     Label("2 km", systemImage: "location.fill")
@@ -262,29 +261,23 @@ struct PlaydatesView: View {
                         .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.pink))
                 } else {
                     MatchProfileCard(candidate: store.playdate)
-                    HStack(spacing: 14) {
+                    HStack(spacing: 24) {
                         Button { isPassed = true } label: {
                             Image(systemName: "xmark").frame(width: 58, height: 58)
                         }
-                        .buttonStyle(CircleActionStyle(fill: SnootsPalette.surface, icon: SnootsPalette.pink))
+                        .buttonStyle(CircleActionStyle(fill: SnootsPalette.primary, icon: SnootsPalette.ink))
                         .accessibilityLabel("Pass on Mochi")
 
                         Button { presentedSheet = .match } label: {
-                            Image(systemName: "heart.fill").frame(width: 70, height: 70)
+                            Image(systemName: "heart.fill").frame(width: 58, height: 58)
                         }
-                        .buttonStyle(CircleActionStyle(fill: SnootsPalette.pink, icon: .white))
+                        .buttonStyle(CircleActionStyle(fill: SnootsPalette.lavender, icon: .white))
                         .accessibilityLabel("Propose a match with Mochi")
-
-                        Button { } label: {
-                            Image(systemName: "bookmark.fill").frame(width: 58, height: 58)
-                        }
-                        .buttonStyle(CircleActionStyle(fill: SnootsPalette.surface, icon: SnootsPalette.deepLilac))
-                        .accessibilityLabel("Save Mochi")
                     }
                     .frame(maxWidth: .infinity)
-                    Text("Pass · propose a leashed hello · save for later")
+                    Text("Pass · propose a leashed hello")
                         .font(.snootsMetadata())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SnootsPalette.secondaryText)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -299,27 +292,30 @@ private struct MatchProfileCard: View {
     let candidate: PlaydateCandidate
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 0) {
             PhotoTile(imageName: candidate.imageName, label: "Available now")
                 .frame(height: 292)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("\(candidate.name), \(candidate.age)")
-                    .font(.snootsScreenTitle())
-                Text("with \(candidate.owner) · \(candidate.distance)")
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(candidate.name), \(candidate.age)")
+                        .font(.snootsScreenTitle())
+                    Text("with \(candidate.owner) · \(candidate.distance)")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                DeclarationChips(labels: candidate.compatibility, tint: SnootsPalette.primaryTint)
+                Divider().overlay(SnootsPalette.divider)
+                Label(candidate.accountability, systemImage: "checkmark.shield.fill")
                     .font(.snootsMetadata())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SnootsPalette.lavender)
+                Text(candidate.intro)
+                    .font(.snootsBody())
             }
-            DeclarationChips(labels: candidate.compatibility, tint: SnootsPalette.softPink)
-            Divider()
-            Label(candidate.accountability, systemImage: "checkmark.shield.fill")
-                .font(.snootsMetadata())
-                .foregroundStyle(SnootsPalette.deepLilac)
-            Text(candidate.intro)
-                .font(.snootsBody())
+            .padding(16)
         }
-        .padding(12)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
     }
 }
 
@@ -335,14 +331,14 @@ private struct MatchedBanner: View {
             Text("You and \(candidate.owner) agreed to a quiet, leashed first hello.")
                 .font(.snootsBody())
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SnootsPalette.secondaryText)
             Label("Shared behavior cards", systemImage: "checkmark.seal.fill")
                 .font(.snootsUI(15, weight: .semibold))
                 .foregroundStyle(SnootsPalette.deepLilac)
         }
         .frame(maxWidth: .infinity)
         .padding(28)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
     }
 }
 
@@ -357,12 +353,12 @@ struct CareView: View {
                         Text("Emergency guidance").font(.snootsScreenTitle())
                         Text("Stay with your pet. Keep it simple.")
                             .font(.snootsBody())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SnootsPalette.secondaryText)
                     }
                     Spacer()
                     Image(systemName: "cross.case.fill")
                         .font(.title2)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SnootsPalette.ink)
                         .frame(width: 44, height: 44)
                         .background(SnootsPalette.careBlue, in: Circle())
                 }
@@ -372,7 +368,7 @@ struct CareView: View {
                     .foregroundStyle(SnootsPalette.alert)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(SnootsPalette.alert.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(SnootsPalette.alert.opacity(0.09), in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
 
                 CareProgressCard(step: store.currentCareStep, index: store.careStepIndex, total: store.careSteps.count)
 
@@ -381,7 +377,7 @@ struct CareView: View {
                     DeclarationChips(labels: store.criticalSymptoms, tint: SnootsPalette.softPink)
                 }
                 .padding(16)
-                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
                 ClinicCard(clinic: store.clinic)
 
@@ -393,7 +389,7 @@ struct CareView: View {
 
                 Text("This prototype demonstrates an in-transit handoff flow. Contact local emergency services or a licensed clinic for real medical decisions.")
                     .font(.snootsMetadata())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SnootsPalette.secondaryText)
             }
             .padding(18)
         }
@@ -412,22 +408,24 @@ private struct CareProgressCard: View {
             HStack {
                 Text("IN TRANSIT · STEP \(index + 1) OF \(total)")
                     .font(.snootsChip())
-                    .foregroundStyle(SnootsPalette.careBlue)
+                    .foregroundStyle(.white.opacity(0.86))
                 Spacer()
                 Image(systemName: step.symbol)
                     .font(.title2)
-                    .foregroundStyle(SnootsPalette.careBlue)
+                    .foregroundStyle(SnootsPalette.lime)
             }
             Text(step.title).font(.snootsCardTitle())
             Text(step.instruction).font(.snootsBody())
             HStack(spacing: 6) {
                 ForEach(0..<total, id: \.self) { item in
-                    Capsule().fill(item <= index ? SnootsPalette.careBlue : SnootsPalette.softPink).frame(height: 6)
+                    Capsule().fill(item <= index ? SnootsPalette.lime : .white.opacity(0.28)).frame(height: 6)
                 }
             }
         }
         .padding(18)
-        .background(SnootsPalette.careTint, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .foregroundStyle(.white)
+        .background(SnootsPalette.lavender, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
     }
 }
 
@@ -441,19 +439,20 @@ private struct ClinicCard: View {
                     .font(.title)
                     .foregroundStyle(SnootsPalette.careBlue)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Destination clinic").font(.snootsMetadata()).foregroundStyle(.secondary)
+                    Text("Destination clinic").font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
                     Text(clinic.name).font(.snootsCardTitle())
                 }
                 Spacer()
                 Text(clinic.eta).font(.snootsUI(15, weight: .semibold)).foregroundStyle(SnootsPalette.careBlue)
             }
-            Divider()
+            Divider().overlay(SnootsPalette.divider)
             Label(clinic.address, systemImage: "location.fill")
             Label(clinic.handoff, systemImage: "doc.text.fill")
         }
         .font(.snootsUI(14))
         .padding(16)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
     }
 }
 
@@ -472,27 +471,27 @@ struct MapsView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Maps").font(.snootsScreenTitle())
-                        Text("No surprises at the door.").font(.snootsBody()).foregroundStyle(.secondary)
+                        Text("Dog-friendly places, with the details that matter.")
+                            .font(.snootsBody())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.title3)
-                        .frame(width: 44, height: 44)
-                        .background(SnootsPalette.surface, in: Circle())
                 }
 
                 NeighborhoodMapCard(places: visibleMapPlaces, isResolving: store.mapPlaces.isResolvingLocations)
                 EmergencyMapCard(clinic: store.clinic) { presentedSheet = .emergency }
 
-                Picker("Place type", selection: $selectedCategory) {
-                    Text("All").tag(MapPlace.Category?.none)
-                    ForEach(MapPlace.Category.allCases) { category in
-                        Label(category.title, systemImage: category.symbol).tag(Optional(category))
-                    }
-                }
-                .pickerStyle(.segmented)
+                PlaceCategoryFilter(selectedCategory: $selectedCategory)
 
-                Text("Maps database · \(visibleMapPlaces.count) places").font(.snootsSection())
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Nearby places").font(.snootsSection())
+                    Spacer()
+                    Label("\(visibleMapPlaces.count) found", systemImage: "mappin.and.ellipse")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                        .accessibilityLabel("\(visibleMapPlaces.count) nearby places found")
+                }
                 if let errorMessage = store.mapPlaces.errorMessage {
                     ContentUnavailableView("Maps database unavailable", systemImage: "externaldrive.badge.exclamationmark", description: Text(errorMessage))
                 } else {
@@ -517,6 +516,68 @@ struct MapsView: View {
     }
 }
 
+private struct PlaceCategoryFilter: View {
+    @Binding var selectedCategory: MapPlace.Category?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Filter places").font(.snootsSection())
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    PlaceFilterButton(
+                        title: "All",
+                        symbol: "square.grid.2x2.fill",
+                        isSelected: selectedCategory == nil
+                    ) {
+                        selectedCategory = nil
+                    }
+
+                    ForEach(MapPlace.Category.allCases) { category in
+                        PlaceFilterButton(
+                            title: category.title,
+                            symbol: category.symbol,
+                            isSelected: selectedCategory == category
+                        ) {
+                            selectedCategory = category
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Filter nearby places")
+    }
+}
+
+private struct PlaceFilterButton: View {
+    let title: String
+    let symbol: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(.snootsUI(15, weight: .semibold))
+                .foregroundStyle(SnootsPalette.ink)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .background(
+                    isSelected ? SnootsPalette.primary : SnootsPalette.surface,
+                    in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                        .stroke(isSelected ? SnootsPalette.ink : SnootsPalette.primary, lineWidth: isSelected ? 2 : 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityHint("Shows only \(title.lowercased()) places")
+    }
+}
+
 private struct EmergencyMapCard: View {
     let clinic: Clinic
     let onOpen: () -> Void
@@ -526,28 +587,33 @@ private struct EmergencyMapCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "cross.case.fill")
                     .font(.title2)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SnootsPalette.ink)
                     .frame(width: 44, height: 44)
-                    .background(SnootsPalette.careBlue, in: Circle())
+                    .background(SnootsPalette.primary, in: Circle())
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Emergency guidance")
                         .font(.snootsCardTitle())
                     Text("\(clinic.name) · \(clinic.eta)")
                         .font(.snootsMetadata())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SnootsPalette.secondaryText)
                 }
                 Spacer()
                 Text("Open now")
                     .font(.snootsChip())
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(SnootsPalette.lime, in: Capsule())
+                    .background(SnootsPalette.primary, in: Capsule())
             }
-            Button("Get emergency help", action: onOpen)
-                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.careBlue))
+            Button("Find emergency care", action: onOpen)
+                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.primary))
         }
         .padding(16)
-        .background(SnootsPalette.careTint, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous)
+                .stroke(SnootsPalette.primary, lineWidth: 2)
+        }
+        .snootsCardShadow()
     }
 }
 
@@ -567,11 +633,14 @@ private struct NeighborhoodMapCard: View {
                 ForEach(places) { place in
                     if let coordinate = place.coordinate {
                         Marker(place.name, systemImage: place.category.symbol, coordinate: coordinate)
-                            .tint(markerColor(for: place.category))
+                            .tint(SnootsPalette.lavender)
                     }
                 }
             }
             .mapStyle(.standard(elevation: .realistic))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Map of nearby dog-friendly places in Taipei")
+            .accessibilityValue(isResolving ? "Locating places" : "\(places.filter { $0.coordinate != nil }.count) places mapped")
             VStack {
                 Spacer()
                 HStack {
@@ -581,20 +650,13 @@ private struct NeighborhoodMapCard: View {
                 }
                 .font(.snootsChip())
                 .padding(12)
-                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
             }
             .padding(12)
         }
         .frame(height: 190)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-
-    private func markerColor(for category: MapPlace.Category) -> Color {
-        switch category {
-        case .restaurant: SnootsPalette.pink
-        case .park: SnootsPalette.deepLilac
-        case .hospital: SnootsPalette.careBlue
-        }
+        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
     }
 }
 
@@ -606,14 +668,19 @@ private struct DatabasePlaceRow: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: place.category.symbol)
                 .font(.title3)
-                .foregroundStyle(categoryColor)
+                .foregroundStyle(SnootsPalette.ink)
                 .frame(width: 40, height: 40)
-                .background(categoryColor.opacity(0.12), in: Circle())
+                .background(SnootsPalette.primaryTint, in: Circle())
             VStack(alignment: .leading, spacing: 5) {
                 Text(place.name).font(.snootsCardTitle())
-                Text(place.category.title).font(.snootsMetadata()).foregroundStyle(categoryColor)
+                Label(place.category.title, systemImage: place.category.symbol)
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
                 if !place.subtitle.isEmpty {
-                    Text(place.subtitle).font(.snootsMetadata()).foregroundStyle(.secondary)
+                    Text(place.subtitle)
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 8)
@@ -621,28 +688,23 @@ private struct DatabasePlaceRow: View {
                 Button {
                     openURL(appleMapsURL)
                 } label: {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.title3)
+                    Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                        .labelStyle(.iconOnly)
+                        .font(.body.weight(.bold))
                         .foregroundStyle(SnootsPalette.ink)
-                        .frame(width: 36, height: 36)
-                        .background(SnootsPalette.softPink, in: Circle())
+                        .frame(width: 44, height: 44)
+                        .background(SnootsPalette.primary, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open \(place.name) in Apple Maps")
+                .accessibilityLabel("Get directions to \(place.name) in Apple Maps")
+                .accessibilityHint("Opens Apple Maps")
             }
         }
         .padding(14)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
     }
 
-    private var categoryColor: Color {
-        switch place.category {
-        case .restaurant: SnootsPalette.pink
-        case .park: SnootsPalette.deepLilac
-        case .hospital: SnootsPalette.careBlue
-        }
-    }
 }
 
 private struct PlaceRow: View {
@@ -659,10 +721,10 @@ private struct PlaceRow: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: 82, height: 104)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.profileImageRadius, style: .continuous))
                     VStack(alignment: .leading, spacing: 6) {
                         Text(place.name).font(.snootsCardTitle()).foregroundStyle(SnootsPalette.ink)
-                        Text("\(place.category) · \(place.walk)").font(.snootsMetadata()).foregroundStyle(.secondary)
+                        Text("\(place.category) · \(place.walk)").font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
                         DeclarationChips(labels: Array(place.rules.prefix(3)).map(\.shortLabel), tint: SnootsPalette.butter)
                         Text("Verified \(place.verified)").font(.snootsMetadata()).foregroundStyle(SnootsPalette.deepLilac)
                     }
@@ -671,16 +733,16 @@ private struct PlaceRow: View {
             .buttonStyle(.plain)
             Button(action: onToggleSave) {
                 Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-                    .foregroundStyle(isSaved ? SnootsPalette.pink : SnootsPalette.ink)
-                    .frame(width: 36, height: 36)
-                    .background(SnootsPalette.softPink, in: Circle())
+                    .foregroundStyle(SnootsPalette.ink)
+                    .frame(width: 44, height: 44)
+                    .background(SnootsPalette.primaryTint, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isSaved ? "Remove \(place.name) from saved places" : "Save \(place.name)")
         }
         .padding(12)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
     }
 }
 
@@ -697,7 +759,7 @@ struct PlaceDetailSheet: View {
                         .frame(height: 210)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(place.name).font(.snootsScreenTitle())
-                        Text("\(place.category) · \(place.walk)").font(.snootsBody()).foregroundStyle(.secondary)
+                        Text("\(place.category) · \(place.walk)").font(.snootsBody()).foregroundStyle(SnootsPalette.secondaryText)
                     }
                     Text("Before you go").font(.snootsSection())
                     ForEach(place.rules) { rule in
@@ -705,7 +767,7 @@ struct PlaceDetailSheet: View {
                             .font(.snootsUI(15, weight: .medium))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(14)
-                            .background(SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
                     }
                     Label("Rules confirmed \(place.verified)", systemImage: "checkmark.seal.fill")
                         .font(.snootsUI(14, weight: .semibold))
@@ -732,7 +794,7 @@ struct ProfileView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Profile").font(.snootsScreenTitle())
-                        Text("Your dog’s trusted details.").font(.snootsBody()).foregroundStyle(.secondary)
+                        Text("Your dog’s trusted details.").font(.snootsBody()).foregroundStyle(SnootsPalette.secondaryText)
                     }
                     Spacer()
                     Image(systemName: "gearshape.fill")
@@ -747,7 +809,7 @@ struct ProfileView: View {
                         .frame(width: 104, height: 104)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(store.profile.name).font(.snootsScreenTitle())
-                        Text("with \(store.pet.name)").font(.snootsBody()).foregroundStyle(.secondary)
+                        Text("with \(store.pet.name)").font(.snootsBody()).foregroundStyle(SnootsPalette.secondaryText)
                         Label(store.profile.neighborhood, systemImage: "location.fill")
                             .font(.snootsMetadata())
                             .foregroundStyle(SnootsPalette.deepLilac)
@@ -755,20 +817,20 @@ struct ProfileView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(14)
-                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
                 TrustSummaryCard(profile: store.profile)
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("\(store.pet.name)’s play card").font(.snootsSection())
-                    Text(store.pet.summary).font(.snootsBody()).foregroundStyle(.secondary)
+                    Text(store.pet.summary).font(.snootsBody()).foregroundStyle(SnootsPalette.secondaryText)
                     DeclarationChips(labels: store.pet.traits, tint: SnootsPalette.butter)
                     Label(store.pet.healthStatus, systemImage: "checkmark.shield.fill")
                         .font(.snootsUI(14, weight: .semibold))
                         .foregroundStyle(SnootsPalette.deepLilac)
                 }
                 .padding(16)
-                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
                 if !store.savedPlaces.isEmpty {
                     Text("Saved places").font(.snootsSection())
@@ -785,7 +847,7 @@ struct ProfileView: View {
                             }
                             .foregroundStyle(SnootsPalette.ink)
                             .padding(14)
-                            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -815,7 +877,7 @@ struct MatchSheet: View {
             Text("You’ll both see verified behavior cards before the match is confirmed.")
                 .font(.snootsBody())
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SnootsPalette.secondaryText)
                 .padding(.horizontal, 26)
             Button("Match with \(candidate.name)") {
                 store.isMatched = true
@@ -823,8 +885,7 @@ struct MatchSheet: View {
             }
             .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.pink))
             Button("Not yet") { dismiss() }
-                .font(.snootsUI(15, weight: .semibold))
-                .foregroundStyle(SnootsPalette.ink)
+                .buttonStyle(SecondaryButtonStyle())
             Spacer()
         }
         .padding(22)
@@ -855,7 +916,7 @@ private struct PhotoTile: View {
                 .padding(12)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.profileImageRadius, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Photo of \(label)")
     }
@@ -886,10 +947,24 @@ private struct PrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.snootsUI(17, weight: .semibold))
-            .foregroundStyle(.white)
+            .font(.snootsButton(17))
+            .foregroundStyle(SnootsPalette.ink)
             .frame(maxWidth: .infinity, minHeight: 48)
-            .background(color.opacity(configuration.isPressed ? 0.75 : 1), in: Capsule())
+            .background(color.opacity(configuration.isPressed ? 0.75 : 1), in: RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous))
+    }
+}
+
+private struct SecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.snootsButton(17))
+            .foregroundStyle(SnootsPalette.ink)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(SnootsPalette.surface.opacity(configuration.isPressed ? 0.75 : 1), in: RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous)
+                    .stroke(SnootsPalette.primary, lineWidth: 2)
+            }
     }
 }
 
@@ -902,24 +977,36 @@ private struct CircleActionStyle: ButtonStyle {
             .font(.title3.weight(.bold))
             .foregroundStyle(icon)
             .background(fill.opacity(configuration.isPressed ? 0.75 : 1), in: Circle())
-            .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
+            .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
+            .shadow(color: .black.opacity(0.08), radius: 20, y: 6)
     }
 }
 
-private enum SnootsPalette {
-    static let canvas = Color(hex: 0xFFFFFC)
-    static let surface = Color.white
-    static let ink = Color(hex: 0x14141A)
-    static let pink = Color(hex: 0xFF4085)
-    static let softPink = Color(hex: 0xFFE3F0)
-    static let lilac = Color(hex: 0xB885FF)
-    static let deepLilac = Color(hex: 0x4A2E7A)
-    static let sky = Color(hex: 0x52ADFF)
-    static let careBlue = Color(hex: 0x146EE0)
-    static let careTint = Color(hex: 0xE3F0FF)
-    static let lime = Color(hex: 0xC7FF3D)
-    static let butter = Color(hex: 0xFFE891)
-    static let alert = Color(hex: 0xB31C40)
+enum SnootsPalette {
+    static let background = Color(hex: 0xF7F7F4)
+    static let card = Color.white
+    static let ink = Color(hex: 0x222222)
+    static let inactive = Color(hex: 0x888888)
+    static let secondaryText = Color(hex: 0x666666)
+    static let placeholder = Color(hex: 0xA3A3A3)
+    static let divider = Color(hex: 0xECECEC)
+    static let primary = Color(hex: 0xD8FF45)
+    static let primaryTint = primary.opacity(0.32)
+    static let lavender = Color(hex: 0xB88EFF)
+    static let lavenderTint = lavender.opacity(0.22)
+
+    static let canvas = background
+    static let surface = card
+    static let lime = primary
+    static let pink = primary
+    static let softPink = primaryTint
+    static let lilac = lavender
+    static let deepLilac = ink
+    static let sky = lavender
+    static let careBlue = primary
+    static let careTint = lavenderTint
+    static let butter = primaryTint
+    static let alert = ink
 }
 
 private extension Color {
@@ -928,19 +1015,37 @@ private extension Color {
     }
 }
 
-private extension Font {
-    static func snootsDisplay(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
-        .custom("Nunito", size: size, relativeTo: .largeTitle).weight(weight)
+private enum SnootsMetrics {
+    static let buttonRadius: CGFloat = 20
+    static let cardRadius: CGFloat = 28
+    static let inputRadius: CGFloat = 18
+    static let profileImageRadius: CGFloat = 24
+}
+
+private extension View {
+    func snootsCardShadow() -> some View {
+        shadow(color: .black.opacity(0.08), radius: 20, y: 6)
+    }
+}
+
+extension Font {
+    static func snootsLogo(_ size: CGFloat) -> Font {
+        .system(size: size, weight: .heavy, design: .rounded)
     }
 
-    static func snootsScreenTitle() -> Font { snootsDisplay(34, weight: .bold) }
-    static func snootsSection() -> Font { snootsDisplay(20, weight: .bold) }
-    static func snootsCardTitle() -> Font { snootsDisplay(18, weight: .bold) }
+    static func snootsHeading(_ size: CGFloat) -> Font {
+        .system(size: size, weight: .semibold, design: .rounded)
+    }
+
+    static func snootsScreenTitle() -> Font { snootsHeading(34) }
+    static func snootsSection() -> Font { snootsHeading(20) }
+    static func snootsCardTitle() -> Font { snootsHeading(18) }
     static func snootsUI(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .custom("Inter", size: size, relativeTo: size >= 15 ? .body : .caption).weight(weight)
+        .system(size: size, weight: weight, design: .rounded)
     }
 
     static func snootsBody() -> Font { snootsUI(16) }
     static func snootsMetadata() -> Font { snootsUI(12, weight: .medium) }
     static func snootsChip() -> Font { snootsUI(12, weight: .medium) }
+    static func snootsButton(_ size: CGFloat) -> Font { .system(size: size, weight: .bold, design: .rounded) }
 }
