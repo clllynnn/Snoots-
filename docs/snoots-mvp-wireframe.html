@@ -363,9 +363,20 @@
     .export-area { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
     .export-area h3 { margin-bottom: 5px; font-size: 15px; }
     .export-area p { color: var(--secondary); font-size: 9px; line-height: 1.45; }
-    .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-    .export-button { min-height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); cursor: pointer; font-size: 9px; font-weight: 800; }
-    .export-button.primary { grid-column: 1 / -1; border-color: var(--ink); background: var(--ink); color: white; }
+    .export-grid { display: grid; gap: 8px; margin-top: 11px; }
+    .export-button { min-height: 58px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); cursor: pointer; color: var(--ink); text-align: left; }
+    .export-button strong, .export-button span { display: block; }
+    .export-button strong { font-size: 11px; font-weight: 900; }
+    .export-button span { margin-top: 3px; color: var(--secondary); font-size: 8px; font-weight: 600; line-height: 1.4; }
+    .export-button.primary { border-color: var(--pink); background: var(--soft-pink); color: var(--pink-dark); }
+    .export-button.codex { border-color: var(--ink); background: var(--ink); color: white; }
+    .export-button.codex span { color: rgba(255,255,255,.72); }
+    .export-file-tools { margin-top: 10px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+    .export-file-tools summary { min-height: 42px; display: flex; align-items: center; padding: 0 11px; cursor: pointer; color: var(--secondary); font-size: 9px; font-weight: 800; }
+    .export-file-tools[open] summary { border-bottom: 1px solid var(--line); }
+    .export-file-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 9px; }
+    .export-file-grid .export-button { min-height: 42px; padding: 0 9px; text-align: center; font-size: 8px; font-weight: 800; }
+    .export-file-grid .export-button:first-child { grid-column: 1 / -1; }
 
     [data-review-id] { position: relative; }
     body[data-review-mode="comment"] [data-review-id] { outline: 1px dashed rgba(255,64,133,.6); outline-offset: 3px; cursor: crosshair !important; }
@@ -432,7 +443,7 @@
         <h1 id="review-title">Snoots!</h1>
         <span class="version-badge">MVP 審稿</span>
       </div>
-      <p class="workspace-lede" data-pretext>直接操作原型，或切到留言模式點選畫面區塊。你的意見會留在這個頁面，最後可匯出成 Codex 能直接施工的回饋檔。</p>
+      <p class="workspace-lede" data-pretext>直接操作原型，或切到留言模式點選畫面區塊。完成後可以複製成給組員閱讀的討論版，或交給 Codex 施工的詳細版。</p>
 
       <div class="mode-switch" role="group" aria-label="審稿模式">
         <button class="mode-button is-active" data-mode="interact" type="button">操作原型</button>
@@ -664,7 +675,18 @@
       <div class="feedback-list-heading"><h3>已記錄</h3><button class="tiny-button" id="add-overall-feedback" type="button">＋ 整體意見</button></div>
       <div class="feedback-list" id="feedback-list"><div class="feedback-empty">還沒有意見。你可以針對單一區塊留言，也可以新增整體意見。</div></div>
 
-      <section class="export-area"><h3>交給下一個 Codex</h3><p>匯出內容會包含畫面區塊、意見類型、文字修改與目前選擇，不需要再重新口述。</p><div class="export-grid"><button class="export-button primary" id="save-feedback-file" type="button">儲存／更新回饋檔</button><button class="export-button" id="download-feedback" type="button">下載 Markdown</button><button class="export-button" id="copy-feedback" type="button">複製交接內容</button></div></section>
+      <section class="export-area">
+        <h3>分享這輪回饋</h3>
+        <p>先讓組員看懂、達成共識；確定要施工後，再把詳細版交給 Codex。</p>
+        <div class="export-grid">
+          <button class="export-button primary" id="copy-team-feedback" type="button"><strong>複製給組員</strong><span>自然語言摘要，不含區塊 ID 與施工資料</span></button>
+          <button class="export-button codex" id="copy-codex-feedback" type="button"><strong>複製給 Codex</strong><span>保留區塊 ID、畫面文案與目前操作狀態</span></button>
+        </div>
+        <details class="export-file-tools">
+          <summary>下載／連結 Codex 回饋檔</summary>
+          <div class="export-file-grid"><button class="export-button" id="save-feedback-file" type="button">儲存／更新回饋檔</button><button class="export-button" id="download-feedback" type="button">下載 Markdown</button></div>
+        </details>
+      </section>
     </aside>
   </main>
 
@@ -985,7 +1007,35 @@
       return [...document.querySelectorAll('[data-copy-id]')].map(element => ({ id: element.dataset.copyId, text: element.textContent.trim() }));
     }
 
-    function buildFeedbackMarkdown() {
+    function buildTeamMarkdown() {
+      const screenLabels = { discover: '探索清單', activity: '活動詳情', compare: 'AI 比較', swipe: '參加犬滑卡', place: '地點規則', all: '整體流程' };
+      const sections = [
+        { type: '修改', title: '建議調整' },
+        { type: '保留', title: '希望保留' },
+        { type: '問題', title: '還需要討論' }
+      ];
+      const lines = ['# Snoots! MVP 畫面回饋', '', `整理時間：${new Date().toLocaleString('zh-TW')}`, ''];
+
+      if (!reviewState.feedback.length) {
+        lines.push('目前沒有記錄畫面意見。', '');
+      } else {
+        lines.push(`這一輪共記錄 ${reviewState.feedback.length} 則意見，整理如下：`, '');
+        sections.forEach(section => {
+          const items = reviewState.feedback.filter(item => item.type === section.type);
+          if (!items.length) return;
+          lines.push(`## ${section.title}`, '');
+          items.forEach((item, index) => {
+            const location = item.targetId === 'overall' ? '' : `（${screenLabels[item.screen] || '目前畫面'}）`;
+            lines.push(`${index + 1}. **${item.label}**${location}`, `   ${item.note}`, '');
+          });
+        });
+      }
+
+      lines.push('## 請大家確認', '', '- 流程可以開始做 UI。', '- 還需要討論：＿＿＿＿。', '');
+      return lines.join('\n');
+    }
+
+    function buildCodexMarkdown() {
       const grouped = reviewState.feedback.reduce((result, item) => { (result[item.screen] ||= []).push(item); return result; }, {});
       const screenLabels = { discover: '探索清單', activity: '活動詳情', compare: 'AI 比較', swipe: '參加犬滑卡', place: '地點規則', all: '整體' };
       const lines = ['# Snoots! MVP 畫面回饋', '', `產生時間：${new Date().toLocaleString('zh-TW')}`, '', '## 給下一個 Codex', '', '- 以本檔案作為畫面修改的主要依據。', '- 先讀 `docs/snoots-mvp-wireframe.html` 與本回饋，不要重新發明產品方向。', '- 完成後保留原型內的意見工具，讓下一輪可以繼續審稿。', ''];
@@ -1015,7 +1065,7 @@
       if (!reviewState.fileHandle) return false;
       try {
         const writable = await reviewState.fileHandle.createWritable();
-        await writable.write(buildFeedbackMarkdown());
+        await writable.write(buildCodexMarkdown());
         await writable.close();
         return true;
       } catch { document.getElementById('file-status').classList.remove('is-linked'); document.getElementById('file-status').textContent = '檔案連結失效，請重新連結'; return false; }
@@ -1028,7 +1078,7 @@
     }
 
     function downloadFeedback() {
-      const blob = new Blob([buildFeedbackMarkdown()], { type: 'text/markdown;charset=utf-8' });
+      const blob = new Blob([buildCodexMarkdown()], { type: 'text/markdown;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1038,8 +1088,13 @@
       showToast('已下載 snoots-ui-feedback.md');
     }
 
-    async function copyFeedback() {
-      try { await navigator.clipboard.writeText(buildFeedbackMarkdown()); showToast('已複製，可直接貼到新的 Codex 對話'); }
+    async function copyTeamFeedback() {
+      try { await navigator.clipboard.writeText(buildTeamMarkdown()); showToast('已複製組員版，可貼到群組或 GitHub'); }
+      catch { showToast('瀏覽器無法複製，請確認剪貼簿權限'); }
+    }
+
+    async function copyCodexFeedback() {
+      try { await navigator.clipboard.writeText(buildCodexMarkdown()); showToast('已複製 Codex 版，可貼到新的實作對話'); }
       catch { showToast('瀏覽器無法複製，請改用下載功能'); }
     }
 
@@ -1105,7 +1160,8 @@
     document.getElementById('link-feedback-file').addEventListener('click', linkFeedbackFile);
     document.getElementById('save-feedback-file').addEventListener('click', saveOrDownloadFeedback);
     document.getElementById('download-feedback').addEventListener('click', downloadFeedback);
-    document.getElementById('copy-feedback').addEventListener('click', copyFeedback);
+    document.getElementById('copy-team-feedback').addEventListener('click', copyTeamFeedback);
+    document.getElementById('copy-codex-feedback').addEventListener('click', copyCodexFeedback);
     document.getElementById('open-feedback').addEventListener('click', () => feedbackPanel.classList.add('is-open'));
     document.getElementById('close-feedback').addEventListener('click', () => feedbackPanel.classList.remove('is-open'));
     document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeMatch(); feedbackPanel.classList.remove('is-open'); } });
