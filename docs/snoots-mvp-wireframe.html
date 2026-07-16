@@ -256,6 +256,14 @@
     .detail-cta { position: sticky; bottom: -100px; margin-top: 14px; padding-top: 10px; background: linear-gradient(transparent, var(--canvas) 24%); }
     .compare-intro { padding: 14px; border-radius: var(--radius-card); background: var(--sky-soft); border: 1px solid #bdddf8; }
     .compare-intro strong { display: block; margin-bottom: 4px; font-size: 12px; }
+    .compare-toolbar { margin-top: 12px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
+    .compare-status { color: var(--secondary); font-size: 9px; line-height: 1.45; }
+    .compare-status strong { color: var(--ink); }
+    .compare-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 9px; }
+    .compare-actions #adjust-comparison { grid-column: 1 / -1; }
+    .compare-actions.has-history #adjust-comparison { grid-column: auto; }
+    .compare-actions .secondary-button { min-height: 38px; margin-top: 0; font-size: 10px; }
+    .compare-actions .secondary-button[hidden] { display: none; }
     .ai-empty { margin-top: 12px; padding: 15px; border: 1px dashed var(--line); border-radius: var(--radius-card); background: var(--surface); color: var(--secondary); font-size: 10px; line-height: 1.5; }
     .ai-empty strong { display: block; margin-bottom: 4px; color: var(--ink); font-size: 12px; }
     .compare-intro p { margin-bottom: 0; color: #315d83; font-size: 10px; line-height: 1.5; }
@@ -618,7 +626,7 @@
         </section>
 
         <section class="app-screen" id="screen-activity" aria-labelledby="activity-detail-title">
-          <button class="back-button" data-open-screen="discover" type="button">‹ 回活動清單</button>
+          <button class="back-button" id="activity-detail-back" data-open-screen="discover" type="button">‹ 回活動清單</button>
           <div class="activity-detail-hero" data-review-id="activity-detail-hero" data-review-label="活動詳情主視覺與日期" data-review-count="0">
             <span id="activity-detail-date">7 月 18 日（六）16:00</span>
             <div><h2 id="activity-detail-title">小型犬慢走團</h2><p id="activity-detail-location">大安森林公園 · 距離 0.8 km</p></div>
@@ -646,6 +654,7 @@
           <button class="back-button" data-open-screen="discover" type="button">‹ 回活動清單</button>
           <header class="screen-header" data-review-id="compare-header" data-review-label="AI 活動比較頁標題" data-review-count="0"><div><h2 id="compare-title" data-copy-id="compare-title" contenteditable="true">Nori 適合哪一場？</h2><p>根據狗狗個性、參加犬與場地規則比較</p></div></header>
           <div class="compare-intro" data-review-id="ai-input-summary" data-review-label="AI 判讀使用的 Nori 資料摘要" data-review-count="0"><strong>這次用 Nori 的資料判斷</strong><p>5 kg、慢熟、害怕突然靠近的大型犬、不喜歡吵雜，適合牽繩慢走。</p></div>
+          <div class="compare-toolbar" id="compare-toolbar"><div class="compare-status" id="compare-status">尚未產生比較結果；先選 2–3 場活動，再按「AI 比較」。</div><div class="compare-actions"><button class="secondary-button" id="adjust-comparison" type="button">調整活動</button><button class="secondary-button" id="toggle-previous-comparison" type="button" hidden>上一輪比較</button></div></div>
           <div class="ai-loader" id="ai-loader" hidden aria-live="polite"><div><div class="spinner" aria-hidden="true"></div><strong>正在比較你選的活動…</strong><p style="margin:6px 0 0;color:var(--secondary);font-size:9px">同時檢查參加犬、活動方式與場地條件</p></div></div>
           <div class="ai-empty" id="ai-empty"><strong>先從活動清單按「AI 比較」</strong><span>這裡只呈現已主動啟動的比較結果，不會因為進入畫面就自動分析。</span></div>
           <div id="ai-results" hidden>
@@ -752,7 +761,10 @@
     let currentActivityDetail = 'slow-walk';
     let currentSwipeActivity = 'slow-walk';
     let currentDogDetail = 'Mochi';
-    let hasRunAIComparison = false;
+    let currentComparison = null;
+    let previousComparison = null;
+    let pendingComparison = null;
+    let comparisonView = 'current';
 
     const activities = {
       'slow-walk': { title: '小型犬慢走團', label: '最推薦', badge: '', description: '活動規模小、全程牽繩，對慢熟的 Nori 最容易掌握距離。', reasons: ['目前以小型犬為主，體型壓力較低', '6／8 組，人數不會過度擁擠', '可提早 10 分鐘到外圍熟悉環境'] },
@@ -808,8 +820,7 @@
       if (name === 'compare' && options.runAI === true) runAIComparison();
       if (name === 'compare' && options.runAI !== true) {
         document.getElementById('ai-loader').hidden = true;
-        document.getElementById('ai-empty').hidden = hasRunAIComparison;
-        document.getElementById('ai-results').hidden = !hasRunAIComparison;
+        renderComparisonView();
       }
       if (name === 'swipe') resetSwipeDeck();
     }
@@ -832,11 +843,15 @@
       });
     }
 
-    function openActivityDetail(id) {
+    function openActivityDetail(id, options = {}) {
       const activity = activities[id];
       const detail = activityDetails[id];
       if (!activity || !detail) return;
       currentActivityDetail = id;
+      const back = document.getElementById('activity-detail-back');
+      const returnTo = options.returnTo || 'discover';
+      back.dataset.openScreen = returnTo;
+      back.textContent = returnTo === 'compare' ? '‹ 回 AI 比較結果' : '‹ 回活動清單';
       document.getElementById('activity-detail-title').textContent = activity.title;
       document.getElementById('activity-detail-date').textContent = detail.date;
       document.getElementById('activity-detail-location').textContent = detail.location;
@@ -895,6 +910,7 @@
       });
       updateSelectionDock();
       updateActivityDetailButton();
+      updateCompareControls();
     }
 
     function updateSelectionDock() {
@@ -906,25 +922,73 @@
       button.textContent = count >= 2 ? `AI 比較 ${count} 場` : 'AI 比較';
     }
 
+    const comparisonOrder = ['slow-walk', 'indoor-meet', 'grass-run'];
+
+    function getSelectedActivityIds() {
+      return comparisonOrder.filter(id => selectedActivities.has(id));
+    }
+
+    function formatActivityNames(ids) {
+      return ids.map(id => activities[id]?.title).filter(Boolean).join('、');
+    }
+
+    function sameActivityIds(left, right) {
+      return left.length === right.length && left.every((id, index) => id === right[index]);
+    }
+
+    function updateCompareControls() {
+      const status = document.getElementById('compare-status');
+      const previousButton = document.getElementById('toggle-previous-comparison');
+      if (!status || !previousButton) return;
+      previousButton.hidden = !previousComparison;
+      previousButton.textContent = comparisonView === 'previous' ? '回目前結果' : '上一輪比較';
+      previousButton.parentElement.classList.toggle('has-history', Boolean(previousComparison));
+      if (!currentComparison) {
+        status.textContent = '尚未產生比較結果；先選 2–3 場活動，再按「AI 比較」。';
+        return;
+      }
+      if (comparisonView === 'previous' && previousComparison) {
+        status.textContent = `上一輪比較：${formatActivityNames(previousComparison.ids)}`;
+        return;
+      }
+      const selectedIds = getSelectedActivityIds();
+      status.textContent = sameActivityIds(selectedIds, currentComparison.ids)
+        ? `目前結果：${formatActivityNames(currentComparison.ids)}`
+        : `已改選活動：${formatActivityNames(selectedIds) || '尚未選擇'}；按「AI 比較」更新結果`;
+    }
+
+    function renderComparisonView() {
+      const snapshot = comparisonView === 'previous' ? previousComparison : currentComparison;
+      const hasResults = Boolean(snapshot);
+      document.getElementById('ai-empty').hidden = hasResults;
+      document.getElementById('ai-results').hidden = !hasResults;
+      if (hasResults) renderAIResults(snapshot.ids);
+      updateCompareControls();
+    }
+
     function runAIComparison() {
+      const ids = getSelectedActivityIds();
+      if (ids.length < 2) return;
       const loader = document.getElementById('ai-loader');
       const empty = document.getElementById('ai-empty');
       const results = document.getElementById('ai-results');
-      hasRunAIComparison = true;
+      pendingComparison = { ids, createdAt: Date.now() };
+      comparisonView = 'current';
       empty.hidden = true;
       loader.hidden = false;
-      results.hidden = true;
+      results.hidden = !currentComparison;
+      if (currentComparison) document.getElementById('compare-status').textContent = '正在更新比較；上一輪結果暫時保留。';
       aiTimer = setTimeout(() => {
-        renderAIResults();
+        if (currentComparison) previousComparison = currentComparison;
+        currentComparison = pendingComparison;
+        pendingComparison = null;
         loader.hidden = true;
-        results.hidden = false;
+        renderComparisonView();
         relayoutText();
       }, 850);
     }
 
-    function renderAIResults() {
-      const preferredOrder = ['slow-walk', 'indoor-meet', 'grass-run'];
-      const ids = preferredOrder.filter(id => selectedActivities.has(id));
+    function renderAIResults(ids = currentComparison?.ids || getSelectedActivityIds()) {
       document.getElementById('result-stack').innerHTML = ids.map((id, index) => {
         const activity = activities[id];
         return `<article class="result-card ${index === 0 ? 'is-top' : ''}" data-review-id="ai-result-${id}" data-review-label="AI 比較結果：${activity.title}" data-review-count="0">
@@ -935,7 +999,7 @@
         </article>`;
       }).join('');
       document.querySelectorAll('[data-open-swipe]').forEach(button => button.addEventListener('click', () => openDogDetail('Mochi', button.dataset.openSwipe)));
-      document.querySelectorAll('#result-stack [data-open-activity]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); openActivityDetail(button.dataset.openActivity); }));
+      document.querySelectorAll('#result-stack [data-open-activity]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); openActivityDetail(button.dataset.openActivity, { returnTo: 'compare' }); }));
       updateReviewCounts();
     }
 
@@ -1257,6 +1321,8 @@
     document.querySelectorAll('[data-select-activity]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); toggleActivity(button.dataset.selectActivity); }));
     document.querySelectorAll('[data-open-place]').forEach(button => button.addEventListener('click', () => showScreen('place')));
     document.getElementById('compare-selected').addEventListener('click', () => showScreen('compare', { runAI: true }));
+    document.getElementById('adjust-comparison').addEventListener('click', () => { comparisonView = 'current'; selectContentTab('activities'); showScreen('discover'); });
+    document.getElementById('toggle-previous-comparison').addEventListener('click', () => { if (!previousComparison) return; comparisonView = comparisonView === 'previous' ? 'current' : 'previous'; renderComparisonView(); });
     document.getElementById('activity-detail-select').addEventListener('click', () => toggleActivity(currentActivityDetail));
     document.querySelectorAll('[data-open-dog-detail]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); openDogDetail(button.dataset.openDogDetail, currentActivityDetail); }));
     document.getElementById('activity-detail-interest').addEventListener('click', () => {
