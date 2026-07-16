@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Snoots! 一日 MVP 團隊審閱用互動原型">
+  <title>Snoots! MVP 團隊審閱原型</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Nunito:wght@700;800;900&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #fffffc;
+      --surface: #ffffff;
+      --ink: #14141a;
+      --secondary: #666673;
+      --pink: #ff4085;
+      --soft-pink: #ffe3f0;
+      --lilac: #b885ff;
+      --deep-lilac: #4a2e7a;
+      --sky: #52adff;
+      --care-blue: #146ee0;
+      --care-tint: #e3f0ff;
+      --lime: #c7ff3d;
+      --butter: #ffe891;
+      --alert: #b31c40;
+      --line: #e8e8e3;
+      --radius-card: 20px;
+      --radius-small: 14px;
+      --shadow: 0 8px 22px rgba(20, 20, 26, .08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f3f3ee;
+      color: var(--ink);
+      font-family: "Inter", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, a { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible {
+      outline: 3px solid var(--sky);
+      outline-offset: 3px;
+    }
+
+    .review-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(310px, 430px) minmax(390px, 1fr);
+    }
+
+    .review-panel {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      padding: 42px clamp(24px, 4vw, 54px);
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--lime);
+      border: 2px solid var(--ink);
+      content: "";
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2, h3 { font-family: "Nunito", system-ui, sans-serif; }
+    h1 { margin-bottom: 10px; font-size: clamp(36px, 5vw, 54px); line-height: .98; font-weight: 900; }
+    .review-lede { max-width: 36ch; color: var(--secondary); line-height: 1.6; }
+
+    .flow-callout {
+      margin: 28px 0;
+      padding: 18px;
+      background: var(--lime);
+      border: 2px solid var(--ink);
+      border-radius: var(--radius-card);
+    }
+
+    .flow-callout strong { display: block; margin-bottom: 6px; font-family: "Nunito"; font-size: 20px; }
+    .flow-callout p { margin-bottom: 0; font-size: 14px; line-height: 1.55; }
+
+    .scenario-list { display: grid; gap: 10px; margin: 22px 0 30px; }
+    .scenario-button {
+      width: 100%;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      cursor: pointer;
+      text-align: left;
+    }
+    .scenario-button:hover { border-color: var(--ink); }
+    .scenario-button.is-active { background: var(--soft-pink); border-color: var(--pink); }
+    .scenario-button span:last-child { font-size: 12px; color: var(--secondary); }
+
+    .review-group { margin-top: 24px; }
+    .review-group h2 { margin-bottom: 10px; font-size: 18px; }
+    .review-group ul { margin: 0; padding-left: 19px; color: var(--secondary); font-size: 14px; line-height: 1.65; }
+    .review-group li + li { margin-top: 5px; }
+    .editable-note { border-radius: 8px; }
+
+    .prototype-stage {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 34px;
+      overflow: hidden;
+    }
+
+    .phone {
+      width: min(390px, calc(100vw - 36px));
+      height: min(844px, calc(100vh - 52px));
+      min-height: 650px;
+      position: relative;
+      overflow: hidden;
+      background: var(--canvas);
+      border: 8px solid var(--ink);
+      border-radius: 46px;
+      box-shadow: 0 26px 70px rgba(20, 20, 26, .22);
+    }
+
+    .phone::before {
+      position: absolute;
+      z-index: 20;
+      top: 10px;
+      left: 50%;
+      width: 112px;
+      height: 28px;
+      border-radius: 20px;
+      background: var(--ink);
+      transform: translateX(-50%);
+      content: "";
+    }
+
+    .app-screen {
+      display: none;
+      height: 100%;
+      overflow-y: auto;
+      padding: 48px 18px 98px;
+      scrollbar-width: none;
+    }
+    .app-screen::-webkit-scrollbar { display: none; }
+    .app-screen.is-visible { display: block; }
+
+    .screen-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+    .screen-header h2 { margin-bottom: 2px; font-size: 34px; line-height: 1; }
+    .screen-header p { margin-bottom: 0; color: var(--secondary); font-size: 13px; }
+
+    .icon-button {
+      width: 44px;
+      height: 44px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      background: var(--surface);
+      cursor: pointer;
+    }
+
+    .back-button {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: -4px 0 10px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .filter-row, .chip-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+    .filter-row { margin-bottom: 12px; }
+    .filter-chip, .info-chip {
+      white-space: nowrap;
+      border: 0;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .filter-chip { min-height: 40px; padding: 0 14px; background: var(--surface); cursor: pointer; }
+    .filter-chip.is-active { background: var(--ink); color: white; }
+    .info-chip { padding: 7px 10px; background: var(--butter); }
+    .info-chip.pink { background: var(--soft-pink); }
+    .info-chip.blue { background: var(--care-tint); color: #0a4da6; }
+
+    .map {
+      height: 355px;
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius-card);
+      background: var(--lime);
+      border: 1px solid rgba(20,20,26,.12);
+    }
+    .map-road { position: absolute; background: var(--surface); border: 1px solid rgba(20,20,26,.08); }
+    .road-a { width: 500px; height: 34px; top: 92px; left: -70px; transform: rotate(18deg); }
+    .road-b { width: 480px; height: 30px; top: 208px; left: -42px; transform: rotate(-24deg); }
+    .road-c { width: 28px; height: 470px; top: -40px; left: 215px; transform: rotate(9deg); }
+    .park-label { position: absolute; top: 145px; left: 24px; font-family: "Nunito"; font-size: 18px; font-weight: 800; transform: rotate(-7deg); }
+
+    .map-pin {
+      width: 50px;
+      height: 50px;
+      position: absolute;
+      z-index: 3;
+      display: grid;
+      place-items: center;
+      border: 3px solid var(--surface);
+      border-radius: 50% 50% 50% 8px;
+      box-shadow: 0 5px 12px rgba(20,20,26,.2);
+      transform: rotate(-45deg);
+      cursor: pointer;
+    }
+    .map-pin span { transform: rotate(45deg); font-size: 11px; font-weight: 800; }
+    .map-pin.event { top: 96px; left: 152px; background: var(--pink); color: white; }
+    .map-pin.place { top: 210px; left: 262px; background: var(--sky); color: white; }
+    .map-pin.care { top: 54px; left: 280px; background: var(--care-blue); color: white; }
+    .map-pin.secondary { top: 252px; left: 74px; background: var(--pink); color: white; }
+    .map-pin[hidden] { display: none; }
+
+    .map-legend { position: absolute; right: 12px; bottom: 12px; padding: 9px 11px; border-radius: 12px; background: rgba(255,255,255,.94); font-size: 11px; font-weight: 700; }
+    .legend-dot { width: 8px; height: 8px; display: inline-block; margin-right: 4px; border-radius: 50%; background: var(--pink); }
+
+    .preview-card, .card {
+      margin-top: 12px;
+      padding: 15px;
+      border-radius: var(--radius-card);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .preview-card { display: none; }
+    .preview-card.is-visible { display: block; }
+    .preview-top { display: flex; justify-content: space-between; gap: 12px; }
+    .preview-top h3 { margin-bottom: 4px; font-size: 19px; line-height: 1.15; }
+    .preview-top p { margin-bottom: 0; color: var(--secondary); font-size: 12px; }
+    .status-badge { height: fit-content; padding: 7px 9px; border-radius: 999px; background: var(--lime); font-size: 11px; font-weight: 700; white-space: nowrap; }
+
+    .primary-button, .secondary-button {
+      min-height: 48px;
+      width: 100%;
+      margin-top: 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .primary-button { border: 0; background: var(--pink); color: white; }
+    .primary-button.care { background: var(--care-blue); }
+    .primary-button.is-joined { background: var(--ink); }
+    .secondary-button { border: 1px solid var(--line); background: var(--surface); }
+    .text-button { min-height: 44px; border: 0; background: transparent; color: var(--deep-lilac); font-weight: 700; cursor: pointer; }
+
+    .hero-event {
+      min-height: 176px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 18px;
+      border-radius: var(--radius-card);
+      background: var(--lime);
+      border: 2px solid var(--ink);
+    }
+    .hero-event .kicker { width: fit-content; margin-bottom: auto; padding: 7px 10px; border-radius: 999px; background: var(--surface); font-size: 11px; font-weight: 700; }
+    .hero-event h2 { max-width: 10ch; margin-bottom: 5px; font-size: 30px; line-height: .98; }
+    .hero-event p { margin-bottom: 0; font-size: 13px; }
+
+    .detail-section { margin-top: 20px; }
+    .detail-section h3 { margin-bottom: 10px; font-size: 19px; }
+    .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .fact { padding: 12px; border-radius: var(--radius-small); background: var(--surface); border: 1px solid var(--line); }
+    .fact span { display: block; margin-bottom: 4px; color: var(--secondary); font-size: 11px; }
+    .fact strong { font-size: 13px; }
+
+    .dog-row { display: flex; gap: 10px; }
+    .dog-avatar { width: 58px; text-align: center; font-size: 11px; font-weight: 600; }
+    .dog-avatar img { width: 52px; height: 52px; display: block; margin: 0 auto 5px; object-fit: cover; border: 3px solid var(--surface); border-radius: 50%; box-shadow: 0 0 0 2px var(--lime); }
+    .dog-avatar.more div { width: 52px; height: 52px; display: grid; place-items: center; margin: 0 auto 5px; border-radius: 50%; background: var(--soft-pink); font-weight: 800; }
+
+    .ai-card { padding: 16px; border-radius: var(--radius-card); background: var(--care-tint); border: 1px solid #b7d7ff; }
+    .ai-label { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 11px; font-weight: 700; color: #0a4da6; }
+    .ai-card h3 { margin-bottom: 7px; font-size: 22px; }
+    .ai-card p { margin-bottom: 10px; font-size: 13px; line-height: 1.55; }
+    .ai-card small { display: block; color: var(--secondary); font-size: 10px; line-height: 1.45; }
+    .ai-loading { display: flex; align-items: center; gap: 10px; min-height: 78px; }
+    .spinner { width: 22px; height: 22px; border: 3px solid #b7d7ff; border-top-color: var(--care-blue); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .match-photo { height: 330px; width: 100%; object-fit: cover; border-radius: var(--radius-card); }
+    .match-name { margin: -70px 12px 0; position: relative; padding: 14px; border-radius: 16px; background: rgba(255,255,255,.94); }
+    .match-name h2 { margin-bottom: 2px; font-size: 30px; }
+    .match-name p { margin-bottom: 0; color: var(--secondary); font-size: 12px; }
+    .match-actions { display: flex; justify-content: center; gap: 18px; margin: 22px 0; }
+    .round-action { width: 64px; height: 64px; border: 0; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow); cursor: pointer; font-size: 20px; font-weight: 900; }
+    .round-action.like { width: 76px; height: 76px; background: var(--pink); color: white; }
+
+    .recommendation { display: none; padding: 16px; border-radius: var(--radius-card); background: var(--soft-pink); border: 1px solid var(--pink); }
+    .recommendation.is-visible { display: block; }
+    .recommendation h3 { margin-bottom: 5px; font-size: 20px; }
+    .recommendation p { margin-bottom: 0; color: var(--secondary); font-size: 13px; line-height: 1.5; }
+
+    .place-image { width: 100%; height: 210px; object-fit: cover; border-radius: var(--radius-card); }
+    .rule-list { display: grid; gap: 8px; }
+    .rule { padding: 12px 13px; border-radius: var(--radius-small); background: var(--surface); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+    .locked-card { position: relative; overflow: hidden; padding: 16px; border-radius: var(--radius-card); background: var(--surface); border: 2px dashed var(--lilac); }
+    .locked-card::after { position: absolute; inset: 0; background: rgba(255,255,255,.55); backdrop-filter: blur(3px); content: ""; }
+    .locked-content { opacity: .45; }
+    .lock-overlay { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; padding: 22px; text-align: center; }
+    .lock-overlay strong { font-family: "Nunito"; font-size: 18px; }
+    .lock-overlay span { display: block; margin-top: 5px; color: var(--secondary); font-size: 11px; }
+
+    .clinic-card { padding: 16px; border-radius: var(--radius-card); background: var(--care-tint); border: 1px solid #b7d7ff; }
+    .clinic-card h3 { margin-bottom: 4px; font-size: 19px; }
+    .clinic-card p { margin-bottom: 9px; color: var(--secondary); font-size: 12px; line-height: 1.45; }
+    .demo-data { display: inline-block; margin-bottom: 10px; padding: 5px 8px; border-radius: 999px; background: var(--butter); font-size: 10px; font-weight: 700; }
+
+    .bottom-nav {
+      position: absolute;
+      z-index: 15;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 82px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      align-items: start;
+      padding: 10px 8px 0;
+      background: rgba(255,255,255,.96);
+      border-top: 1px solid var(--line);
+    }
+    .nav-button { min-height: 54px; display: grid; place-items: center; gap: 3px; border: 0; background: transparent; color: var(--secondary); cursor: pointer; font-size: 10px; font-weight: 600; }
+    .nav-button::before { width: 20px; height: 20px; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 7px; content: ""; }
+    .nav-button.is-active { color: var(--pink); }
+    .nav-button.is-active::before { background: var(--soft-pink); }
+
+    .toast { position: absolute; z-index: 40; right: 18px; bottom: 92px; left: 18px; display: none; padding: 13px 15px; border-radius: 14px; background: var(--ink); color: white; font-size: 13px; text-align: center; }
+    .toast.is-visible { display: block; animation: toast-in .2s ease-out; }
+    @keyframes toast-in { from { transform: translateY(8px); opacity: 0; } }
+
+    .modal-backdrop { position: absolute; z-index: 50; inset: 0; display: none; align-items: flex-end; background: rgba(20,20,26,.45); }
+    .modal-backdrop.is-visible { display: flex; }
+    .modal { width: 100%; padding: 24px 20px 34px; border-radius: 28px 28px 0 0; background: var(--surface); }
+    .modal h2 { margin-bottom: 7px; font-size: 26px; }
+    .modal p { color: var(--secondary); font-size: 13px; line-height: 1.5; }
+
+    .review-hint { margin-top: 20px; color: var(--secondary); font-size: 11px; line-height: 1.5; }
+
+    @media (max-width: 900px) {
+      .review-shell { grid-template-columns: 1fr; }
+      .review-panel { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .prototype-stage { min-height: auto; padding: 28px 16px 44px; }
+      .phone { height: 760px; }
+    }
+
+    @media (max-width: 480px) {
+      body { background: var(--canvas); }
+      .review-panel { padding: 28px 20px; }
+      .review-group { display: none; }
+      .prototype-stage { padding: 0; }
+      .phone { width: 100%; height: 844px; min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; }
+    }
+
+    @media (min-width: 1024px) { .prototype-stage { padding: 48px; } }
+    @media (min-width: 1440px) { .review-shell { grid-template-columns: 460px 1fr; } }
+    @media (prefers-color-scheme: dark) { body { background: #ecece6; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+  </style>
+</head>
+<body>
+  <main class="review-shell">
+    <aside class="review-panel" aria-labelledby="review-title">
+      <div class="eyebrow">團隊審閱原型</div>
+      <h1 id="review-title">Snoots!</h1>
+      <p class="review-lede" data-pretext contenteditable="true">這不是最終視覺稿，而是一張讓全隊三人（包含 Dennis）共同確認產品主線、資訊層級與分工邊界的可操作原型。</p>
+
+      <div class="flow-callout">
+        <strong>一天只完成這個故事</strong>
+        <p>地圖發現狗聚 → AI 判斷是否適合 Nori → 報名成功 → 真實帶狗見面。</p>
+      </div>
+
+      <nav class="scenario-list" aria-label="原型情境">
+        <button class="scenario-button is-active" data-scenario="map" type="button"><strong>1. 核心流程</strong><span>地圖與活動</span></button>
+        <button class="scenario-button" data-scenario="dogs" type="button"><strong>2. 滑卡入口</strong><span>配對接活動</span></button>
+        <button class="scenario-button" data-scenario="care" type="button"><strong>3. 急診照護圖層</strong><span>急診資訊</span></button>
+        <button class="scenario-button" data-scenario="place" type="button"><strong>4. 付費牆示意</strong><span>地點詳情</span></button>
+      </nav>
+
+      <section class="review-group">
+        <h2>已定案</h2>
+        <ul>
+          <li>地圖切入，線下見面是結果。</li>
+          <li>滑卡保留，配對後接公開活動。</li>
+          <li>AI 聚焦活動適合度與原因說明。</li>
+          <li>急診照護收進地圖，基本安全資訊不鎖付費牆。</li>
+        </ul>
+      </section>
+
+      <section class="review-group">
+        <h2>請團隊審閱</h2>
+        <ul>
+          <li>三種地圖標記是否一眼能分辨？</li>
+          <li>適合度的理由是否夠可信、沒有過度承諾？</li>
+          <li>滑卡接公開活動是否自然？</li>
+          <li>哪些進階地點資訊值得未來付費？</li>
+        </ul>
+      </section>
+
+      <p class="review-hint">可點左側四個情境或手機下方導覽。部分說明文字可直接點選修改，用來現場討論措辭；重新整理後會恢復。</p>
+    </aside>
+
+    <section class="prototype-stage" aria-label="Snoots 手機原型">
+      <div class="phone">
+        <section class="app-screen is-visible" id="screen-map" aria-labelledby="map-title">
+          <header class="screen-header">
+            <div>
+              <h2 id="map-title">附近</h2>
+              <p>大安區 · 今天到週末</p>
+            </div>
+            <button class="icon-button" type="button" aria-label="篩選">≡</button>
+          </header>
+
+          <div class="filter-row" role="tablist" aria-label="地圖圖層">
+            <button class="filter-chip is-active" data-layer="all" role="tab" aria-selected="true" type="button">全部</button>
+            <button class="filter-chip" data-layer="event" role="tab" aria-selected="false" type="button">狗聚</button>
+            <button class="filter-chip" data-layer="place" role="tab" aria-selected="false" type="button">地點</button>
+            <button class="filter-chip" data-layer="care" role="tab" aria-selected="false" type="button">急診</button>
+          </div>
+
+          <div class="map" aria-label="大安區示意地圖">
+            <div class="map-road road-a"></div><div class="map-road road-b"></div><div class="map-road road-c"></div>
+            <div class="park-label">大安森林公園</div>
+            <button class="map-pin event" data-pin="event" type="button" aria-label="小型犬慢走團"><span>團</span></button>
+            <button class="map-pin event secondary" data-pin="event-alt" type="button" aria-label="週三固定散步團"><span>團</span></button>
+            <button class="map-pin place" data-pin="place" type="button" aria-label="Companion Cafe"><span>店</span></button>
+            <button class="map-pin care" data-pin="care" type="button" aria-label="大安夜間動物醫院"><span>醫</span></button>
+            <div class="map-legend"><span class="legend-dot"></span>本週有活動</div>
+          </div>
+
+          <article class="preview-card is-visible" id="preview-event">
+            <div class="preview-top">
+              <div><h3>小型犬慢走團</h3><p>週六 16:00 · 大安森林公園 · 尚有 2 組</p></div>
+              <span class="status-badge">適合 Nori</span>
+            </div>
+            <div class="chip-row" style="margin-top:12px"><span class="info-chip">全程牽繩</span><span class="info-chip pink">慢熟友善</span></div>
+            <button class="primary-button" id="open-activity" type="button">查看活動與適合度</button>
+          </article>
+
+          <article class="preview-card" id="preview-place">
+            <div class="preview-top"><div><h3>Companion Cafe</h3><p>咖啡廳 · 步行 4 分鐘</p></div><span class="status-badge">今日確認</span></div>
+            <div class="chip-row" style="margin-top:12px"><span class="info-chip">室內牽繩</span><span class="info-chip">15 kg 以下</span></div>
+            <button class="primary-button" data-open-screen="place" type="button">查看地點規則</button>
+          </article>
+
+          <article class="preview-card" id="preview-care">
+            <span class="demo-data">示意資料</span>
+            <div class="preview-top"><div><h3>大安夜間動物醫院</h3><p>車程 8 分鐘 · 接受夜間急診，前往前請先電話確認</p></div></div>
+            <button class="primary-button care" data-open-screen="care" type="button">查看電話與資訊</button>
+          </article>
+        </section>
+
+        <section class="app-screen" id="screen-activity" aria-labelledby="activity-title">
+          <button class="back-button" data-open-screen="map" type="button">‹ 回地圖</button>
+          <div class="hero-event">
+            <span class="kicker">每週固定團 · 本週場次</span>
+            <h2 id="activity-title">小型犬慢走團</h2>
+            <p>週六 16:00 · 大安森林公園</p>
+          </div>
+
+          <section class="detail-section">
+            <div class="facts">
+              <div class="fact"><span>集合</span><strong>信義路入口</strong></div>
+              <div class="fact"><span>人數</span><strong>6 / 8 組</strong></div>
+              <div class="fact"><span>方式</span><strong>全程牽繩慢走</strong></div>
+              <div class="fact"><span>主揪</span><strong>Yuna · 已辦 8 次</strong></div>
+            </div>
+          </section>
+
+          <section class="detail-section">
+            <h3>這些狗狗會參加</h3>
+            <div class="dog-row">
+              <div class="dog-avatar"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"><span>Mochi</span></div>
+              <div class="dog-avatar"><img src="../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg" alt="Pudding"><span>Pudding</span></div>
+              <div class="dog-avatar more"><div>T</div><span>Tofu</span></div>
+              <div class="dog-avatar more"><div>+3</div><span>其他狗狗</span></div>
+            </div>
+          </section>
+
+          <section class="detail-section ai-card" aria-live="polite">
+            <div class="ai-label"><span>SNOOTS AI 適合度</span><span>依 Nori 的資料</span></div>
+            <div class="ai-loading" id="ai-loading"><span class="spinner" aria-hidden="true"></span><span>正在比對狗狗、活動與場地…</span></div>
+            <div id="ai-result" hidden>
+              <h3>很適合 Nori</h3>
+              <p data-pretext>這場以小型犬為主，目前只有 6 隻狗，而且全程牽繩。Nori 個性慢熟，建議提早 10 分鐘抵達，先在外圍熟悉環境再加入。</p>
+              <div class="chip-row"><span class="info-chip blue">體型相近</span><span class="info-chip blue">人數少</span><span class="info-chip blue">慢速介紹</span></div>
+              <small>這是參考建議，不是安全保證。現場仍請由主人觀察狗狗狀態。</small>
+            </div>
+          </section>
+
+          <button class="primary-button" id="join-event" type="button">參加這場活動</button>
+        </section>
+
+        <section class="app-screen" id="screen-dogs" aria-labelledby="dogs-title">
+          <header class="screen-header"><div><h2 id="dogs-title">狗友</h2><p>先認識狗，再一起找適合的活動</p></div><span class="status-badge">2 km</span></header>
+          <img class="match-photo" src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi">
+          <div class="match-name"><h2>Mochi, 2 歲</h2><p>和 Elena · 距離 1.2 km</p></div>
+          <div class="chip-row" style="margin-top:18px"><span class="info-chip pink">溫和打招呼</span><span class="info-chip pink">牽繩介紹</span><span class="info-chip pink">體型相近</span></div>
+          <div class="match-actions">
+            <button class="round-action" type="button" aria-label="略過 Mochi">×</button>
+            <button class="round-action like" id="like-mochi" type="button" aria-label="想認識 Mochi">♥</button>
+            <button class="round-action" type="button" aria-label="收藏 Mochi">＋</button>
+          </div>
+          <article class="recommendation" id="match-recommendation">
+            <h3>你和 Mochi 配對成功</h3>
+            <p>你們都適合週六的小型犬慢走團。第一次見面可以先參加公開活動，不必直接一對一約見。</p>
+            <button class="primary-button" data-open-screen="activity" type="button">一起看看這場活動</button>
+          </article>
+        </section>
+
+        <section class="app-screen" id="screen-care" aria-labelledby="care-title">
+          <button class="back-button" data-open-screen="map" type="button">‹ 回地圖</button>
+          <header class="screen-header"><div><h2 id="care-title">急診照護</h2><p>附近可聯絡的動物醫療地點</p></div></header>
+          <div class="clinic-card">
+            <span class="demo-data">示意資料 · 請勿作真實醫療使用</span>
+            <h3>大安夜間動物醫院</h3>
+            <p>車程約 8 分鐘 · 接受夜間急診。營業與急診狀況可能變動，前往前請先電話確認。</p>
+            <div class="rule-list">
+              <div class="rule">電話：02-0000-0000（示意）</div>
+              <div class="rule">地址：台北市大安區示意路 104 號</div>
+              <div class="rule">最後確認：今天 18:40</div>
+            </div>
+            <button class="primary-button care" type="button" onclick="showToast('展示模式：這裡會開啟電話撥號')">先打電話確認</button>
+          </div>
+          <p class="review-hint">急診照護的基本資訊不進付費牆；本版不提供症狀判斷、醫療建議或緊急派遣。</p>
+        </section>
+
+        <section class="app-screen" id="screen-place" aria-labelledby="place-title">
+          <button class="back-button" data-open-screen="map" type="button">‹ 回地圖</button>
+          <img class="place-image" src="../app/Snoots!/Assets.xcassets/CompanionCafe.imageset/companion-cafe.jpg" alt="Companion Cafe">
+          <div class="screen-header" style="margin-top:14px"><div><h2 id="place-title" style="font-size:30px">Companion Cafe</h2><p>咖啡廳 · 步行 4 分鐘 · 今天 18:40 確認</p></div></div>
+          <section class="detail-section"><h3>基本規則（免費）</h3><div class="rule-list"><div class="rule">室內需要牽繩</div><div class="rule">15 kg 以下</div><div class="rule">使用座位請自備座墊</div></div></section>
+          <section class="detail-section locked-card">
+            <div class="locked-content"><h3>對 Nori 的完整分析</h3><p>安靜時段、建議座位、規則變動提醒與個人化到訪建議。</p></div>
+            <button class="lock-overlay" id="open-paywall" type="button" aria-label="查看付費牆示意"><span><strong>進階資訊示意</strong><span>哪些內容值得付費，留待團隊討論</span></span></button>
+          </section>
+        </section>
+
+        <section class="app-screen" id="screen-community" aria-labelledby="community-title">
+          <header class="screen-header"><div><h2 id="community-title">社群</h2><p>保留現有內容，本次不再擴充</p></div></header>
+          <article class="card"><h3>Nori 的第一次慢走團</h3><p style="color:var(--secondary);font-size:13px;line-height:1.55">這個頁面只代表既有 Feed 仍可存在。一天內的時間優先投入地圖、活動與 AI 適合度。</p></article>
+        </section>
+
+        <section class="app-screen" id="screen-profile" aria-labelledby="profile-title">
+          <header class="screen-header"><div><h2 id="profile-title">Nori</h2><p>適合度判斷需要的最小狗狗資料</p></div></header>
+          <img class="place-image" src="../app/Snoots!/Assets.xcassets/Nori.imageset/nori.jpg" alt="Nori">
+          <div class="rule-list" style="margin-top:14px"><div class="rule">5 kg · 小型犬</div><div class="rule">慢熟，害怕突然靠近的大型犬</div><div class="rule">不喜歡太吵雜，適合牽繩慢走</div></div>
+        </section>
+
+        <nav class="bottom-nav" aria-label="主要導覽">
+          <button class="nav-button is-active" data-nav="map" type="button">地圖</button>
+          <button class="nav-button" data-nav="dogs" type="button">狗友</button>
+          <button class="nav-button" data-nav="community" type="button">社群</button>
+          <button class="nav-button" data-nav="profile" type="button">我的</button>
+        </nav>
+
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+        <div class="modal-backdrop" id="paywall-modal" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
+          <div class="modal">
+            <h2 id="paywall-title">付費牆位置待討論</h2>
+            <p>基本場地規則與急診照護資訊保持免費。進階個人化分析、規則變動提醒與推薦時段，可作為未來付費方向。</p>
+            <button class="primary-button" type="button" onclick="showToast('已記錄：這裡只做付費牆示意'); closePaywall()">了解概念</button>
+            <button class="secondary-button" type="button" onclick="closePaywall()">返回地點</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const screens = [...document.querySelectorAll('.app-screen')];
+    const navButtons = [...document.querySelectorAll('[data-nav]')];
+    const scenarioButtons = [...document.querySelectorAll('[data-scenario]')];
+    const previewCards = [...document.querySelectorAll('.preview-card')];
+    let aiTimer;
+
+    function showScreen(name) {
+      clearTimeout(aiTimer);
+      screens.forEach(screen => screen.classList.toggle('is-visible', screen.id === `screen-${name}`));
+      const navName = ['map', 'dogs', 'community', 'profile'].includes(name) ? name : (name === 'activity' || name === 'care' || name === 'place' ? 'map' : name);
+      navButtons.forEach(button => button.classList.toggle('is-active', button.dataset.nav === navName));
+      scenarioButtons.forEach(button => button.classList.toggle('is-active', button.dataset.scenario === name || (name === 'activity' && button.dataset.scenario === 'map')));
+      const visible = document.querySelector('.app-screen.is-visible');
+      if (visible) visible.scrollTop = 0;
+      if (name === 'activity') runSuitability();
+    }
+
+    function runSuitability() {
+      const loading = document.getElementById('ai-loading');
+      const result = document.getElementById('ai-result');
+      loading.hidden = false;
+      result.hidden = true;
+      aiTimer = setTimeout(() => { loading.hidden = true; result.hidden = false; relayoutText(); }, 900);
+    }
+
+    function selectLayer(layer) {
+      document.querySelectorAll('[data-layer]').forEach(button => {
+        const active = button.dataset.layer === layer;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-selected', String(active));
+      });
+      document.querySelectorAll('.map-pin').forEach(pin => {
+        pin.hidden = layer !== 'all' && !pin.classList.contains(layer);
+      });
+      const preview = layer === 'care' ? 'care' : layer === 'place' ? 'place' : 'event';
+      showPreview(preview);
+    }
+
+    function showPreview(name) {
+      previewCards.forEach(card => card.classList.toggle('is-visible', card.id === `preview-${name}`));
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('is-visible');
+      setTimeout(() => toast.classList.remove('is-visible'), 2200);
+    }
+
+    function closePaywall() { document.getElementById('paywall-modal').classList.remove('is-visible'); }
+
+    document.querySelectorAll('[data-open-screen]').forEach(button => button.addEventListener('click', () => showScreen(button.dataset.openScreen)));
+    navButtons.forEach(button => button.addEventListener('click', () => showScreen(button.dataset.nav)));
+    scenarioButtons.forEach(button => button.addEventListener('click', () => showScreen(button.dataset.scenario)));
+    document.querySelectorAll('[data-layer]').forEach(button => button.addEventListener('click', () => selectLayer(button.dataset.layer)));
+    document.querySelectorAll('[data-pin]').forEach(button => button.addEventListener('click', () => {
+      const pin = button.dataset.pin;
+      showPreview(pin === 'care' ? 'care' : pin === 'place' ? 'place' : 'event');
+    }));
+    document.getElementById('open-activity').addEventListener('click', () => showScreen('activity'));
+    document.getElementById('join-event').addEventListener('click', event => {
+      event.currentTarget.textContent = '已參加 · 週六見';
+      event.currentTarget.classList.add('is-joined');
+      showToast('報名成功，活動前會再次提醒注意事項');
+    });
+    document.getElementById('like-mochi').addEventListener('click', () => {
+      document.getElementById('match-recommendation').classList.add('is-visible');
+      showToast('你和 Mochi 配對成功');
+    });
+    document.getElementById('open-paywall').addEventListener('click', () => document.getElementById('paywall-modal').classList.add('is-visible'));
+    document.getElementById('paywall-modal').addEventListener('click', event => { if (event.target.id === 'paywall-modal') closePaywall(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closePaywall(); });
+
+    let pretextHandles = new Map();
+    async function setupPretext() {
+      try {
+        const pretext = await import('https://esm.sh/@chenglou/pretext');
+        await document.fonts.ready;
+        document.querySelectorAll('[data-pretext]').forEach(element => {
+          pretextHandles.set(element, { api: pretext, handle: pretext.prepare(element.textContent, getComputedStyle(element).font) });
+          if (element.contentEditable === 'true') {
+            new MutationObserver(() => {
+              pretextHandles.set(element, { api: pretext, handle: pretext.prepare(element.textContent, getComputedStyle(element).font) });
+              relayoutText();
+            }).observe(element, { childList: true, characterData: true, subtree: true });
+          }
+        });
+        relayoutText();
+      } catch (error) {
+        document.documentElement.dataset.pretext = 'unavailable';
+      }
+    }
+
+    function relayoutText() {
+      pretextHandles.forEach(({ api, handle }, element) => {
+        const style = getComputedStyle(element);
+        const result = api.layout(handle, element.clientWidth, parseFloat(style.lineHeight));
+        element.style.minHeight = `${result.height}px`;
+      });
+    }
+
+    new ResizeObserver(relayoutText).observe(document.body);
+    setupPretext();
+  </script>
+</body>
+</html>
