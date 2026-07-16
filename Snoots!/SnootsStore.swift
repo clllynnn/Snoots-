@@ -3,7 +3,14 @@ import Observation
 
 @Observable
 final class SnootsStore {
-    let profile = ParentProfile(name: "Amber", petName: "Nori", trustScore: 92)
+    let profile = ParentProfile(name: "Amber", petName: "Nori", trustScore: 92, neighborhood: "Da’an District, Taipei")
+    let pet = PetProfile(
+        name: "Nori",
+        imageName: "Nori",
+        summary: "A thoughtful walker who prefers a little space before joining in.",
+        traits: ["Slow introductions", "Adult dogs", "Long lead"],
+        healthStatus: "Vaccinations and behavior card verified"
+    )
     var isMatched = false
     var careStepIndex = 0
     var savedPlaceIDs: Set<String> = []
@@ -40,6 +47,7 @@ final class SnootsStore {
     ]
 
     var currentCareStep: CareStep { careSteps[careStepIndex] }
+    var savedPlaces: [Place] { places.filter { savedPlaceIDs.contains($0.id) } }
 
     func advanceCareStep() {
         careStepIndex = min(careStepIndex + 1, careSteps.count - 1)
@@ -60,11 +68,13 @@ final class SnootsStore {
 enum SnootsSheet: Identifiable {
     case place(String)
     case match
+    case emergency
 
     var id: String {
         switch self {
         case .place(let placeID): "place-\(placeID)"
         case .match: "match"
+        case .emergency: "emergency"
         }
     }
 }
@@ -73,6 +83,15 @@ struct ParentProfile {
     let name: String
     let petName: String
     let trustScore: Int
+    let neighborhood: String
+}
+
+struct PetProfile {
+    let name: String
+    let imageName: String
+    let summary: String
+    let traits: [String]
+    let healthStatus: String
 }
 
 struct SocialPost: Identifiable {

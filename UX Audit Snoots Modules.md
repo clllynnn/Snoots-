@@ -2,7 +2,7 @@
 
 ## Overview
 
-This UX audit evaluates five core product modules of Snoots! through the lens of user needs, behavioral insights, and market validation. Each module is assessed based on clarity of user intent, problem-solution fit, and opportunity for differentiation in the Taiwan pet-tech landscape.
+This UX audit evaluates four core product modules of Snoots! through the lens of user needs, behavioral insights, and market validation. Each module is assessed based on clarity of user intent, problem-solution fit, and opportunity for differentiation in the Taiwan pet-tech landscape.
 
 ## Early-Stage Product Strategy
 
@@ -32,8 +32,7 @@ For the initial version (MVP), Snoots! should prioritize:
 Once trust and a user base are established:
 
 1. Layer in Social Feed (content + identity).
-2. Expand into Community Forum (knowledge + retention).
-3. Integrate Emergency Guidance (high-trust utility layer).
+2. Integrate Emergency Guidance (high-trust utility layer).
 
 ## Module 1: Social Feed
 
@@ -65,36 +64,7 @@ Dog owners want to share updates about their pets using photos and descriptive t
 - Smart feed ranking based on relevance and credibility.
 - Highlight milestones and lifecycle moments.
 
-## Module 2: Community Forum
-
-### User Intent
-
-New pet owners seek fast, reliable answers to specific dog-care questions through searchable discussions.
-
-### UX Evaluation
-
-- Strong utility-driven behavior: problem → search → solution.
-- Keyword-based discovery aligns with user mental models.
-- High reliance on community-generated expertise.
-
-### Pain Points / Gaps
-
-- Information fragmentation across existing platforms.
-- Outdated or unverified medical advice.
-- Poor organization and search accuracy in legacy forums.
-
-### Market Insights
-
-- Taiwanese users heavily rely on Facebook Groups and Dcard.
-- Existing platforms suffer from algorithm-driven visibility issues, a lack of structured knowledge systems, and low content reliability.
-
-### Opportunities
-
-- Build a structured knowledge layer with tagged, categorized answers.
-- Surface expert-verified responses.
-- Introduce search refinement filters for age, breed, and condition.
-
-## Module 3: Playdate Matching
+## Module 2: Playdate Matching
 
 ### User Intent
 
@@ -123,7 +93,7 @@ Dog owners want to safely find compatible playmates for their pets based on spec
 - Require profile verification for vaccination and behavior tags.
 - Enable controlled meetup-planning tools.
 
-## Module 4: Pet-Friendly Maps
+## Module 3: Pet-Friendly Maps
 
 ### User Intent
 
@@ -152,7 +122,7 @@ Dog owners want accurate, detailed information about pet policies at local venue
 - Enable community verification and updates.
 - Highlight certainty indicators for verified versus user-reported information.
 
-## Module 5: Emergency Guidance
+## Module 4: Emergency Guidance
 
 ### User Intent
 
@@ -202,4 +172,4 @@ Snoots! can win by structuring fragmented information, verifying real-world data
 
 ## Conclusion
 
-Snoots! addresses high-demand, emotionally driven user needs in an underserved and fragmented market. By focusing early on Playdate Matching and Pet-Friendly Maps, the product can establish immediate real-world value, build trust, and create a strong foundation for expanding into social and community-driven features.
+Snoots! addresses high-demand, emotionally driven user needs in an underserved and fragmented market. By focusing early on Playdate Matching and Pet-Friendly Maps, the product can establish immediate real-world value, build trust, and create a strong foundation for expanding into social and high-trust utility features.
