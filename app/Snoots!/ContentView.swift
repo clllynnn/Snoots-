@@ -2,32 +2,34 @@ import SwiftUI
 
 struct ContentView: View {
     let store: SnootsStore
-    @State private var selectedTab: AppTab = .social
+    @State private var selectedTab: AppTab = .match
     @State private var presentedSheet: SnootsSheet?
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack { SocialView(store: store) }
-                .tabItem { Label("Social", systemImage: "bubble.left.and.bubble.right.fill").font(.snootsUI(11, weight: .medium)) }
-                .tag(AppTab.social)
-
             NavigationStack { PlaydatesView(store: store, presentedSheet: $presentedSheet) }
-                .tabItem { Label("Playdates", systemImage: "heart.fill").font(.snootsUI(11, weight: .medium)) }
-                .tag(AppTab.playdates)
+                .tabItem { Label("Match", systemImage: "heart.fill").font(.snootsUI(11, weight: .medium)) }
+                .tag(AppTab.match)
 
-            NavigationStack { CareView(store: store) }
-                .tabItem { Label("Care", systemImage: "cross.case.fill").font(.snootsUI(11, weight: .medium)) }
-                .tag(AppTab.care)
+            NavigationStack { MapsView(store: store, presentedSheet: $presentedSheet) }
+                .tabItem { Label("Maps", systemImage: "map.fill").font(.snootsUI(11, weight: .medium)) }
+                .tag(AppTab.maps)
 
-            NavigationStack { PlacesView(store: store, presentedSheet: $presentedSheet) }
-                .tabItem { Label("Places", systemImage: "map.fill").font(.snootsUI(11, weight: .medium)) }
-                .tag(AppTab.places)
+            NavigationStack { FeedView(store: store) }
+                .tabItem { Label("Feed", systemImage: "bubble.left.and.bubble.right.fill").font(.snootsUI(11, weight: .medium)) }
+                .tag(AppTab.feed)
+
+            NavigationStack { ProfileView(store: store, presentedSheet: $presentedSheet) }
+                .tabItem { Label("Profile", systemImage: "person.crop.circle.fill").font(.snootsUI(11, weight: .medium)) }
+                .tag(AppTab.profile)
         }
         .tint(SnootsPalette.lime)
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .match:
                 MatchSheet(candidate: store.playdate, store: store)
+            case .emergency:
+                NavigationStack { CareView(store: store) }
             case .place(let placeID):
                 if let place = store.place(id: placeID) {
                     PlaceDetailSheet(place: place, store: store)
@@ -38,20 +40,25 @@ struct ContentView: View {
 }
 
 private enum AppTab: Hashable {
-    case social, playdates, care, places
+    case match, maps, feed, profile
 }
 
-struct SocialView: View {
+struct FeedView: View {
     let store: SnootsStore
+    @State private var selectedSection: FeedSection = .feed
+
+    private var visiblePosts: [SocialPost] {
+        store.socialPosts.filter { selectedSection == .feed ? $0.kind == .photo : $0.kind == .discussion }
+    }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Snoots!")
-                            .font(.snootsDisplay(38, weight: .black))
-                        Text("Taipei pet parents, checked in.")
+                        Text("Feed")
+                            .font(.snootsScreenTitle())
+                        Text("Your Taipei dog community.")
                             .font(.snootsUI(15))
                             .foregroundStyle(.secondary)
                     }
@@ -66,8 +73,15 @@ struct SocialView: View {
 
                 TrustSummaryCard(profile: store.profile)
 
+                Picker("Community section", selection: $selectedSection) {
+                    ForEach(FeedSection.allCases) { section in
+                        Text(section.title).tag(section)
+                    }
+                }
+                .pickerStyle(.segmented)
+
                 HStack {
-                    Text("From your community")
+                    Text(selectedSection.heading)
                         .font(.snootsSection())
                     Spacer()
                     Label("Nearby", systemImage: "location.fill")
@@ -75,7 +89,7 @@ struct SocialView: View {
                         .foregroundStyle(SnootsPalette.deepLilac)
                 }
 
-                ForEach(store.socialPosts) { post in
+                ForEach(visiblePosts) { post in
                     switch post.kind {
                     case .photo:
                         PhotoPostCard(post: post)
@@ -90,6 +104,14 @@ struct SocialView: View {
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
     }
+}
+
+private enum FeedSection: String, CaseIterable, Identifiable {
+    case feed, forum
+
+    var id: Self { self }
+    var title: String { rawValue.capitalized }
+    var heading: String { self == .feed ? "From your community" : "Questions for the community" }
 }
 
 private struct TrustSummaryCard: View {
@@ -218,8 +240,8 @@ struct PlaydatesView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Playdates").font(.snootsScreenTitle())
-                        Text("Accountability before chemistry.")
+                        Text("Match").font(.snootsScreenTitle())
+                        Text("Compatibility before chemistry.")
                             .font(.snootsBody())
                             .foregroundStyle(.secondary)
                     }
@@ -331,7 +353,7 @@ struct CareView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Care").font(.snootsScreenTitle())
+                        Text("Emergency guidance").font(.snootsScreenTitle())
                         Text("Stay with your pet. Keep it simple.")
                             .font(.snootsBody())
                             .foregroundStyle(.secondary)
@@ -434,7 +456,7 @@ private struct ClinicCard: View {
     }
 }
 
-struct PlacesView: View {
+struct MapsView: View {
     let store: SnootsStore
     @Binding var presentedSheet: SnootsSheet?
 
@@ -443,7 +465,7 @@ struct PlacesView: View {
             LazyVStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Places").font(.snootsScreenTitle())
+                        Text("Maps").font(.snootsScreenTitle())
                         Text("No surprises at the door.").font(.snootsBody()).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -454,7 +476,8 @@ struct PlacesView: View {
                 }
 
                 NeighborhoodMapCard(places: store.places)
-                Text("Verified around Da’an").font(.snootsSection())
+                EmergencyMapCard(clinic: store.clinic) { presentedSheet = .emergency }
+                Text("Pet-friendly nearby").font(.snootsSection())
 
                 ForEach(store.places) { place in
                     PlaceRow(place: place, isSaved: store.isSaved(place), onOpen: { presentedSheet = .place(place.id) }, onToggleSave: { store.toggleSaved(place) })
@@ -464,6 +487,40 @@ struct PlacesView: View {
         }
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+private struct EmergencyMapCard: View {
+    let clinic: Clinic
+    let onOpen: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "cross.case.fill")
+                    .font(.title2)
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(SnootsPalette.careBlue, in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Emergency guidance")
+                        .font(.snootsCardTitle())
+                    Text("\(clinic.name) · \(clinic.eta)")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("Open now")
+                    .font(.snootsChip())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(SnootsPalette.lime, in: Capsule())
+            }
+            Button("Get emergency help", action: onOpen)
+                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.careBlue))
+        }
+        .padding(16)
+        .background(SnootsPalette.careTint, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
@@ -581,6 +638,82 @@ struct PlaceDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.font(.snootsUI(15, weight: .semibold)) } }
         }
+    }
+}
+
+struct ProfileView: View {
+    let store: SnootsStore
+    @Binding var presentedSheet: SnootsSheet?
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Profile").font(.snootsScreenTitle())
+                        Text("Your dog’s trusted details.").font(.snootsBody()).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "gearshape.fill")
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
+                        .background(SnootsPalette.surface, in: Circle())
+                        .accessibilityLabel("Profile settings")
+                }
+
+                HStack(spacing: 14) {
+                    PhotoTile(imageName: store.pet.imageName, label: store.pet.name)
+                        .frame(width: 104, height: 104)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(store.profile.name).font(.snootsScreenTitle())
+                        Text("with \(store.pet.name)").font(.snootsBody()).foregroundStyle(.secondary)
+                        Label(store.profile.neighborhood, systemImage: "location.fill")
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.deepLilac)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(14)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+                TrustSummaryCard(profile: store.profile)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("\(store.pet.name)’s play card").font(.snootsSection())
+                    Text(store.pet.summary).font(.snootsBody()).foregroundStyle(.secondary)
+                    DeclarationChips(labels: store.pet.traits, tint: SnootsPalette.butter)
+                    Label(store.pet.healthStatus, systemImage: "checkmark.shield.fill")
+                        .font(.snootsUI(14, weight: .semibold))
+                        .foregroundStyle(SnootsPalette.deepLilac)
+                }
+                .padding(16)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+                if !store.savedPlaces.isEmpty {
+                    Text("Saved places").font(.snootsSection())
+                    ForEach(store.savedPlaces) { place in
+                        Button { presentedSheet = .place(place.id) } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(place.name).font(.snootsCardTitle())
+                                    Text("\(place.category) · \(place.walk)").font(.snootsMetadata())
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.bold))
+                            }
+                            .foregroundStyle(SnootsPalette.ink)
+                            .padding(14)
+                            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
