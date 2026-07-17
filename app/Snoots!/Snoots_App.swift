@@ -25,7 +25,7 @@ struct Snoots_App: App {
                 if isShowingLaunchScreen {
                     LaunchScreenView()
                         .task {
-                            try? await Task.sleep(for: .seconds(2))
+                            try? await Task.sleep(for: .seconds(2.8))
                             guard !Task.isCancelled else { return }
                             isShowingLaunchScreen = false
                         }
@@ -54,14 +54,26 @@ struct Snoots_App: App {
 }
 
 private struct LaunchScreenView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let logoSize: CGFloat = 88
+
     var body: some View {
-        Image("LaunchLogo")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 260, height: 260)
-            .accessibilityLabel("Snoots")
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(SnootsPalette.primary)
-            .ignoresSafeArea()
+        Group {
+            if reduceMotion {
+                Image("LaunchLogo")
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                AnimatedGIFView(
+                    sourceName: "launch-logo-full-drawing",
+                    fallbackImageName: "LaunchLogo"
+                )
+            }
+        }
+        .frame(width: logoSize, height: logoSize, alignment: .center)
+        .accessibilityLabel("Snoots")
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .background(Color(red: 216 / 255, green: 1, blue: 69 / 255))
+        .ignoresSafeArea()
     }
 }

@@ -350,8 +350,6 @@ struct PlaydatesView: View {
                     .foregroundStyle(SnootsPalette.secondaryText)
             }
 
-            Spacer(minLength: 12)
-
             Group {
                 if store.isMatched {
                     MatchedBanner(candidate: store.playdate, language: language)
@@ -374,12 +372,11 @@ struct PlaydatesView: View {
                 }
             }
             .frame(maxWidth: 390)
-            .frame(maxWidth: .infinity)
-
-            Spacer(minLength: 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(.horizontal, 18)
         .padding(.top, 14)
+        .padding(.bottom, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
@@ -425,32 +422,39 @@ private struct SwipeableMatchCard: View {
     private var isShowingPlaydate: Bool { dragOffset.width > 0 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Image(candidate.imageName)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity)
-                .frame(height: 242)
-                .clipped()
+        GeometryReader { geometry in
+            VStack(alignment: .leading, spacing: 0) {
+                Image(candidate.imageName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geometry.size.width)
+                    .frame(maxHeight: .infinity)
+                    .clipped()
 
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(candidate.name), \(localizedAge)")
-                        .font(.snootsHeading(28))
-                    Text(language.text("with \(candidate.owner) · \(localizedDistance)", "飼主 \(candidate.owner) · 距離 \(localizedDistance)"))
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(candidate.name), \(localizedAge)")
+                            .font(.snootsHeading(28))
+                        Text(language.text("with \(candidate.owner) · \(localizedDistance)", "飼主 \(candidate.owner) · 距離 \(localizedDistance)"))
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                    }
+                    Text(localizedIntro)
+                        .font(.snootsUI(14))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    MatchTraitChips(labels: localizedCompatibility)
+                    Label(localizedSafetyLine, systemImage: "checkmark.shield.fill")
                         .font(.snootsMetadata())
-                        .foregroundStyle(SnootsPalette.secondaryText)
+                        .foregroundStyle(SnootsPalette.lavender)
                 }
-                Text(localizedIntro)
-                    .font(.snootsUI(14))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                MatchTraitChips(labels: localizedCompatibility)
-                Label(localizedSafetyLine, systemImage: "checkmark.shield.fill")
-                    .font(.snootsMetadata())
-                    .foregroundStyle(SnootsPalette.lavender)
+                .padding(18)
+                .frame(width: geometry.size.width, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 230, alignment: .topLeading)
+                .layoutPriority(1)
             }
-            .padding(18)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
         }
         .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
@@ -1912,99 +1916,101 @@ private struct MatchChatRoom: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 10) {
-                        Image(candidate.imageName)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 44, height: 44)
-                            .clipShape(Circle())
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(language.text("You matched with \(candidate.name)", "你和 \(candidate.name) 配對成功"))
-                                .font(.snootsCardTitle())
-                            Label(
-                                language.text("Elena · Identity verified", "Elena · 身分已驗證"),
-                                systemImage: "checkmark.seal.fill"
-                            )
-                            .font(.snootsMetadata())
-                            .foregroundStyle(SnootsPalette.secondaryText)
-                        }
-                    }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-
-                    Text(language.text("Start with a friendly hello", "從一句友善的問候開始"))
-                        .font(.snootsSection())
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 10) {
-                            ForEach(openingGreetings, id: \.self) { greeting in
-                                Button {
-                                    send(greeting)
-                                } label: {
-                                    Text(greeting)
-                                        .font(.snootsUI(14, weight: .medium))
-                                        .multilineTextAlignment(.leading)
-                                        .foregroundStyle(SnootsPalette.ink)
-                                        .frame(width: 230, alignment: .leading)
-                                        .padding(14)
-                                        .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 1)
-                    }
-
-                    if !store.matchChatMessages.isEmpty {
-                        Text(language.text("Messages", "訊息"))
-                            .font(.snootsSection())
-                            .padding(.top, 4)
-
-                        ForEach(store.matchChatMessages) { message in
-                            HStack {
-                                if message.isOutgoing { Spacer(minLength: 52) }
-                                Text(message.text)
-                                    .font(.snootsBody())
-                                    .foregroundStyle(SnootsPalette.ink)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 11)
-                                    .background(
-                                        message.isOutgoing ? SnootsPalette.lime : SnootsPalette.surface,
-                                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    )
-                                if !message.isOutgoing { Spacer(minLength: 52) }
-                            }
-                        }
-                    }
-                }
-                .padding(18)
-            }
-
-            HStack(spacing: 10) {
-                TextField(language.text("Write a message", "輸入訊息"), text: $draft, axis: .vertical)
-                    .font(.snootsBody())
-                    .lineLimit(1...4)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-                    .focused($isComposerFocused)
-                    .submitLabel(.send)
-                    .onSubmit { send(draft) }
-
-                Button { send(draft) } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(SnootsPalette.ink)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 10) {
+                    Image(candidate.imageName)
+                        .resizable()
+                        .scaledToFill()
                         .frame(width: 44, height: 44)
-                        .background(SnootsPalette.lime, in: Circle())
+                        .clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(language.text("You matched with \(candidate.name)", "你和 \(candidate.name) 配對成功"))
+                            .font(.snootsCardTitle())
+                        Label(
+                            language.text("Elena · Identity verified", "Elena · 身分已驗證"),
+                            systemImage: "checkmark.seal.fill"
+                        )
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    }
                 }
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
-                .accessibilityLabel(language.text("Send message", "傳送訊息"))
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+
+                if !store.matchChatMessages.isEmpty {
+                    Text(language.text("Messages", "訊息"))
+                        .font(.snootsSection())
+                        .padding(.top, 4)
+
+                    ForEach(store.matchChatMessages) { message in
+                        HStack {
+                            if message.isOutgoing { Spacer(minLength: 52) }
+                            Text(message.text)
+                                .font(.snootsBody())
+                                .foregroundStyle(SnootsPalette.ink)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 11)
+                                .background(
+                                    message.isOutgoing ? SnootsPalette.lime : SnootsPalette.surface,
+                                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                )
+                            if !message.isOutgoing { Spacer(minLength: 52) }
+                        }
+                    }
+                }
+            }
+            .padding(18)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(language.text("Start with a friendly hello", "從一句友善的問候開始"))
+                    .font(.snootsSection())
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(openingGreetings, id: \.self) { greeting in
+                            Button {
+                                send(greeting)
+                            } label: {
+                                Text(greeting)
+                                    .font(.snootsUI(14, weight: .medium))
+                                    .multilineTextAlignment(.leading)
+                                    .foregroundStyle(SnootsPalette.ink)
+                                    .frame(width: 230, alignment: .leading)
+                                    .padding(14)
+                                    .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                }
+
+                HStack(spacing: 10) {
+                    TextField(language.text("Write a message", "輸入訊息"), text: $draft, axis: .vertical)
+                        .font(.snootsBody())
+                        .lineLimit(1...4)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+                        .focused($isComposerFocused)
+                        .submitLabel(.send)
+                        .onSubmit { send(draft) }
+
+                    Button { send(draft) } label: {
+                        Image(systemName: "arrow.up")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(SnootsPalette.ink)
+                            .frame(width: 44, height: 44)
+                            .background(SnootsPalette.lime, in: Circle())
+                    }
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+                    .accessibilityLabel(language.text("Send message", "傳送訊息"))
+                }
             }
             .padding(14)
             .background(SnootsPalette.canvas)
