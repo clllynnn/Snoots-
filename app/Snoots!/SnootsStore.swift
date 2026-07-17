@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 import Observation
 
 @MainActor
@@ -393,6 +394,7 @@ struct Place: Identifiable {
     let verificationSource: String
     let acceptsLargeDogs: Bool
     let isOpenNow: Bool
+    var hasLiveStatus: Bool = true
     let latitude: Double
     let longitude: Double
     let address: String
@@ -445,13 +447,18 @@ struct Place: Identifiable {
 
     func localizedLastConfirmed(_ language: SnootsLanguage) -> String {
         switch lastConfirmed {
-        case "Just now": language.text(lastConfirmed, "剛剛")
-        case "17 Jul 2026": language.text(lastConfirmed, "2026 年 7 月 17 日")
-        case "16 Jul 2026": language.text(lastConfirmed, "2026 年 7 月 16 日")
-        case "14 Jul 2026": language.text(lastConfirmed, "2026 年 7 月 14 日")
-        case "12 Jul 2026": language.text(lastConfirmed, "2026 年 7 月 12 日")
-        case "10 Jul 2026": language.text(lastConfirmed, "2026 年 7 月 10 日")
-        default: lastConfirmed
+        case "Just now": return language.text(lastConfirmed, "剛剛")
+        case "17 Jul 2026": return language.text(lastConfirmed, "2026 年 7 月 17 日")
+        case "16 Jul 2026": return language.text(lastConfirmed, "2026 年 7 月 16 日")
+        case "14 Jul 2026": return language.text(lastConfirmed, "2026 年 7 月 14 日")
+        case "12 Jul 2026": return language.text(lastConfirmed, "2026 年 7 月 12 日")
+        case "10 Jul 2026": return language.text(lastConfirmed, "2026 年 7 月 10 日")
+        default:
+            guard let date = ISO8601DateFormatter().date(from: lastConfirmed) else { return lastConfirmed }
+            return date.formatted(
+                Date.FormatStyle(date: .long, time: .omitted)
+                    .locale(language.locale)
+            )
         }
     }
 
@@ -467,6 +474,8 @@ struct Place: Identifiable {
         case "Dog park": language.text("Dog park", "狗狗公園")
         case "Emergency veterinary clinic": language.text("Emergency veterinary clinic", "急診獸醫診所")
         case "Veterinary hospital": language.text("Veterinary hospital", "動物醫院")
+        case "Restaurant": language.text("Restaurant", "用餐地點")
+        case "Park": language.text("Park", "公園")
         default: category
         }
     }
@@ -496,13 +505,107 @@ struct Place: Identifiable {
     }
 
     func openingHours(_ language: SnootsLanguage) -> String {
-        isOpenNow ? language.text("Open until 21:00", "營業至 21:00") : language.text("Opens at 10:00", "10:00 開始營業")
+        guard hasLiveStatus else { return language.text("Live hours unavailable", "暫無即時營業資訊") }
+        return isOpenNow ? language.text("Open until 21:00", "營業至 21:00") : language.text("Opens at 10:00", "10:00 開始營業")
     }
 
     func realWorldNotes(_ language: SnootsLanguage) -> [String] {
         acceptsLargeDogs
             ? [language.text("Tight indoor aisles", "室內走道較窄"), language.text("Busy after 2pm", "下午 2 點後較繁忙")]
             : [language.text("Best for smaller dogs", "較適合小型犬"), language.text("Bring a calm-down kit", "建議攜帶安撫用品")]
+    }
+}
+
+extension MapPlace {
+    func asNearbyPlace() -> Place? {
+        guard let coordinate else { return nil }
+
+        let nearbyCategory: NearbyCategory
+        let displayCategory: String
+        let imageName: String
+        switch category {
+        case .meetup:
+            nearbyCategory = .meetups
+            displayCategory = "Dog meetup"
+            imageName = "Nori"
+        case .restaurant:
+            nearbyCategory = .dining
+            displayCategory = "Restaurant"
+            imageName = "CompanionCafe"
+        case .park:
+            nearbyCategory = .parks
+            displayCategory = "Park"
+            imageName = "Mochi"
+        case .hospital:
+            nearbyCategory = .vets
+            displayCategory = "Veterinary hospital"
+            imageName = "TerraceTable"
+        }
+
+        let nearbyRegion: NearbyRegion
+        let regionText = [area, location].compactMap { $0 }.joined()
+        if regionText.contains("大安") {
+            nearbyRegion = .daan
+        } else if regionText.contains("信義") {
+            nearbyRegion = .xinyi
+        } else if regionText.contains("中正") {
+            nearbyRegion = .zhongzheng
+        } else {
+            nearbyRegion = .currentLocation
+        }
+
+        let dogAccess: DogAccess
+        switch dogAccessLabel {
+        case "indoor_ok": dogAccess = .indoorOK
+        case "outdoor_only": dogAccess = .outdoorOnly
+        case "carrier_required": dogAccess = .carrierRequired
+        default: dogAccess = .restrictionsApply
+        }
+
+        let verification: VerificationLevel
+        switch verificationLevel {
+        case "venue_confirmed": verification = .venueConfirmed
+        case "community_confirmed": verification = .communityConfirmed
+        default: verification = .needsReconfirmation
+        }
+
+        var rules: [PlaceRule] = []
+        if filterIDs.contains(where: { $0.hasSuffix("leash_required") }) { rules.append(.indoorLeash) }
+        if dogAccess == .outdoorOnly { rules.append(.outdoorOnly) }
+        if filterIDs.contains("park.shade_canopy") { rules.append(.waterBowl) }
+
+        var facilities: [PlaceFacility] = []
+        if filterIDs.contains("park.shade_canopy") { facilities.append(.shade) }
+        if filterIDs.contains("park.seating") { facilities.append(.outdoorSeating) }
+
+        let minutes = max(1, Int(ceil((distanceMeters ?? 0) / 80)))
+        let confirmation = verifiedAt ?? ""
+        let source = verification == .venueConfirmed ? "Venue confirmed" : verification == .communityConfirmed ? "Community confirmed" : "Community report"
+
+        return Place(
+            id: id,
+            name: name,
+            category: displayCategory,
+            nearbyCategory: nearbyCategory,
+            region: nearbyRegion,
+            walk: "\(minutes) min walk",
+            walkMinutes: minutes,
+            imageName: imageName,
+            rules: rules,
+            verified: confirmation,
+            dogAccess: dogAccess,
+            verificationLevel: verification,
+            lastConfirmed: confirmation,
+            verificationSource: source,
+            acceptsLargeDogs: filterIDs.contains("dining.large_dog") || category != .restaurant,
+            isOpenNow: false,
+            hasLiveStatus: false,
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            address: location ?? area ?? "",
+            facilities: facilities,
+            intentKeywords: ([policySummary] + filterIDs.sorted()).compactMap { $0 }.joined(separator: " ")
+        )
     }
 }
 

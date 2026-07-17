@@ -23,6 +23,7 @@ Numbers／管理後台
 - `supabase/migrations/20260717000000_nearby_places.sql`：正式 schema、索引、RLS 與附近搜尋函式。
 - `supabase/seed.sql`：由現有 SQLite 產生的 35 筆待審核地點與次標籤關聯。
 - `scripts/generate_supabase_seed.py`：可重複產生 seed，避免人工複製資料。
+- `scripts/generate_geocoded_publish_sql.swift`：使用 Apple Maps 為 Development 待審地點產生座標與發布 SQL；產出必須人工檢查後才可執行。
 - `app/Snoots!/SupabaseNearbyClient.swift`：App 的唯讀 Supabase REST 串接。
 - `app/Snoots!/MapPlacesRepository.swift`：遠端優先、本機 fallback 的資料載入入口。
 
@@ -89,6 +90,14 @@ App 不應再以地點 ID 猜測標籤。新增次標籤時，應先在這張表
 
 正式環境不可拿來測試 schema 或大量匯入。
 
+目前 Development 已建立於 Supabase：
+
+- 專案名稱：`Snoots Development`
+- Project ref：`erixfppvrhxvhdagncrf`
+- 區域：Northeast Asia（Seoul）
+
+Production 尚未建立。不得把 Development 的資料庫密碼、secret key 或 service role key 複製到正式 App。
+
 ### 套用資料庫
 
 安裝 Supabase CLI 並登入後：
@@ -109,6 +118,8 @@ Build Settings 需要提供：
 - `SNOOTS_SUPABASE_PUBLISHABLE_KEY`
 
 未設定、值無效或遠端連線失敗時，Repository 保留 bundled SQLite，不會讓附近頁面因設定缺失而無法啟動。正式封存前應由 CI 或 Release build configuration 注入正確環境值。
+
+目前只有 Debug build configuration 指向 Development，且只包含可公開的 publishable key。Release 保持空白，等 Production 建立後由發行流程注入，禁止直接沿用 Development。
 
 ## 6. Numbers 匯入流程
 
@@ -154,13 +165,14 @@ Numbers 可以作為大量整理工具，但不能直接覆蓋 Production。
 
 ## 9. 目前邊界與下一階段
 
-本次已完成 schema、RLS、PostGIS 查詢、種子產生器與 iOS 安全讀取層。尚未建立實際 Supabase 雲端專案，因為建立／連結需要專案擁有者的 Supabase 帳號與 project ref。現有 35 筆匯入資料也刻意保持未發布，必須先補齊座標及確認日期。
+本次已完成 Development 專案、schema、RLS、PostGIS 查詢、種子產生器與 iOS 唯讀串接。UI 次標籤直接取自 `filter_options`，複選時保存穩定 `filter_id` 並傳給 `nearby_places`；地圖與清單使用 RPC 回傳結果。本機 SQLite 僅在未設定或連線失敗時備援。
+
+目前 Development 有 24 個啟用中的次標籤、35 筆匯入地點，其中 15 筆已完成初步座標並發布供串接驗證。其餘 20 筆仍維持未發布，不能為了補數量而略過座標與來源審核。狗聚活動仍來自 App 既有活動資料，尚未搬入 `places`。
 
 下一階段應依序完成：
 
-1. 建立 Development 與 Production Supabase 專案。
-2. 套用 migration 與 Development seed。
-3. 補齊並審核 35 筆資料。
-4. 將附近頁面的 `Place` 模型完全統一到 Repository，讓 UI 次標籤直接取自 `filter_options`。
-5. 增加最後成功資料的持久快取與同步時間顯示。
-6. 建立非技術人員可使用的管理表單與審核流程。
+1. 人工核對已發布的 15 筆座標，補齊並審核其餘 20 筆資料。
+2. 將狗聚活動搬入受控的活動資料表或統一的附近查詢層。
+3. 建立 Production Supabase 專案與獨立 Release 設定。
+4. 增加最後成功資料的持久快取與同步時間顯示。
+5. 建立非技術人員可使用的管理表單與審核流程。

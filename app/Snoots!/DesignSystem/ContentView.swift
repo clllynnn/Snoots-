@@ -1286,18 +1286,44 @@ struct MapsView: View {
     let meetupFocusRequest: Int
     let meetupFocusTargetID: String?
     let onNavigate: (SnootsRoute) -> Void
-    @State private var selectedSubcategories: Set<NearbySubcategory> = []
+    @State private var selectedFilterIDs: Set<String> = []
     @State private var selectedPlaceID: String?
     @State private var resultsPanelDetent: NearbyResultsDetent = .compact
     @State private var hasInitializedNearby = false
     @State private var handledMeetupFocusRequest = 0
 
     private var visiblePlaces: [Place] {
-        return store.allPlaces.filter { place in
+        let candidates: [Place]
+        if selectedCategory == .meetups {
+            candidates = store.allPlaces.filter { $0.nearbyCategory == .meetups }
+        } else if store.mapPlaces.dataSource == .supabase {
+            candidates = store.mapPlaces.places.compactMap { $0.asNearbyPlace() }
+        } else {
+            candidates = store.allPlaces
+        }
+
+        return candidates.filter { place in
             (selectedCategory.map { place.nearbyCategory == $0 } ?? true)
                 && selectedRegion.matches(place)
-                && selectedSubcategories.allSatisfy { $0.matches(place) }
+                && localMeetupMatches(place)
         }
+    }
+
+    private var availableFilterOptions: [MapFilterOption] {
+        guard let category = selectedCategory?.databaseCategory else { return [] }
+        return store.mapPlaces.filterOptions
+            .filter { $0.category == category }
+            .sorted { $0.displayOrder < $1.displayOrder }
+    }
+
+    private var remoteQuery: NearbyRemoteQuery {
+        let center = selectedRegion.mapRegion.center
+        return NearbyRemoteQuery(
+            latitude: center.latitude,
+            longitude: center.longitude,
+            category: selectedCategory?.databaseCategory,
+            filterIDs: selectedFilterIDs.sorted()
+        )
     }
 
     private var markers: [NearbyMapMarker] {
@@ -1337,8 +1363,8 @@ struct MapsView: View {
 
                 NearbySubcategoryStrip(
                     region: $selectedRegion,
-                    category: selectedCategory,
-                    selections: $selectedSubcategories,
+                    options: availableFilterOptions,
+                    selections: $selectedFilterIDs,
                     language: language
                 )
             }
@@ -1376,21 +1402,29 @@ struct MapsView: View {
             handleMeetupFocusIfNeeded()
             guard !hasInitializedNearby else { return }
             hasInitializedNearby = true
-            selectedSubcategories = []
+            selectedFilterIDs = []
         }
         .onChange(of: selectedCategory) { _, _ in
-            selectedSubcategories = []
+            selectedFilterIDs = []
             resetResults()
         }
         .onChange(of: selectedRegion) { _, _ in resetResults() }
-        .onChange(of: selectedSubcategories) { _, _ in resetResults(keepPanelPosition: true) }
+        .onChange(of: selectedFilterIDs) { _, _ in resetResults(keepPanelPosition: true) }
         .onChange(of: meetupFocusRequest) { _, _ in handleMeetupFocusIfNeeded() }
+        .task(id: remoteQuery) {
+            await store.mapPlaces.refresh(
+                latitude: remoteQuery.latitude,
+                longitude: remoteQuery.longitude,
+                category: remoteQuery.category,
+                filterIDs: Set(remoteQuery.filterIDs)
+            )
+        }
     }
 
     private func handleMeetupFocusIfNeeded() {
         guard handledMeetupFocusRequest != meetupFocusRequest else { return }
         handledMeetupFocusRequest = meetupFocusRequest
-        selectedSubcategories = []
+        selectedFilterIDs = []
         resetResults()
         let targetID = meetupFocusTargetID
         Task { @MainActor in
@@ -1405,6 +1439,24 @@ struct MapsView: View {
             resultsPanelDetent = .compact
         }
     }
+
+    private func localMeetupMatches(_ place: Place) -> Bool {
+        guard place.nearbyCategory == .meetups else { return true }
+        return selectedFilterIDs.allSatisfy { filterID in
+            switch filterID {
+            case "meetup.leashed_group_walk": place.category == "Leashed group walk"
+            case "meetup.indoor": place.category == "Indoor dog meetup"
+            default: true
+            }
+        }
+    }
+}
+
+private struct NearbyRemoteQuery: Hashable {
+    let latitude: Double
+    let longitude: Double
+    let category: MapPlace.Category?
+    let filterIDs: [String]
 }
 
 enum NearbyCategory: CaseIterable, Identifiable, Hashable {
@@ -1417,6 +1469,15 @@ enum NearbyCategory: CaseIterable, Identifiable, Hashable {
         case .dining: language.text("Dining", "用餐")
         case .parks: language.text("Parks", "公園")
         case .vets: language.text("Veterinary care", "獸醫院")
+        }
+    }
+
+    var databaseCategory: MapPlace.Category {
+        switch self {
+        case .meetups: .meetup
+        case .dining: .restaurant
+        case .parks: .park
+        case .vets: .hospital
         }
     }
 }
@@ -1461,80 +1522,6 @@ enum NearbyRegion: CaseIterable, Identifiable, Hashable {
         center: CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5480),
         span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.06)
     )
-}
-
-private enum NearbySubcategory: CaseIterable, Hashable, Identifiable {
-    case leashedGroupWalk, indoorDogMeetup
-    case freeMovement, floorAllowed, leashRequired, leashNotRequired, largeDog, mediumDog, smallDog
-    case offLeash, naturalGrass, safetyFacilities, trainingFacilities, shadeCanopy, seating, allDay, daytime
-    case emergency24Hours, residentVeterinarian, oxygenICU, pulseOximeter, bloodPanel, xRay, ultrasound
-
-    var id: Self { self }
-
-    var category: NearbyCategory {
-        switch self {
-        case .leashedGroupWalk, .indoorDogMeetup: .meetups
-        case .freeMovement, .floorAllowed, .leashRequired, .leashNotRequired, .largeDog, .mediumDog, .smallDog: .dining
-        case .offLeash, .naturalGrass, .safetyFacilities, .trainingFacilities, .shadeCanopy, .seating, .allDay, .daytime: .parks
-        case .emergency24Hours, .residentVeterinarian, .oxygenICU, .pulseOximeter, .bloodPanel, .xRay, .ultrasound: .vets
-        }
-    }
-
-    func title(_ language: SnootsLanguage) -> String {
-        switch self {
-        case .leashedGroupWalk: language.text("Leashed group walk", "牽繩團體散步")
-        case .indoorDogMeetup: language.text("Indoor dog meetup", "室內狗聚")
-        case .freeMovement: language.text("Free movement", "可自由活動")
-        case .floorAllowed: language.text("Dogs on floor", "可落地")
-        case .leashRequired: language.text("Leash required", "需要牽繩")
-        case .leashNotRequired: language.text("No leash required", "不需要牽繩")
-        case .largeDog: language.text("Large dog", "大型犬")
-        case .mediumDog: language.text("Medium dog", "中型犬")
-        case .smallDog: language.text("Small dog", "小型犬")
-        case .offLeash: language.text("Off leash", "不需要牽繩")
-        case .naturalGrass: language.text("Natural grass", "天然草皮")
-        case .safetyFacilities: language.text("Safety facilities", "安全設施")
-        case .trainingFacilities: language.text("Training facilities", "訓練設施")
-        case .shadeCanopy: language.text("Shade canopy", "遮陽棚")
-        case .seating: language.text("Seating", "休憩座椅")
-        case .allDay: language.text("Good all day", "全天適合")
-        case .daytime: language.text("Good in daytime", "適合白天")
-        case .emergency24Hours: language.text("24-hour emergency", "24 小時急診")
-        case .residentVeterinarian: language.text("Resident veterinarian", "駐診獸醫師")
-        case .oxygenICU: language.text("Oxygen ICU", "ICU 氧氣病籠")
-        case .pulseOximeter: language.text("Pulse oximeter", "血氧機")
-        case .bloodPanel: language.text("Blood panel", "全套血檢")
-        case .xRay: language.text("X-ray", "X 光")
-        case .ultrasound: language.text("Ultrasound", "超音波")
-        }
-    }
-
-    func matches(_ place: Place) -> Bool {
-        switch self {
-        case .leashedGroupWalk: place.category == "Leashed group walk"
-        case .indoorDogMeetup: place.category == "Indoor dog meetup"
-        case .freeMovement: place.intentKeywords.contains("free roam")
-        case .floorAllowed: place.dogAccess != .carrierRequired
-        case .leashRequired: place.rules.contains(.indoorLeash)
-        case .leashNotRequired: !place.rules.contains(.indoorLeash)
-        case .largeDog: place.acceptsLargeDogs
-        case .mediumDog, .smallDog: place.nearbyCategory == .dining
-        case .offLeash: place.intentKeywords.contains("free roam")
-        case .naturalGrass: place.nearbyCategory == .parks
-        case .safetyFacilities, .trainingFacilities: place.id == "xinyi-dog-park"
-        case .shadeCanopy: place.facilities.contains(.shade)
-        case .seating: place.facilities.contains(.outdoorSeating)
-        case .allDay: place.id == "daan-forest"
-        case .daytime: place.nearbyCategory == .parks
-        case .emergency24Hours: place.id == "daan-night"
-        case .residentVeterinarian: place.id == "xinyi-vet"
-        case .oxygenICU, .pulseOximeter, .bloodPanel, .xRay, .ultrasound: place.id == "daan-night"
-        }
-    }
-
-    static func options(for category: NearbyCategory) -> [Self] {
-        allCases.filter { $0.category == category }
-    }
 }
 
 private enum NearbyResultsDetent: Equatable {
@@ -1632,8 +1619,8 @@ private struct NearbyCategorySegmentedControl: UIViewRepresentable {
 
 private struct NearbySubcategoryStrip: View {
     @Binding var region: NearbyRegion
-    let category: NearbyCategory?
-    @Binding var selections: Set<NearbySubcategory>
+    let options: [MapFilterOption]
+    @Binding var selections: Set<String>
     let language: SnootsLanguage
 
     var body: some View {
@@ -1666,19 +1653,19 @@ private struct NearbySubcategoryStrip: View {
             }
             .fixedSize(horizontal: true, vertical: false)
 
-            if let category {
+            if !options.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(NearbySubcategory.options(for: category)) { subcategory in
-                            let isSelected = selections.contains(subcategory)
+                        ForEach(options) { option in
+                            let isSelected = selections.contains(option.id)
                             Button {
                                 if isSelected {
-                                    selections.remove(subcategory)
+                                    selections.remove(option.id)
                                 } else {
-                                    selections.insert(subcategory)
+                                    selections.insert(option.id)
                                 }
                             } label: {
-                                Text(subcategory.title(language))
+                                Text(option.title(language))
                                     .font(.snootsChip())
                                     .foregroundStyle(SnootsPalette.ink)
                                     .padding(.horizontal, 12)
@@ -1695,7 +1682,7 @@ private struct NearbySubcategoryStrip: View {
                         }
                     }
                 }
-                .id(category)
+                .id(options.map(\.id))
                 .contentMargins(.horizontal, 1, for: .scrollContent)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .clipped()
@@ -1917,8 +1904,13 @@ private struct NearbyPlaceCard: View {
                 HStack(spacing: 5) {
                     Text(place.localizedWalk(language))
                     Text("·")
-                    Text(place.isOpenNow ? language.text("Open", "營業中") : language.text("Closed", "休息中"))
-                        .foregroundStyle(place.isOpenNow ? SnootsPalette.deepLilac : SnootsPalette.secondaryText)
+                    if place.hasLiveStatus {
+                        Text(place.isOpenNow ? language.text("Open", "營業中") : language.text("Closed", "休息中"))
+                            .foregroundStyle(place.isOpenNow ? SnootsPalette.deepLilac : SnootsPalette.secondaryText)
+                    } else {
+                        Text(language.text("Hours unavailable", "暫無營業資訊"))
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                    }
                 }
                 .font(.snootsMetadata())
                 Text(place.dogAccess.label(language))
@@ -2038,11 +2030,13 @@ private struct PracticalPlaceInfo: View {
             HStack {
                 Label(place.openingHours(language), systemImage: "clock.fill")
                 Spacer()
-                Text(place.isOpenNow ? language.text("Open now", "營業中") : language.text("Closed", "休息中"))
-                    .font(.snootsChip())
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(place.isOpenNow ? SnootsPalette.lime : SnootsPalette.canvas, in: Capsule())
+                if place.hasLiveStatus {
+                    Text(place.isOpenNow ? language.text("Open now", "營業中") : language.text("Closed", "休息中"))
+                        .font(.snootsChip())
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .background(place.isOpenNow ? SnootsPalette.lime : SnootsPalette.canvas, in: Capsule())
+                }
             }
             .font(.snootsUI(14, weight: .medium))
             Label(place.localizedAddress(language), systemImage: "location.fill")

@@ -13,9 +13,15 @@ struct MapPlace: Identifiable {
     let sourceURL: URL?
     let ruleLabels: [String]
     let filterIDs: Set<String>
+    let policySummary: String?
+    let dogAccessLabel: String?
+    let verificationLevel: String
+    let verifiedAt: String?
+    let distanceMeters: Double?
     var coordinate: CLLocationCoordinate2D?
 
     enum Category: String, CaseIterable, Identifiable {
+        case meetup = "dog_meetup"
         case restaurant = "pet_friendly_restaurant"
         case park = "pet_friendly_park"
         case hospital = "animal_hospital"
@@ -24,6 +30,7 @@ struct MapPlace: Identifiable {
 
         var title: String {
             switch self {
+            case .meetup: "Dog meetups"
             case .restaurant: "Restaurants"
             case .park: "Parks"
             case .hospital: "Hospitals"
@@ -32,6 +39,7 @@ struct MapPlace: Identifiable {
 
         var symbol: String {
             switch self {
+            case .meetup: "person.2.fill"
             case .restaurant: "fork.knife"
             case .park: "tree.fill"
             case .hospital: "cross.case.fill"
@@ -54,6 +62,10 @@ struct MapFilterOption: Identifiable, Sendable {
     let titleTraditionalChinese: String
     let titleEnglish: String
     let displayOrder: Int
+
+    func title(_ language: SnootsLanguage) -> String {
+        language.text(titleEnglish, titleTraditionalChinese)
+    }
 }
 
 @MainActor
@@ -76,12 +88,28 @@ final class MapPlacesRepository {
     }
 
     func refreshFromRemoteIfConfigured() async {
+        await refresh(
+            latitude: 25.0330,
+            longitude: 121.5480,
+            category: nil,
+            filterIDs: []
+        )
+    }
+
+    func refresh(
+        latitude: Double,
+        longitude: Double,
+        category: MapPlace.Category?,
+        filterIDs: Set<String>
+    ) async {
         guard let configuration = SupabaseNearbyConfiguration.load() else { return }
 
         do {
             let snapshot = try await SupabaseNearbyClient(configuration: configuration).fetchSnapshot(
-                latitude: 25.0330,
-                longitude: 121.5480
+                latitude: latitude,
+                longitude: longitude,
+                category: category?.rawValue,
+                filterIDs: filterIDs.sorted()
             )
             let options = snapshot.filterOptions.compactMap { option -> MapFilterOption? in
                 guard let category = MapPlace.Category(rawValue: option.category) else { return nil }
@@ -108,6 +136,11 @@ final class MapPlacesRepository {
                     sourceURL: place.sourceURL.flatMap(URL.init(string:)),
                     ruleLabels: place.filterIDs.compactMap { labelsByID[$0] },
                     filterIDs: Set(place.filterIDs),
+                    policySummary: place.policySummary,
+                    dogAccessLabel: place.dogAccessLabel,
+                    verificationLevel: place.verificationLevel,
+                    verifiedAt: place.verifiedAt,
+                    distanceMeters: place.distanceMeters,
                     coordinate: CLLocationCoordinate2D(
                         latitude: place.latitude,
                         longitude: place.longitude
@@ -116,14 +149,11 @@ final class MapPlacesRepository {
             }
 
             filterOptions = options
-            if !remotePlaces.isEmpty {
-                places = remotePlaces
-                dataSource = .supabase
-                hasResolvedLocations = true
-            }
+            places = remotePlaces
+            dataSource = .supabase
+            hasResolvedLocations = true
             errorMessage = nil
         } catch {
-            dataSource = .bundledSQLite
             errorMessage = error.localizedDescription
         }
     }
@@ -208,6 +238,11 @@ final class MapPlacesRepository {
                         freeRoam: string(from: statement, column: 10)
                     ),
                     filterIDs: [],
+                    policySummary: nil,
+                    dogAccessLabel: nil,
+                    verificationLevel: "needs_reconfirmation",
+                    verifiedAt: nil,
+                    distanceMeters: nil,
                     coordinate: nil
                 )
             )
