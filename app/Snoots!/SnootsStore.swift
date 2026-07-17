@@ -12,6 +12,12 @@ final class SnootsStore {
         traits: ["Slow introductions", "Adult dogs", "Long lead"],
         healthStatus: "Vaccinations and behavior card verified"
     )
+    let feedingMonitor = FeedingMonitor(
+        isOnline: true,
+        lastFedHoursAgo: 3,
+        waterIntakeMilliliters: 200,
+        waterGoalMilliliters: 1200
+    )
     let care = PetCareProfile(
         rabies: VaccineRecord(
             vaccinatedOn: "14 Sep 2025",
@@ -21,14 +27,36 @@ final class SnootsStore {
             batchNumber: "RAB-250914"
         ),
         otherVaccinationsCount: 2,
-        healthNotes: "No allergies or ongoing medication"
+        healthNotes: "Spayed 8 Mar 2025 · No chronic conditions\nLast vet visit 10 Jul 2026"
     )
     var isMatched = false
     var hasMatchChat = false
     var matchChatMessages: [MatchChatMessage] = []
     var careStepIndex = 0
     var savedPlaceIDs: Set<String> = []
+    var createdMeetups: [MeetupDraft] = []
     let mapPlaces = MapPlacesRepository()
+
+    let meetupActivityTypes = [
+        MeetupActivityType(id: "dining", symbol: "fork.knife", title: "Dog-friendly dining", traditionalChineseTitle: "寵物友善用餐"),
+        MeetupActivityType(id: "park", symbol: "tree", title: "Dog park", traditionalChineseTitle: "寵物公園"),
+        MeetupActivityType(id: "other", symbol: "person.2", title: "Other meetup", traditionalChineseTitle: "其他狗聚")
+    ]
+    let meetupVenues = [
+        MeetupVenue(id: "daan-forest", name: "Da’an Forest Park · East Gate", traditionalChineseName: "大安森林公園 · 東門"),
+        MeetupVenue(id: "riverside", name: "Riverside Park · Lawn", traditionalChineseName: "河濱公園 · 草地區"),
+        MeetupVenue(id: "companion", name: "Companion Cafe · Patio", traditionalChineseName: "Companion Cafe · 戶外座位")
+    ]
+    let meetupDurations = [
+        MeetupDuration(hours: 1),
+        MeetupDuration(hours: 2),
+        MeetupDuration(hours: 3)
+    ]
+    let meetupSafetyOptions = [
+        MeetupSafetyOption(id: "Leash on", title: "Leash on", traditionalChineseTitle: "全程牽繩"),
+        MeetupSafetyOption(id: "Slow introductions", title: "Slow introductions", traditionalChineseTitle: "慢慢認識"),
+        MeetupSafetyOption(id: "Adult dogs", title: "Adult dogs", traditionalChineseTitle: "偏好成犬")
+    ]
 
     let feedStories = [
         FeedStory(name: "Your story", imageName: "Nori", isCurrentUser: true),
@@ -108,12 +136,70 @@ final class SnootsStore {
         guard !trimmedText.isEmpty else { return }
         matchChatMessages.append(MatchChatMessage(text: trimmedText, isOutgoing: true))
     }
+
+    func createMeetup(_ meetup: MeetupDraft) {
+        createdMeetups.insert(meetup, at: 0)
+    }
 }
 
 struct MatchChatMessage: Identifiable {
     let id = UUID()
     let text: String
     let isOutgoing: Bool
+}
+
+struct MeetupActivityType: Identifiable {
+    let id: String
+    let symbol: String
+    let title: String
+    let traditionalChineseTitle: String
+
+    func localizedTitle(_ language: SnootsLanguage) -> String {
+        language.text(title, traditionalChineseTitle)
+    }
+}
+
+struct MeetupVenue: Identifiable {
+    let id: String
+    let name: String
+    let traditionalChineseName: String
+
+    func localizedName(_ language: SnootsLanguage) -> String {
+        language.text(name, traditionalChineseName)
+    }
+}
+
+struct MeetupDuration: Identifiable {
+    let hours: Int
+    var id: Int { hours }
+
+    func localizedLabel(_ language: SnootsLanguage) -> String {
+        language.text("\\(hours) hour\\(hours == 1 ? \"\" : \"s\")", "\\(hours) 小時")
+    }
+}
+
+struct MeetupSafetyOption: Identifiable {
+    let id: String
+    let title: String
+    let traditionalChineseTitle: String
+
+    func localizedTitle(_ language: SnootsLanguage) -> String {
+        language.text(title, traditionalChineseTitle)
+    }
+}
+
+struct MeetupDraft: Identifiable {
+    let id = UUID()
+    let title: String
+    let activityTypeID: String
+    let venueID: String
+    let startDate: Date
+    let durationHours: Int
+    let attendeeLimit: Int
+    let requiresApproval: Bool
+    let safetyTagIDs: [String]
+    let notes: String
+    let hasCoverPhoto: Bool
 }
 
 struct ParentProfile {
@@ -129,6 +215,17 @@ struct PetProfile {
     var summary: String
     var traits: [String]
     let healthStatus: String
+}
+
+struct FeedingMonitor {
+    let isOnline: Bool
+    let lastFedHoursAgo: Int
+    let waterIntakeMilliliters: Int
+    let waterGoalMilliliters: Int
+
+    var waterProgress: Double {
+        min(Double(waterIntakeMilliliters) / Double(waterGoalMilliliters), 1)
+    }
 }
 
 struct SocialPost: Identifiable {

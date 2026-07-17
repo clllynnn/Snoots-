@@ -11,6 +11,10 @@ enum SnootsLanguage: String, CaseIterable, Identifiable {
         Locale(identifier: self == .traditionalChinese ? "zh-Hant" : "en")
     }
 
+    static var systemDefault: SnootsLanguage {
+        Locale.current.language.languageCode?.identifier == "zh" ? .traditionalChinese : .english
+    }
+
     func text(_ english: String, _ traditionalChinese: String) -> String {
         self == .english ? english : traditionalChinese
     }
