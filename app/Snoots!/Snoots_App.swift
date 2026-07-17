@@ -36,6 +36,9 @@ struct Snoots_App: App {
                         displayLanguageRawValue: $displayLanguageRawValue
                     )
                     .environment(\.locale, displayLanguage.locale)
+                    .task {
+                        await store.mapPlaces.refreshFromRemoteIfConfigured()
+                    }
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in

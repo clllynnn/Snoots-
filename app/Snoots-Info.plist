@@ -20,6 +20,10 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>SnootsSupabasePublishableKey</key>
+    <string>$(SNOOTS_SUPABASE_PUBLISHABLE_KEY)</string>
+    <key>SnootsSupabaseURL</key>
+    <string>$(SNOOTS_SUPABASE_URL)</string>
     <key>UIAppFonts</key>
     <array>
         <string>Inter-Regular.ttf</string>

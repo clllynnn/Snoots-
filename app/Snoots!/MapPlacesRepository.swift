@@ -12,6 +12,7 @@ struct MapPlace: Identifiable {
     let appleMapsURL: URL?
     let sourceURL: URL?
     let ruleLabels: [String]
+    let filterIDs: Set<String>
     var coordinate: CLLocationCoordinate2D?
 
     enum Category: String, CaseIterable, Identifiable {
@@ -47,16 +48,84 @@ struct MapPlace: Identifiable {
     }
 }
 
+struct MapFilterOption: Identifiable, Sendable {
+    let id: String
+    let category: MapPlace.Category
+    let titleTraditionalChinese: String
+    let titleEnglish: String
+    let displayOrder: Int
+}
+
 @MainActor
 @Observable
 final class MapPlacesRepository {
+    enum DataSource: Equatable {
+        case bundledSQLite
+        case supabase
+    }
+
     private(set) var places: [MapPlace] = []
+    private(set) var filterOptions: [MapFilterOption] = []
+    private(set) var dataSource: DataSource = .bundledSQLite
     private(set) var errorMessage: String?
     private(set) var isResolvingLocations = false
     private var hasResolvedLocations = false
 
     init() {
         loadPlaces()
+    }
+
+    func refreshFromRemoteIfConfigured() async {
+        guard let configuration = SupabaseNearbyConfiguration.load() else { return }
+
+        do {
+            let snapshot = try await SupabaseNearbyClient(configuration: configuration).fetchSnapshot(
+                latitude: 25.0330,
+                longitude: 121.5480
+            )
+            let options = snapshot.filterOptions.compactMap { option -> MapFilterOption? in
+                guard let category = MapPlace.Category(rawValue: option.category) else { return nil }
+                return MapFilterOption(
+                    id: option.id,
+                    category: category,
+                    titleTraditionalChinese: option.titleTraditionalChinese,
+                    titleEnglish: option.titleEnglish,
+                    displayOrder: option.displayOrder
+                )
+            }
+            let labelsByID = Dictionary(
+                uniqueKeysWithValues: options.map { ($0.id, $0.titleTraditionalChinese) }
+            )
+            let remotePlaces = snapshot.places.compactMap { place -> MapPlace? in
+                guard let category = MapPlace.Category(rawValue: place.category) else { return nil }
+                return MapPlace(
+                    id: place.id,
+                    category: category,
+                    name: place.name,
+                    area: place.area,
+                    location: place.address,
+                    appleMapsURL: place.appleMapsURL.flatMap(URL.init(string:)),
+                    sourceURL: place.sourceURL.flatMap(URL.init(string:)),
+                    ruleLabels: place.filterIDs.compactMap { labelsByID[$0] },
+                    filterIDs: Set(place.filterIDs),
+                    coordinate: CLLocationCoordinate2D(
+                        latitude: place.latitude,
+                        longitude: place.longitude
+                    )
+                )
+            }
+
+            filterOptions = options
+            if !remotePlaces.isEmpty {
+                places = remotePlaces
+                dataSource = .supabase
+                hasResolvedLocations = true
+            }
+            errorMessage = nil
+        } catch {
+            dataSource = .bundledSQLite
+            errorMessage = error.localizedDescription
+        }
     }
 
     func resolveLocationsIfNeeded() async {
@@ -138,6 +207,7 @@ final class MapPlacesRepository {
                         leashRequired: string(from: statement, column: 9),
                         freeRoam: string(from: statement, column: 10)
                     ),
+                    filterIDs: [],
                     coordinate: nil
                 )
             )

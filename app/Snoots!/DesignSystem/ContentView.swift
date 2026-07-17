@@ -1286,10 +1286,9 @@ struct MapsView: View {
     let meetupFocusRequest: Int
     let meetupFocusTargetID: String?
     let onNavigate: (SnootsRoute) -> Void
-    @State private var selectedSubcategory: NearbySubcategory? = nil
+    @State private var selectedSubcategories: Set<NearbySubcategory> = []
     @State private var selectedPlaceID: String?
     @State private var resultsPanelDetent: NearbyResultsDetent = .compact
-    @State private var isRegionPickerPresented = false
     @State private var hasInitializedNearby = false
     @State private var handledMeetupFocusRequest = 0
 
@@ -1297,7 +1296,7 @@ struct MapsView: View {
         return store.allPlaces.filter { place in
             (selectedCategory.map { place.nearbyCategory == $0 } ?? true)
                 && selectedRegion.matches(place)
-                && (selectedSubcategory.map { $0.matches(place) } ?? true)
+                && selectedSubcategories.allSatisfy { $0.matches(place) }
         }
     }
 
@@ -1311,10 +1310,7 @@ struct MapsView: View {
     }
 
     private var resultsSummary: String {
-        let category = selectedCategory?.title(language) ?? language.text("All activities", "全部活動")
-        let region = selectedRegion.title(language)
-        guard let selectedSubcategory else { return "\(category) · \(region)" }
-        return "\(category) · \(selectedSubcategory.title(language)) · \(region)"
+        language.text("Filtered results", "篩選結果")
     }
 
     var body: some View {
@@ -1336,14 +1332,14 @@ struct MapsView: View {
                     .accessibilityLabel(language.text("Find emergency care", "尋找緊急醫療"))
                 }
 
-                NearbyCategoryTagBar(selection: $selectedCategory, language: language)
+                NearbyCategorySegmentedControl(selection: $selectedCategory, language: language)
+                    .frame(height: NearbyCategorySegmentedControl.controlHeight)
 
                 NearbySubcategoryStrip(
-                    region: selectedRegion,
+                    region: $selectedRegion,
                     category: selectedCategory,
-                    selection: $selectedSubcategory,
-                    language: language,
-                    onSelectRegion: { isRegionPickerPresented = true }
+                    selections: $selectedSubcategories,
+                    language: language
                 )
             }
             .padding(.horizontal, 18)
@@ -1367,8 +1363,7 @@ struct MapsView: View {
                         summary: resultsSummary,
                         selectedPlaceID: $selectedPlaceID,
                         detent: $resultsPanelDetent,
-                        language: language,
-                        onOpen: { onNavigate(.place($0.id)) }
+                        language: language
                     )
                     .frame(height: panelHeight)
                 }
@@ -1377,28 +1372,25 @@ struct MapsView: View {
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.visible, for: .tabBar)
-        .sheet(isPresented: $isRegionPickerPresented) {
-            NearbyRegionPickerSheet(selection: $selectedRegion, language: language)
-        }
         .onAppear {
             handleMeetupFocusIfNeeded()
             guard !hasInitializedNearby else { return }
             hasInitializedNearby = true
-            selectedSubcategory = nil
+            selectedSubcategories = []
         }
         .onChange(of: selectedCategory) { _, _ in
-            selectedSubcategory = nil
+            selectedSubcategories = []
             resetResults()
         }
         .onChange(of: selectedRegion) { _, _ in resetResults() }
-        .onChange(of: selectedSubcategory) { _, _ in resetResults(keepPanelPosition: true) }
+        .onChange(of: selectedSubcategories) { _, _ in resetResults(keepPanelPosition: true) }
         .onChange(of: meetupFocusRequest) { _, _ in handleMeetupFocusIfNeeded() }
     }
 
     private func handleMeetupFocusIfNeeded() {
         guard handledMeetupFocusRequest != meetupFocusRequest else { return }
         handledMeetupFocusRequest = meetupFocusRequest
-        selectedSubcategory = nil
+        selectedSubcategories = []
         resetResults()
         let targetID = meetupFocusTargetID
         Task { @MainActor in
@@ -1419,15 +1411,6 @@ enum NearbyCategory: CaseIterable, Identifiable, Hashable {
     case meetups, dining, parks, vets
 
     var id: Self { self }
-    var symbol: String {
-        switch self {
-        case .meetups: "pawprint.fill"
-        case .dining: "fork.knife"
-        case .parks: "tree.fill"
-        case .vets: "cross.case.fill"
-        }
-    }
-
     func title(_ language: SnootsLanguage) -> String {
         switch self {
         case .meetups: language.text("Dog meetups", "狗聚")
@@ -1569,43 +1552,105 @@ private enum NearbyResultsDetent: Equatable {
     }
 }
 
-private struct NearbyCategoryTagBar: View {
+private struct NearbyCategorySegmentedControl: UIViewRepresentable {
+    static let controlHeight: CGFloat = 54
+
     @Binding var selection: NearbyCategory?
     let language: SnootsLanguage
 
-    var body: some View {
-        HStack(spacing: 7) {
-            ForEach(NearbyCategory.allCases) { category in
-                let isSelected = selection == category
-                Button {
-                    selection = isSelected ? nil : category
-                } label: {
-                    Text(category.title(language))
-                        .font(.snootsUI(14, weight: .bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                        .foregroundStyle(SnootsPalette.ink)
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                        .background(isSelected ? SnootsPalette.primary : SnootsPalette.surface, in: Capsule())
-                        .overlay(Capsule().stroke(isSelected ? SnootsPalette.ink : SnootsPalette.divider, lineWidth: isSelected ? 1.5 : 1))
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
+    func makeUIView(context: Context) -> UISegmentedControl {
+        let control = TallSegmentedControl(items: NearbyCategory.allCases.map { $0.title(language) })
+        let titleAttributes: [NSAttributedString.Key: Any] = [.font: categoryFont]
+        control.setTitleTextAttributes(titleAttributes, for: .normal)
+        control.setTitleTextAttributes(titleAttributes, for: .selected)
+        control.addTarget(context.coordinator, action: #selector(Coordinator.recordSelectionBeforeTouch(_:)), for: .touchDown)
+        control.addTarget(context.coordinator, action: #selector(Coordinator.selectionChanged(_:)), for: .valueChanged)
+        control.addTarget(context.coordinator, action: #selector(Coordinator.clearRepeatedSelection(_:)), for: .touchUpInside)
+        control.accessibilityLabel = language.text("Nearby category", "附近分類")
+        return control
+    }
+
+    func updateUIView(_ control: UISegmentedControl, context: Context) {
+        context.coordinator.parent = self
+        for (index, category) in NearbyCategory.allCases.enumerated() {
+            control.setTitle(category.title(language), forSegmentAt: index)
+        }
+        control.selectedSegmentIndex = selection.flatMap { NearbyCategory.allCases.firstIndex(of: $0) } ?? UISegmentedControl.noSegment
+        control.accessibilityLabel = language.text("Nearby category", "附近分類")
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    private var categoryFont: UIFont {
+        let baseFont = UIFont.systemFont(ofSize: 20, weight: .semibold)
+        let roundedDescriptor = baseFont.fontDescriptor.withDesign(.rounded) ?? baseFont.fontDescriptor
+        let roundedFont = UIFont(descriptor: roundedDescriptor, size: 20)
+        return UIFontMetrics(forTextStyle: .title3).scaledFont(for: roundedFont)
+    }
+
+    private final class TallSegmentedControl: UISegmentedControl {
+        override var intrinsicContentSize: CGSize {
+            var size = super.intrinsicContentSize
+            size.height = NearbyCategorySegmentedControl.controlHeight
+            return size
+        }
+
+        override func sizeThatFits(_ size: CGSize) -> CGSize {
+            var fittedSize = super.sizeThatFits(size)
+            fittedSize.height = NearbyCategorySegmentedControl.controlHeight
+            return fittedSize
+        }
+    }
+
+    final class Coordinator: NSObject {
+        var parent: NearbyCategorySegmentedControl
+        private var selectedIndexBeforeTouch = UISegmentedControl.noSegment
+
+        init(parent: NearbyCategorySegmentedControl) {
+            self.parent = parent
+        }
+
+        @objc func recordSelectionBeforeTouch(_ sender: UISegmentedControl) {
+            selectedIndexBeforeTouch = sender.selectedSegmentIndex
+        }
+
+        @objc func selectionChanged(_ sender: UISegmentedControl) {
+            guard NearbyCategory.allCases.indices.contains(sender.selectedSegmentIndex) else {
+                parent.selection = nil
+                return
             }
+            parent.selection = NearbyCategory.allCases[sender.selectedSegmentIndex]
+        }
+
+        @objc func clearRepeatedSelection(_ sender: UISegmentedControl) {
+            guard sender.selectedSegmentIndex == selectedIndexBeforeTouch else { return }
+            sender.selectedSegmentIndex = UISegmentedControl.noSegment
+            parent.selection = nil
         }
     }
 }
 
 private struct NearbySubcategoryStrip: View {
-    let region: NearbyRegion
+    @Binding var region: NearbyRegion
     let category: NearbyCategory?
-    @Binding var selection: NearbySubcategory?
+    @Binding var selections: Set<NearbySubcategory>
     let language: SnootsLanguage
-    let onSelectRegion: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            Button(action: onSelectRegion) {
+            Menu {
+                ForEach(NearbyRegion.allCases) { option in
+                    Button {
+                        region = option
+                    } label: {
+                        if option == region {
+                            Label(option.title(language), systemImage: "checkmark")
+                        } else {
+                            Text(option.title(language))
+                        }
+                    }
+                }
+            } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "location.fill")
                     Text(region.title(language))
@@ -1619,16 +1664,19 @@ private struct NearbySubcategoryStrip: View {
                 .background(SnootsPalette.lavenderTint, in: Capsule())
                 .overlay(Capsule().stroke(SnootsPalette.lavender, lineWidth: 1))
             }
-            .buttonStyle(.plain)
             .fixedSize(horizontal: true, vertical: false)
 
             if let category {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(NearbySubcategory.options(for: category)) { subcategory in
-                            let isSelected = selection == subcategory
+                            let isSelected = selections.contains(subcategory)
                             Button {
-                                selection = isSelected ? nil : subcategory
+                                if isSelected {
+                                    selections.remove(subcategory)
+                                } else {
+                                    selections.insert(subcategory)
+                                }
                             } label: {
                                 Text(subcategory.title(language))
                                     .font(.snootsChip())
@@ -1636,7 +1684,11 @@ private struct NearbySubcategoryStrip: View {
                                     .padding(.horizontal, 12)
                                     .frame(minHeight: 40)
                                     .background(isSelected ? SnootsPalette.primary : SnootsPalette.surface, in: Capsule())
-                                    .overlay(Capsule().stroke(isSelected ? SnootsPalette.ink : SnootsPalette.divider, lineWidth: isSelected ? 1.5 : 1))
+                                    .overlay {
+                                        if !isSelected {
+                                            Capsule().stroke(SnootsPalette.divider, lineWidth: 1)
+                                        }
+                                    }
                             }
                             .buttonStyle(.plain)
                             .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -1650,43 +1702,6 @@ private struct NearbySubcategoryStrip: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct NearbyRegionPickerSheet: View {
-    @Binding var selection: NearbyRegion
-    let language: SnootsLanguage
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List(NearbyRegion.allCases) { region in
-                Button {
-                    selection = region
-                    dismiss()
-                } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: region == .currentLocation ? "location.fill" : "mappin.and.ellipse")
-                            .font(.snootsUI(17, weight: .bold))
-                            .frame(width: 36, height: 36)
-                            .background(selection == region ? SnootsPalette.lavenderTint : SnootsPalette.canvas, in: Circle())
-                        Text(region.title(language))
-                            .font(.snootsUI(17, weight: .semibold))
-                        Spacer()
-                        if selection == region {
-                            Image(systemName: "checkmark")
-                                .font(.snootsUI(15, weight: .bold))
-                        }
-                    }
-                    .foregroundStyle(SnootsPalette.ink)
-                    .frame(minHeight: 48)
-                }
-                .buttonStyle(.plain)
-            }
-            .navigationTitle(language.text("Choose area", "選擇區域"))
-            .navigationBarTitleDisplayMode(.inline)
-        }
-        .presentationDetents([.medium])
     }
 }
 
@@ -1815,7 +1830,6 @@ private struct NearbyResultsPanel: View {
     @Binding var selectedPlaceID: String?
     @Binding var detent: NearbyResultsDetent
     let language: SnootsLanguage
-    let onOpen: (Place) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1862,7 +1876,6 @@ private struct NearbyResultsPanel: View {
                             ForEach(places) { place in
                                 NearbyPlaceCard(place: place, isSelected: selectedPlaceID == place.id, language: language) {
                                     selectedPlaceID = place.id
-                                    onOpen(place)
                                 }
                                 .id(place.id)
                             }
@@ -1890,10 +1903,10 @@ private struct NearbyPlaceCard: View {
     let place: Place
     let isSelected: Bool
     let language: SnootsLanguage
-    let onOpen: () -> Void
+    let onSelect: () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
+        Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(place.localizedName(language))
                     .font(.snootsCardTitle())
@@ -1927,7 +1940,7 @@ private struct NearbyPlaceCard: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityHint(language.text("Open place details", "開啟地點詳情"))
+        .accessibilityHint(language.text("Highlights this place on the map", "在地圖上標示此地點"))
     }
 }
 

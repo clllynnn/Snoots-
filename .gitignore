@@ -1,0 +1,16 @@
+# Local credentials and developer-specific configuration
+.env
+.env.*
+!.env.example
+app/Config/Secrets.xcconfig
+
+# Supabase local runtime files
+supabase/.branches/
+supabase/.temp/
+
+# Apple and Xcode local state
+.DS_Store
+**/xcuserdata/
+DerivedData/
+__pycache__/
+*.pyc
