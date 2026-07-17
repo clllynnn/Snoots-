@@ -753,21 +753,19 @@ struct MapsView: View {
     let store: SnootsStore
     let language: SnootsLanguage
     let onNavigate: (SnootsRoute) -> Void
-    @State private var selectedCategory: NearbyCategory?
+    @State private var selectedCategory: NearbyCategory = .meetups
+    @State private var selectedRegion: NearbyRegion = .currentLocation
     @State private var selectedFilters: Set<NearbyFilter> = []
-    @State private var intentQuery = ""
     @State private var selectedPlaceID: String?
-    @State private var isShowingResults = false
     @State private var resultsPanelDetent: NearbyResultsDetent = .compact
-    @State private var isTabBarRevealed = false
-    @State private var nearbyEditorSheet: NearbyEditorSheet?
+    @State private var isActivityPickerPresented = false
+    @State private var isRegionPickerPresented = false
 
     private var visiblePlaces: [Place] {
-        guard let selectedCategory else { return [] }
         return store.places.filter { place in
             place.nearbyCategory == selectedCategory
+                && selectedRegion.matches(place)
                 && selectedFilters.allSatisfy { $0.matches(place) }
-                && matchesIntent(place)
         }
     }
 
@@ -780,20 +778,21 @@ struct MapsView: View {
         return leadingPins + [NearbyMapMarker(cluster: clustered, language: language)]
     }
 
+    private var resultsSummary: String {
+        let category = selectedCategory.title(language)
+        let region = selectedRegion.title(language)
+        guard !selectedFilters.isEmpty else { return "\(category) · \(region)" }
+        return language.text("\(category) · \(region) · \(selectedFilters.count) filters", "\(category) · \(region) · \(selectedFilters.count) 個條件")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: isShowingResults ? 10 : 20) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(language.text("What’s Nearby", "附近有什麼"))
-                            .font(.snootsScreenTitle())
-                        if !isShowingResults {
-                            Text(language.text("1 Choose a category · 2 Choose filters", "1 選主分類 · 2 選次分類"))
-                                .font(.snootsUI(15, weight: .medium))
-                                .foregroundStyle(SnootsPalette.secondaryText)
-                        }
+            VStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    NearbyActivityButton(category: selectedCategory, language: language) {
+                        isActivityPickerPresented = true
                     }
-                    Spacer(minLength: 8)
+
                     Button { onNavigate(.emergency) } label: {
                         Image(systemName: "cross.case.fill")
                             .font(.snootsUI(17, weight: .bold))
@@ -805,95 +804,126 @@ struct MapsView: View {
                     .accessibilityLabel(language.text("Find emergency care", "尋找緊急醫療"))
                 }
 
-                if isShowingResults {
-                    ResultsFilterSummaryBar(
-                        selectedCategory: selectedCategory,
-                        selectedFilters: $selectedFilters,
-                        intentQuery: $intentQuery,
-                        language: language,
-                        onEditFilters: { nearbyEditorSheet = .filters },
-                        onEditSearch: {
-                            isTabBarRevealed = false
-                            isShowingResults = false
-                        }
-                    )
-                } else {
-                    NearbyCategoryPicker(selection: $selectedCategory, language: language)
-
-                    if selectedCategory != nil {
-                        SecondaryFilterEntry(selectedFilters: selectedFilters, language: language) {
-                            nearbyEditorSheet = .filters
-                        }
-                        Button(language.text("Show results", "顯示結果")) {
-                            selectedPlaceID = nil
-                            resultsPanelDetent = .compact
-                            isTabBarRevealed = false
-                            isShowingResults = true
-                        }
-                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
-                    }
-                }
+                NearbyFilterStrip(
+                    region: selectedRegion,
+                    selectedFilters: $selectedFilters,
+                    language: language,
+                    onSelectRegion: { isRegionPickerPresented = true }
+                )
             }
             .padding(.horizontal, 18)
-            .padding(.top, 14)
-            .padding(.bottom, isShowingResults ? 10 : 16)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
 
-            if isShowingResults, selectedCategory != nil {
-                GeometryReader { proxy in
-                    let panelHeight = resultsPanelDetent.height(in: proxy.size.height)
-                    VStack(spacing: 0) {
-                        NearbyMap(markers: markers, selectedPlaceID: $selectedPlaceID, language: language)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: max(180, proxy.size.height - panelHeight))
+            GeometryReader { proxy in
+                let panelHeight = resultsPanelDetent.height(in: proxy.size.height)
+                VStack(spacing: 0) {
+                    NearbyMap(
+                        markers: markers,
+                        selectedPlaceID: $selectedPlaceID,
+                        region: $selectedRegion,
+                        language: language
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: max(180, proxy.size.height - panelHeight))
 
-                        NearbyResultsPanel(
-                            places: visiblePlaces,
-                            selectedPlaceID: $selectedPlaceID,
-                            detent: $resultsPanelDetent,
-                            language: language,
-                            onOpen: { onNavigate(.place($0.id)) },
-                            onTabBarVisibilityChange: { isTabBarRevealed = $0 }
-                        )
-                        .frame(height: panelHeight)
-                    }
+                    NearbyResultsPanel(
+                        places: visiblePlaces,
+                        summary: resultsSummary,
+                        selectedPlaceID: $selectedPlaceID,
+                        detent: $resultsPanelDetent,
+                        language: language,
+                        onOpen: { onNavigate(.place($0.id)) }
+                    )
+                    .frame(height: panelHeight)
                 }
-            } else {
-                Spacer(minLength: 0)
             }
         }
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
-        .toolbar(isShowingResults && !isTabBarRevealed ? .hidden : .visible, for: .tabBar)
-        .sheet(item: $nearbyEditorSheet) { sheet in
-            switch sheet {
-            case .filters:
-                NearbyFilterEditorSheet(selectedFilters: $selectedFilters, intentQuery: $intentQuery, language: language)
-            }
+        .toolbar(.visible, for: .tabBar)
+        .sheet(isPresented: $isActivityPickerPresented) {
+            NearbyActivityPickerSheet(selection: $selectedCategory, language: language)
         }
+        .sheet(isPresented: $isRegionPickerPresented) {
+            NearbyRegionPickerSheet(selection: $selectedRegion, language: language)
+        }
+        .onChange(of: selectedCategory) { _, _ in resetResults() }
+        .onChange(of: selectedRegion) { _, _ in resetResults() }
+        .onChange(of: selectedFilters) { _, _ in resetResults(keepPanelPosition: true) }
     }
 
-    private func matchesIntent(_ place: Place) -> Bool {
-        let query = intentQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return true }
-        let searchable = [place.name, place.category, place.dogAccess.rawValue, place.intentKeywords].joined(separator: " ").lowercased()
-        return searchable.contains(query)
-            || (query.contains("indoor") && place.dogAccess == .indoorOK)
-            || ((query.contains("rain") || query.contains("雨")) && place.dogAccess == .indoorOK)
-            || ((query.contains("large") || query.contains("大型")) && place.acceptsLargeDogs)
+    private func resetResults(keepPanelPosition: Bool = false) {
+        selectedPlaceID = nil
+        if !keepPanelPosition {
+            resultsPanelDetent = .compact
+        }
     }
 }
 
 enum NearbyCategory: CaseIterable, Identifiable, Hashable {
-    case meetups, places, vets
+    case meetups, dining, parks, vets
 
     var id: Self { self }
+    var symbol: String {
+        switch self {
+        case .meetups: "pawprint.fill"
+        case .dining: "fork.knife"
+        case .parks: "tree.fill"
+        case .vets: "cross.case.fill"
+        }
+    }
+
     func title(_ language: SnootsLanguage) -> String {
         switch self {
         case .meetups: language.text("Dog meetups", "狗聚")
-        case .places: language.text("Places", "地點")
+        case .dining: language.text("Dining", "用餐")
+        case .parks: language.text("Parks", "公園")
         case .vets: language.text("Veterinary care", "獸醫院")
         }
     }
+}
+
+enum NearbyRegion: CaseIterable, Identifiable, Hashable {
+    case currentLocation, zhongzheng, daan, xinyi
+
+    var id: Self { self }
+
+    func title(_ language: SnootsLanguage) -> String {
+        switch self {
+        case .currentLocation: language.text("Current location", "目前位置")
+        case .zhongzheng: language.text("Zhongzheng", "中正區")
+        case .daan: language.text("Da’an", "大安區")
+        case .xinyi: language.text("Xinyi", "信義區")
+        }
+    }
+
+    var cameraPosition: MapCameraPosition {
+        if self == .currentLocation {
+            return .userLocation(fallback: .region(Self.defaultRegion))
+        }
+        return .region(mapRegion)
+    }
+
+    var mapRegion: MKCoordinateRegion {
+        let center: CLLocationCoordinate2D
+        switch self {
+        case .currentLocation: center = Self.defaultRegion.center
+        case .zhongzheng: center = CLLocationCoordinate2D(latitude: 25.0324, longitude: 121.5199)
+        case .daan: center = CLLocationCoordinate2D(latitude: 25.0268, longitude: 121.5434)
+        case .xinyi: center = CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5654)
+        }
+        return MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.035, longitudeDelta: 0.035))
+    }
+
+    func matches(_ place: Place) -> Bool {
+        self == .currentLocation || place.region == self
+    }
+
+    private static let defaultRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5480),
+        span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.06)
+    )
 }
 
 private enum NearbyFilter: CaseIterable, Hashable, Identifiable {
@@ -940,186 +970,93 @@ private enum NearbyResultsDetent: Equatable {
     }
 }
 
-private enum NearbyEditorSheet: Identifiable {
-    case filters
-
-    var id: String { "nearby-filters" }
-}
-
-private struct NearbyCategoryPicker: View {
-    @Binding var selection: NearbyCategory?
-    let language: SnootsLanguage
-
-    var body: some View {
-        Picker("", selection: $selection) {
-            ForEach(NearbyCategory.allCases) { category in
-                Text(category.title(language)).tag(Optional(category))
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(.segmented)
-        .accessibilityLabel(language.text("Choose a category", "選擇主分類"))
-    }
-}
-
-private struct SecondaryFilterEntry: View {
-    let selectedFilters: Set<NearbyFilter>
+private struct NearbyActivityButton: View {
+    let category: NearbyCategory
     let language: SnootsLanguage
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack {
-                Text(selectedFilters.isEmpty
-                     ? language.text("Secondary filters", "次分類")
-                     : language.text("\(selectedFilters.count) filters", "次分類 \(selectedFilters.count) 項"))
-                    .font(.snootsUI(15, weight: .semibold))
-                Spacer()
-                Text(selectedFilters.isEmpty ? language.text("Choose", "選擇") : language.text("Change", "變更"))
-                    .font(.snootsMetadata())
-                    .foregroundStyle(SnootsPalette.secondaryText)
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .font(.snootsUI(18, weight: .bold))
+                    .frame(width: 38, height: 38)
+                    .background(SnootsPalette.primaryTint, in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(language.text("What’s nearby?", "附近有什麼"))
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    Text(category.title(language))
+                        .font(.snootsUI(17, weight: .bold))
+                }
+
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.down")
+                    .font(.snootsUI(13, weight: .bold))
             }
             .foregroundStyle(SnootsPalette.ink)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 48)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 58)
             .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
                     .stroke(SnootsPalette.divider, lineWidth: 1)
             }
+            .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(language.text("Edit secondary filters", "編輯次分類"))
+        .accessibilityLabel(language.text("Choose activity. Current selection: \(category.title(language))", "選擇活動，目前為\(category.title(language))"))
     }
 }
 
-private struct ResultsFilterSummaryBar: View {
-    let selectedCategory: NearbyCategory?
+private struct NearbyFilterStrip: View {
+    let region: NearbyRegion
     @Binding var selectedFilters: Set<NearbyFilter>
-    @Binding var intentQuery: String
     let language: SnootsLanguage
-    let onEditFilters: () -> Void
-    let onEditSearch: () -> Void
+    let onSelectRegion: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    if let selectedCategory {
-                        AppliedFilterChip(title: selectedCategory.title(language), tint: SnootsPalette.primary)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Button(action: onSelectRegion) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "location.fill")
+                        Text(region.title(language))
+                        Image(systemName: "chevron.down")
+                            .font(.snootsUI(10, weight: .bold))
                     }
-                    ForEach(NearbyFilter.allCases.filter { selectedFilters.contains($0) }) { filter in
-                        AppliedFilterChip(title: filter.title(language), tint: SnootsPalette.butter)
-                    }
-                    if !intentQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        AppliedFilterChip(title: intentQuery, tint: SnootsPalette.primaryTint)
-                    }
-                    if selectedFilters.isEmpty && intentQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        AppliedFilterChip(title: language.text("All conditions", "所有條件"), tint: SnootsPalette.canvas)
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-
-            Button(action: onEditFilters) {
-                Text(language.text("Filters", "篩選條件"))
-                    .font(.snootsUI(14, weight: .bold))
+                    .font(.snootsChip())
                     .foregroundStyle(SnootsPalette.ink)
                     .padding(.horizontal, 12)
-                    .frame(minHeight: 44)
-                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(language.text("Edit secondary filters", "編輯次分類"))
-
-            Button(action: onEditSearch) {
-                Image(systemName: "magnifyingglass")
-                    .font(.snootsUI(15, weight: .bold))
-                    .foregroundStyle(SnootsPalette.ink)
-                    .frame(width: 44, height: 44)
-                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(language.text("Edit search", "修改搜尋"))
-        }
-        .frame(height: 48)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(language.text("Applied search filters", "已套用的搜尋條件"))
-    }
-}
-
-private struct AppliedFilterChip: View {
-    let title: String
-    let tint: Color
-
-    var body: some View {
-        Text(title)
-            .font(.snootsChip())
-            .foregroundStyle(SnootsPalette.ink)
-            .lineLimit(1)
-            .padding(.horizontal, 10)
-            .frame(minHeight: 40)
-            .background(tint, in: Capsule())
-    }
-}
-
-private struct NearbyFilterEditorSheet: View {
-    @Binding var selectedFilters: Set<NearbyFilter>
-    @Binding var intentQuery: String
-    let language: SnootsLanguage
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    TextField(language.text("Optional: indoor café, rainy day place", "選填：室內咖啡廳、雨天去處"), text: $intentQuery)
-                        .textInputAutocapitalization(.never)
-                        .submitLabel(.search)
+                    .frame(minHeight: 40)
+                    .background(SnootsPalette.lavenderTint, in: Capsule())
+                    .overlay(Capsule().stroke(SnootsPalette.lavender, lineWidth: 1))
                 }
+                .buttonStyle(.plain)
 
-                Section {
-                    ForEach(NearbyFilter.allCases) { filter in
-                        Button {
-                            toggle(filter)
-                        } label: {
-                            HStack {
-                                Text(filter.title(language))
-                                    .font(.snootsUI(16, weight: .medium))
-                                Spacer()
-                                if selectedFilters.contains(filter) {
-                                    Image(systemName: "checkmark")
-                                        .font(.snootsUI(15, weight: .bold))
-                                        .foregroundStyle(SnootsPalette.ink)
-                                }
-                            }
-                            .foregroundStyle(SnootsPalette.ink)
-                            .frame(minHeight: 44)
+                ForEach(NearbyFilter.allCases) { filter in
+                    let isSelected = selectedFilters.contains(filter)
+                    Button {
+                        toggle(filter)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: filter.symbol)
+                            Text(filter.title(language))
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(selectedFilters.contains(filter) ? .isSelected : [])
-                        .accessibilityValue(selectedFilters.contains(filter) ? language.text("Selected", "已選取") : language.text("Not selected", "未選取"))
+                        .font(.snootsChip())
+                        .foregroundStyle(SnootsPalette.ink)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 40)
+                        .background(isSelected ? SnootsPalette.primary : SnootsPalette.surface, in: Capsule())
+                        .overlay(Capsule().stroke(isSelected ? SnootsPalette.ink : SnootsPalette.divider, lineWidth: isSelected ? 1.5 : 1))
                     }
-                } header: {
-                    Text(language.text("Select any conditions. Changes apply immediately.", "可複選，變更會立即套用。"))
-                } footer: {
-                    if !selectedFilters.isEmpty {
-                        Button(language.text("Clear all", "清除全部"), role: .destructive) {
-                            selectedFilters.removeAll()
-                        }
-                    }
-                }
-            }
-            .navigationTitle(language.text("Filters", "次分類"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(language.text("Done", "完成")) { dismiss() }
-                        .font(.snootsUI(15, weight: .semibold))
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .contentMargins(.horizontal, 1, for: .scrollContent)
     }
 
     private func toggle(_ filter: NearbyFilter) {
@@ -1128,6 +1065,80 @@ private struct NearbyFilterEditorSheet: View {
         } else {
             selectedFilters.insert(filter)
         }
+    }
+}
+
+private struct NearbyActivityPickerSheet: View {
+    @Binding var selection: NearbyCategory
+    let language: SnootsLanguage
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(NearbyCategory.allCases) { category in
+                Button {
+                    selection = category
+                    dismiss()
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: category.symbol)
+                            .font(.snootsUI(17, weight: .bold))
+                            .frame(width: 36, height: 36)
+                            .background(selection == category ? SnootsPalette.primary : SnootsPalette.canvas, in: Circle())
+                        Text(category.title(language))
+                            .font(.snootsUI(17, weight: .semibold))
+                        Spacer()
+                        if selection == category {
+                            Image(systemName: "checkmark")
+                                .font(.snootsUI(15, weight: .bold))
+                        }
+                    }
+                    .foregroundStyle(SnootsPalette.ink)
+                    .frame(minHeight: 48)
+                }
+                .buttonStyle(.plain)
+            }
+            .navigationTitle(language.text("Choose activity", "選擇活動"))
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium])
+    }
+}
+
+private struct NearbyRegionPickerSheet: View {
+    @Binding var selection: NearbyRegion
+    let language: SnootsLanguage
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(NearbyRegion.allCases) { region in
+                Button {
+                    selection = region
+                    dismiss()
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: region == .currentLocation ? "location.fill" : "mappin.and.ellipse")
+                            .font(.snootsUI(17, weight: .bold))
+                            .frame(width: 36, height: 36)
+                            .background(selection == region ? SnootsPalette.lavenderTint : SnootsPalette.canvas, in: Circle())
+                        Text(region.title(language))
+                            .font(.snootsUI(17, weight: .semibold))
+                        Spacer()
+                        if selection == region {
+                            Image(systemName: "checkmark")
+                                .font(.snootsUI(15, weight: .bold))
+                        }
+                    }
+                    .foregroundStyle(SnootsPalette.ink)
+                    .frame(minHeight: 48)
+                }
+                .buttonStyle(.plain)
+            }
+            .navigationTitle(language.text("Choose area", "選擇區域"))
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium])
     }
 }
 
@@ -1161,8 +1172,9 @@ private struct NearbyMapMarker: Identifiable {
 private struct NearbyMap: View {
     let markers: [NearbyMapMarker]
     @Binding var selectedPlaceID: String?
+    @Binding var region: NearbyRegion
     let language: SnootsLanguage
-    @State private var position: MapCameraPosition = .userLocation(fallback: .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5654), span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.06))))
+    @State private var position: MapCameraPosition = NearbyRegion.currentLocation.cameraPosition
 
     var body: some View {
         Map(position: $position) {
@@ -1181,12 +1193,28 @@ private struct NearbyMap: View {
         }
         .mapStyle(.standard(elevation: .realistic))
         .overlay(alignment: .topTrailing) {
-            MapUserLocationButton()
-                .tint(SnootsPalette.ink)
+            Button {
+                region = .currentLocation
+            } label: {
+                Image(systemName: "location.fill")
+                    .font(.snootsUI(16, weight: .bold))
+                    .foregroundStyle(SnootsPalette.ink)
+                    .frame(width: 44, height: 44)
+                    .background(SnootsPalette.surface, in: Circle())
+                    .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+            }
+                .buttonStyle(.plain)
                 .padding(14)
+                .accessibilityLabel(language.text("Use current location", "使用目前位置"))
+        }
+        .onAppear { position = region.cameraPosition }
+        .onChange(of: region) { _, newRegion in
+            withAnimation(.snappy) {
+                position = newRegion.cameraPosition
+            }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(language.text("Map centered on your location", "以你的位置為中心的地圖"))
+        .accessibilityLabel(language.text("Nearby results map", "附近結果地圖"))
     }
 }
 
@@ -1195,8 +1223,15 @@ private struct NearbyMapPin: View {
     let isSelected: Bool
 
     var body: some View {
-        Text(count == 1 ? "•" : "\(count)")
-            .font(.snootsUI(count == 1 ? 28 : 15, weight: .bold))
+        Group {
+            if count == 1 {
+                Image(systemName: "mappin.circle.fill")
+                    .font(.snootsUI(23, weight: .bold))
+            } else {
+                Text("\(count)")
+                    .font(.snootsUI(15, weight: .bold))
+            }
+        }
             .foregroundStyle(SnootsPalette.ink)
             .frame(width: isSelected ? 54 : 46, height: isSelected ? 54 : 46)
             .background(isSelected ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
@@ -1209,18 +1244,16 @@ private struct NearbyMapPin: View {
 
 private struct NearbyResultsPanel: View {
     let places: [Place]
+    let summary: String
     @Binding var selectedPlaceID: String?
     @Binding var detent: NearbyResultsDetent
     let language: SnootsLanguage
     let onOpen: (Place) -> Void
-    let onTabBarVisibilityChange: (Bool) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             Button {
-                let nextDetent: NearbyResultsDetent = detent == .compact ? .expanded : .compact
-                withAnimation(.snappy) { detent = nextDetent }
-                onTabBarVisibilityChange(nextDetent == .compact)
+                withAnimation(.snappy) { detent.toggle() }
             } label: {
                 Capsule()
                     .fill(SnootsPalette.ink.opacity(0.18))
@@ -1232,22 +1265,18 @@ private struct NearbyResultsPanel: View {
                 DragGesture(minimumDistance: 8)
                     .onEnded { value in
                         guard abs(value.translation.height) > 28 else { return }
-                        let nextDetent: NearbyResultsDetent = value.translation.height < 0 ? .expanded : .compact
                         withAnimation(.snappy) {
-                            detent = nextDetent
+                            detent = value.translation.height < 0 ? .expanded : .compact
                         }
-                        onTabBarVisibilityChange(nextDetent == .compact)
                     }
             )
-            .onHover { isHovering in
-                if isHovering { onTabBarVisibilityChange(true) }
-            }
             .accessibilityLabel(detent == .expanded ? language.text("Collapse results", "收合結果") : language.text("Expand results", "展開結果"))
-            .accessibilityHint(language.text("Drag up to focus on results. Drag down to reveal the native tab bar and more of the map", "向上拉可專注查看結果；向下拉可顯示原生導覽列與更多地圖"))
+            .accessibilityHint(language.text("Drag up to see the full list. Drag down to see more of the map", "向上拉查看完整清單；向下拉查看更多地圖"))
 
             HStack(alignment: .firstTextBaseline) {
-                Text(language.text("Matches", "符合條件"))
+                Text(summary)
                     .font(.snootsSection())
+                    .lineLimit(1)
                 Spacer()
                 Text(language.text("\(places.count) found", "找到 \(places.count) 個"))
                     .font(.snootsMetadata())
@@ -1260,17 +1289,26 @@ private struct NearbyResultsPanel: View {
                 ContentUnavailableView(language.text("No matches yet", "暫時沒有符合的結果"), systemImage: "pawprint.fill", description: Text(language.text("Try removing one condition.", "試著移除一個條件。")))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 10) {
-                        ForEach(places) { place in
-                            NearbyPlaceCard(place: place, isSelected: selectedPlaceID == place.id, language: language) {
-                                selectedPlaceID = place.id
-                                onOpen(place)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach(places) { place in
+                                NearbyPlaceCard(place: place, isSelected: selectedPlaceID == place.id, language: language) {
+                                    selectedPlaceID = place.id
+                                    onOpen(place)
+                                }
+                                .id(place.id)
                             }
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 14)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 14)
+                    .onChange(of: selectedPlaceID) { _, placeID in
+                        guard let placeID, places.contains(where: { $0.id == placeID }) else { return }
+                        withAnimation(.snappy) {
+                            proxy.scrollTo(placeID, anchor: .top)
+                        }
+                    }
                 }
             }
         }
