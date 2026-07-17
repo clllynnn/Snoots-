@@ -11,7 +11,7 @@ import SwiftUI
 struct Snoots_App: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = SnootsStore()
-    @AppStorage("snoots.displayLanguage") private var displayLanguageRawValue = SnootsLanguage.traditionalChinese.rawValue
+    @AppStorage("snoots.displayLanguage.v2") private var displayLanguageRawValue = SnootsLanguage.systemDefault.rawValue
     @State private var isShowingLaunchScreen = true
     @State private var shouldShowLaunchScreenOnNextActivation = false
 

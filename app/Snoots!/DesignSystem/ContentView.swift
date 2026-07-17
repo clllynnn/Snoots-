@@ -1,4 +1,5 @@
 import MapKit
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -93,17 +94,15 @@ struct FeedView: View {
     let language: SnootsLanguage
     @State private var likedPostIDs: Set<UUID> = []
     @State private var savedPostIDs: Set<UUID> = []
+    @State private var presentedSheet: FeedSheet?
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Feed")
+                    VStack(alignment: .leading) {
+                        Text(language.text("Feed", "社群"))
                             .font(.snootsScreenTitle())
-                        Text("Your Taipei dog community.")
-                            .font(.snootsUI(15))
-                            .foregroundStyle(SnootsPalette.secondaryText)
                     }
                     Spacer()
                     HStack(spacing: 4) {
@@ -112,9 +111,11 @@ struct FeedView: View {
                     }
                 }
 
-                FeedStoryStrip(stories: store.feedStories)
+                CreateActivityButton(language: language) {
+                    presentedSheet = .createMeetup
+                }
 
-                TrustSummaryCard(profile: store.profile, language: language)
+                FeedStoryStrip(stories: store.feedStories, language: language)
 
                 ForEach(store.socialPosts) { post in
                     FeedPostCard(
@@ -133,6 +134,12 @@ struct FeedView: View {
         }
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet {
+            case .createMeetup:
+                CreateMeetupSheet(store: store, language: language)
+            }
+        }
     }
 
     private func toggle(_ id: UUID, in selection: inout Set<UUID>) {
@@ -141,6 +148,12 @@ struct FeedView: View {
         } else {
             selection.insert(id)
         }
+    }
+
+    private enum FeedSheet: Identifiable {
+        case createMeetup
+
+        var id: String { "createMeetup" }
     }
 }
 
@@ -161,6 +174,7 @@ private struct FeedHeaderButton: View {
 
 private struct FeedStoryStrip: View {
     let stories: [FeedStory]
+    let language: SnootsLanguage
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -193,53 +207,388 @@ private struct FeedStoryStrip: View {
                                         .overlay { Circle().stroke(SnootsPalette.surface, lineWidth: 2) }
                                 }
                             }
-                            Text(story.name)
+                            Text(story.isCurrentUser ? language.text(story.name, "你的限時") : story.name)
                                 .font(.snootsMetadata())
                                 .foregroundStyle(SnootsPalette.ink)
                                 .lineLimit(1)
                         }
                         .frame(width: 68)
                     }
-                    .accessibilityLabel(story.name)
+                    .accessibilityLabel(story.isCurrentUser ? language.text(story.name, "你的限時") : story.name)
                 }
             }
         }
     }
 }
 
-private struct TrustSummaryCard: View {
-    let profile: ParentProfile
+private struct CreateActivityButton: View {
     let language: SnootsLanguage
+    let onCreate: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.title2)
-                .foregroundStyle(SnootsPalette.ink)
-                .frame(width: 48, height: 48)
-                .background(SnootsPalette.lime, in: Circle())
-                .accessibilityLabel("Verified trust profile")
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Trust profile \(profile.trustScore)")
-                    .font(.snootsCardTitle())
-                Text("ID, vet record and behavior card verified")
-                    .font(.snootsMetadata())
-                    .foregroundStyle(SnootsPalette.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
+        HStack(spacing: 10) {
             Button(action: {}) {
-                Label("View", systemImage: "chevron.right")
-                    .labelStyle(.titleAndIcon)
-                    .font(.snootsUI(14, weight: .semibold))
-                    .foregroundStyle(SnootsPalette.navigationActive)
+                Label(language.text("View meetups", "檢視狗聚"), systemImage: "person.2")
+                    .font(.snootsButton(16))
+                    .foregroundStyle(SnootsPalette.ink)
+                    .frame(maxWidth: .infinity, minHeight: 56)
             }
-            .accessibilityLabel("View trust profile")
+            .buttonStyle(.plain)
+            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous)
+                    .stroke(SnootsPalette.lime, lineWidth: 2)
+            }
+            .accessibilityLabel(language.text("View meetups", "檢視狗聚"))
+
+            Button(action: onCreate) {
+                Label(language.text("Create a meetup", "發起狗聚"), systemImage: "plus")
+                    .font(.snootsButton(16))
+                    .frame(maxWidth: .infinity, minHeight: 56)
+            }
+            .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+            .accessibilityLabel(language.text("Create a meetup", "發起狗聚"))
         }
-        .padding(14)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous).stroke(SnootsPalette.lime, lineWidth: 2) }
-        .snootsCardShadow()
+    }
+}
+
+private struct CreateMeetupSheet: View {
+    let store: SnootsStore
+    let language: SnootsLanguage
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var selectedTypeID = ""
+    @State private var selectedVenueID = ""
+    @State private var startDate = Date.now.addingTimeInterval(60 * 60)
+    @State private var durationHours = 2
+    @State private var attendeeLimit = 6
+    @State private var requiresApproval = true
+    @State private var selectedSafetyTags: Set<String> = ["Leash on", "Slow introductions"]
+    @State private var notes = ""
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var activityPhoto: Image?
+    @FocusState private var isTitleFocused: Bool
+
+    private var selectedType: MeetupActivityType? {
+        store.meetupActivityTypes.first { $0.id == selectedTypeID }
+    }
+
+    private var selectedVenue: MeetupVenue? {
+        store.meetupVenues.first { $0.id == selectedVenueID }
+    }
+
+    private var canPublish: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedType != nil && selectedVenue != nil
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(language.text("Bring compatible dogs together", "為合拍的狗狗發起相聚"))
+                            .font(.snootsSection())
+                        Text(language.text("Set clear expectations so every hello starts calmly.", "清楚設定期待，讓每一次見面都能安心開始。"))
+                            .font(.snootsBody())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                    }
+
+                    MeetupComposerSection(title: language.text("Activity type", "活動類型")) {
+                        HStack(spacing: 10) {
+                            ForEach(store.meetupActivityTypes) { type in
+                                MeetupTypeTile(
+                                    type: type,
+                                    language: language,
+                                    isSelected: selectedTypeID == type.id
+                                ) {
+                                    selectedTypeID = type.id
+                                }
+                            }
+                        }
+                    }
+
+                    MeetupComposerSection(title: language.text("Details", "活動詳情")) {
+                        VStack(spacing: 0) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "textformat")
+                                    .foregroundStyle(SnootsPalette.navigationActive)
+                                    .frame(width: 24)
+                                TextField(language.text("Give your meetup a name", "為狗聚取個名稱"), text: $title)
+                                    .font(.snootsBody())
+                                    .focused($isTitleFocused)
+                            }
+                            .padding(16)
+
+                            Divider().padding(.leading, 52)
+
+                            DatePicker(
+                                selection: $startDate,
+                                in: Date.now...,
+                                displayedComponents: [.date, .hourAndMinute]
+                            ) {
+                                Label(language.text("Starts", "開始時間"), systemImage: "calendar")
+                                    .font(.snootsBody())
+                                    .foregroundStyle(SnootsPalette.ink)
+                            }
+                            .tint(SnootsPalette.navigationActive)
+                            .padding(16)
+
+                            Divider().padding(.leading, 52)
+
+                            Picker(selection: $durationHours) {
+                                ForEach(store.meetupDurations) { duration in
+                                    Text(duration.localizedLabel(language)).tag(duration.hours)
+                                }
+                            } label: {
+                                Label(language.text("Duration", "活動時長"), systemImage: "clock")
+                                    .font(.snootsBody())
+                            }
+                            .tint(SnootsPalette.navigationActive)
+                            .padding(16)
+                        }
+                    }
+
+                    MeetupComposerSection(title: language.text("Location", "地點")) {
+                        Picker(selection: $selectedVenueID) {
+                            ForEach(store.meetupVenues) { venue in
+                                Text(venue.localizedName(language)).tag(venue.id)
+                            }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "mappin.and.ellipse")
+                                    .foregroundStyle(SnootsPalette.navigationActive)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(language.text("Meet at", "集合地點"))
+                                        .font(.snootsMetadata())
+                                        .foregroundStyle(SnootsPalette.secondaryText)
+                                    Text(selectedVenue?.localizedName(language) ?? language.text("Choose a place", "選擇地點"))
+                                        .font(.snootsBody())
+                                        .foregroundStyle(SnootsPalette.ink)
+                                }
+                                Spacer()
+                            }
+                        }
+                        .tint(SnootsPalette.navigationActive)
+                        .padding(16)
+                    }
+
+                    MeetupComposerSection(title: language.text("Cover photo", "活動照片")) {
+                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                            HStack(spacing: 14) {
+                                Group {
+                                    if let activityPhoto {
+                                        activityPhoto
+                                            .resizable()
+                                            .scaledToFill()
+                                    } else {
+                                        Image(systemName: "photo.badge.plus")
+                                            .font(.title2)
+                                            .foregroundStyle(SnootsPalette.navigationActive)
+                                    }
+                                }
+                                .frame(width: 58, height: 58)
+                                .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(language.text("Add a photo", "新增照片"))
+                                        .font(.snootsCardTitle())
+                                        .foregroundStyle(SnootsPalette.ink)
+                                    Text(language.text("Help nearby dog parents recognise the meetup.", "讓附近的飼主更容易辨識狗聚。"))
+                                        .font(.snootsMetadata())
+                                        .foregroundStyle(SnootsPalette.secondaryText)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(SnootsPalette.inactive)
+                            }
+                            .padding(16)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    MeetupComposerSection(title: language.text("Dog-friendly settings", "安心狗聚設定")) {
+                        VStack(spacing: 0) {
+                            Toggle(isOn: $requiresApproval) {
+                                Label(language.text("Review join requests", "審核參加申請"), systemImage: "checkmark.shield")
+                                    .font(.snootsBody())
+                            }
+                            .tint(SnootsPalette.lime)
+                            .padding(16)
+
+                            Divider().padding(.leading, 52)
+
+                            Stepper(value: $attendeeLimit, in: 2...20) {
+                                Label("\\(language.text(\"Up to\", \"最多\")) \\(attendeeLimit) \\(language.text(\"dogs\", \"隻狗狗\"))", systemImage: "dog")
+                                    .font(.snootsBody())
+                            }
+                            .tint(SnootsPalette.navigationActive)
+                            .padding(16)
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(language.text("Shared expectations", "共同約定"))
+                                .font(.snootsMetadata())
+                                .foregroundStyle(SnootsPalette.secondaryText)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(store.meetupSafetyOptions) { option in
+                                        Button {
+                                            toggleSafetyTag(option.id)
+                                        } label: {
+                                            Label(
+                                                option.localizedTitle(language),
+                                                systemImage: selectedSafetyTags.contains(option.id) ? "checkmark.circle.fill" : "circle"
+                                            )
+                                            .font(.snootsChip())
+                                            .foregroundStyle(SnootsPalette.ink)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 8)
+                                            .background(
+                                                selectedSafetyTags.contains(option.id) ? SnootsPalette.primaryTint : SnootsPalette.canvas,
+                                                in: Capsule()
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityAddTraits(selectedSafetyTags.contains(option.id) ? .isSelected : [])
+                                    }
+                                }
+                            }
+                        }
+                        .padding(16)
+                    }
+
+                    MeetupComposerSection(title: language.text("A note for dog parents", "給飼主的補充說明")) {
+                        TextEditor(text: $notes)
+                            .font(.snootsBody())
+                            .frame(minHeight: 104)
+                            .padding(12)
+                            .scrollContentBackground(.hidden)
+                            .background(SnootsPalette.surface)
+                            .accessibilityLabel(language.text("Meetup notes", "狗聚說明"))
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 20)
+            }
+            .background(SnootsPalette.canvas)
+            .navigationTitle(language.text("Create a meetup", "發起狗聚"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(language.text("Cancel", "取消")) {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(language.text("Publish", "發佈")) {
+                        publish()
+                    }
+                    .font(.snootsButton(16))
+                    .disabled(!canPublish)
+                }
+            }
+            .onAppear {
+                if selectedTypeID.isEmpty {
+                    selectedTypeID = store.meetupActivityTypes.first?.id ?? ""
+                }
+                if selectedVenueID.isEmpty {
+                    selectedVenueID = store.meetupVenues.first?.id ?? ""
+                }
+            }
+            .onChange(of: selectedPhoto) { _, newValue in
+                loadPhoto(from: newValue)
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func toggleSafetyTag(_ id: String) {
+        if selectedSafetyTags.contains(id) {
+            selectedSafetyTags.remove(id)
+        } else {
+            selectedSafetyTags.insert(id)
+        }
+    }
+
+    private func loadPhoto(from item: PhotosPickerItem?) {
+        Task {
+            guard let data = try? await item?.loadTransferable(type: Data.self),
+                  let uiImage = UIImage(data: data) else { return }
+            activityPhoto = Image(uiImage: uiImage)
+        }
+    }
+
+    private func publish() {
+        guard let selectedType, let selectedVenue else { return }
+        store.createMeetup(
+            MeetupDraft(
+                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                activityTypeID: selectedType.id,
+                venueID: selectedVenue.id,
+                startDate: startDate,
+                durationHours: durationHours,
+                attendeeLimit: attendeeLimit,
+                requiresApproval: requiresApproval,
+                safetyTagIDs: Array(selectedSafetyTags),
+                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                hasCoverPhoto: activityPhoto != nil
+            )
+        )
+        dismiss()
+    }
+}
+
+private struct MeetupComposerSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(title)
+                .font(.snootsSection())
+            content
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                .snootsCardShadow()
+        }
+    }
+}
+
+private struct MeetupTypeTile: View {
+    let type: MeetupActivityType
+    let language: SnootsLanguage
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 9) {
+                Image(systemName: type.symbol)
+                    .font(.title3.weight(.semibold))
+                Text(type.localizedTitle(language))
+                    .font(.snootsChip())
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(SnootsPalette.ink)
+            .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
+            .padding(12)
+            .background(isSelected ? SnootsPalette.lime : SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                    .stroke(isSelected ? SnootsPalette.lime : SnootsPalette.divider, lineWidth: isSelected ? 2 : 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -1578,7 +1927,7 @@ struct ProfileView: View {
                         NavigationLink {
                             EditProfileView(store: store, language: language)
                         } label: {
-                            Image(systemName: "pencil")
+                            Image(systemName: "square.and.pencil")
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(SnootsPalette.ink)
                                 .frame(width: 44, height: 44)
@@ -1621,6 +1970,8 @@ struct ProfileView: View {
                 .padding(14)
                 .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
+                FeedingInformationCard(monitor: store.feedingMonitor, language: language)
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text(language.text("Interaction tags", "互動標籤")).font(.snootsSection())
                     DeclarationChips(labels: store.pet.traits.map { localizedTrait($0, language: language) }, tint: SnootsPalette.butter)
@@ -1642,15 +1993,9 @@ struct ProfileView: View {
                     }
                     .buttonStyle(.plain)
                     CareStatusRow(
-                        symbol: "checklist.checked",
-                        title: language.text("Other vaccinations", "其他疫苗"),
-                        detail: language.text("\(store.care.otherVaccinationsCount) records up to date", "\(store.care.otherVaccinationsCount) 項紀錄皆為最新"),
-                        accent: SnootsPalette.butter
-                    )
-                    CareStatusRow(
                             symbol: "heart.text.square.fill",
                             title: language.text("Health notes", "健康備註"),
-                            detail: language.text(store.care.healthNotes, "沒有過敏或持續用藥"),
+                            detail: language.text(store.care.healthNotes, "結紮日期：2025 年 3 月 8 日 · 無慢性病\n上次看診：2026 年 7 月 10 日"),
                         accent: SnootsPalette.lavenderTint
                     )
                 }
@@ -1772,6 +2117,74 @@ private struct LanguageSettingsView: View {
         }
         .navigationTitle(language.text("Settings", "設定"))
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct FeedingInformationCard: View {
+    let monitor: FeedingMonitor
+    let language: SnootsLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(language.text("Feeding information", "餵養資訊"))
+                    .font(.snootsSection())
+                Spacer()
+                Label(
+                    monitor.isOnline
+                        ? language.text("Monitor online", "監視器已連線")
+                        : language.text("Monitor offline", "監視器離線"),
+                    systemImage: monitor.isOnline ? "dot.radiowaves.left.and.right" : "wifi.slash"
+                )
+                .font(.snootsMetadata())
+                .foregroundStyle(monitor.isOnline ? SnootsPalette.navigationActive : SnootsPalette.secondaryText)
+            }
+
+            HStack(spacing: 12) {
+                Image(systemName: "fork.knife")
+                    .font(.headline)
+                    .foregroundStyle(SnootsPalette.ink)
+                    .frame(width: 40, height: 40)
+                    .background(SnootsPalette.lime, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(language.text("Last fed", "上次餵食"))
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    Text(language.text("\(monitor.lastFedHoursAgo) hours ago", "\(monitor.lastFedHoursAgo) 小時前"))
+                        .font(.snootsCardTitle())
+                }
+                Spacer()
+                Label(
+                    language.text("Feeding detected", "已偵測到餵食"),
+                    systemImage: "checkmark.circle.fill"
+                )
+                .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.navigationActive)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Label(language.text("Water", "飲水量"), systemImage: "drop.fill")
+                        .font(.snootsUI(15, weight: .semibold))
+                    Spacer()
+                    Text("\(monitor.waterIntakeMilliliters) / \(monitor.waterGoalMilliliters) \(language.text("mL", "毫升"))")
+                        .font(.snootsUI(15, weight: .semibold))
+                }
+                ProgressView(value: monitor.waterProgress)
+                    .tint(SnootsPalette.primary)
+                Label(
+                    language.text("Drinking detected by pet monitor", "寵物監視器已偵測到飲水"),
+                    systemImage: "checkmark.circle.fill"
+                )
+                .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.secondaryText)
+            }
+        }
+        .padding(16)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(language.text("Feeding monitor status", "餵養監視器狀態"))
     }
 }
 
