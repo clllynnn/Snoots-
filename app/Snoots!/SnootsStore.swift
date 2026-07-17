@@ -395,6 +395,8 @@ struct Place: Identifiable {
     let acceptsLargeDogs: Bool
     let isOpenNow: Bool
     var hasLiveStatus: Bool = true
+    var appleMapsURL: URL? = nil
+    var filterIDs: Set<String> = []
     let latitude: Double
     let longitude: Double
     let address: String
@@ -509,6 +511,16 @@ struct Place: Identifiable {
         return isOpenNow ? language.text("Open until 21:00", "營業至 21:00") : language.text("Opens at 10:00", "10:00 開始營業")
     }
 
+    var resolvedAppleMapsURL: URL? {
+        if let appleMapsURL { return appleMapsURL }
+        var components = URLComponents(string: "https://maps.apple.com/")
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: name),
+            URLQueryItem(name: "address", value: address)
+        ]
+        return components?.url
+    }
+
     func realWorldNotes(_ language: SnootsLanguage) -> [String] {
         acceptsLargeDogs
             ? [language.text("Tight indoor aisles", "室內走道較窄"), language.text("Busy after 2pm", "下午 2 點後較繁忙")]
@@ -600,6 +612,8 @@ extension MapPlace {
             acceptsLargeDogs: filterIDs.contains("dining.large_dog") || category != .restaurant,
             isOpenNow: false,
             hasLiveStatus: false,
+            appleMapsURL: appleMapsURL,
+            filterIDs: filterIDs,
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
             address: location ?? area ?? "",

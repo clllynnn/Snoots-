@@ -1386,6 +1386,7 @@ struct MapsView: View {
 
                     NearbyResultsPanel(
                         places: visiblePlaces,
+                        filterOptions: store.mapPlaces.filterOptions,
                         summary: resultsSummary,
                         selectedPlaceID: $selectedPlaceID,
                         detent: $resultsPanelDetent,
@@ -1813,6 +1814,7 @@ private struct NearbyMapPin: View {
 
 private struct NearbyResultsPanel: View {
     let places: [Place]
+    let filterOptions: [MapFilterOption]
     let summary: String
     @Binding var selectedPlaceID: String?
     @Binding var detent: NearbyResultsDetent
@@ -1861,7 +1863,12 @@ private struct NearbyResultsPanel: View {
                     ScrollView {
                         LazyVStack(spacing: 10) {
                             ForEach(places) { place in
-                                NearbyPlaceCard(place: place, isSelected: selectedPlaceID == place.id, language: language) {
+                                NearbyPlaceCard(
+                                    place: place,
+                                    filterOptions: filterOptions,
+                                    isSelected: selectedPlaceID == place.id,
+                                    language: language
+                                ) {
                                     selectedPlaceID = place.id
                                 }
                                 .id(place.id)
@@ -1888,50 +1895,92 @@ private struct NearbyResultsPanel: View {
 
 private struct NearbyPlaceCard: View {
     let place: Place
+    let filterOptions: [MapFilterOption]
     let isSelected: Bool
     let language: SnootsLanguage
     let onSelect: () -> Void
 
+    private var databaseFilterLabels: [String] {
+        filterOptions
+            .filter { place.filterIDs.contains($0.id) }
+            .sorted { $0.displayOrder < $1.displayOrder }
+            .map { $0.title(language) }
+    }
+
+    private var usesDatabasePlaceUI: Bool {
+        place.nearbyCategory != .meetups && !place.filterIDs.isEmpty
+    }
+
     var body: some View {
-        Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(place.localizedName(language))
-                    .font(.snootsCardTitle())
-                    .foregroundStyle(SnootsPalette.ink)
-                Text(place.localizedCategory(language))
-                    .font(.snootsMetadata())
-                    .foregroundStyle(SnootsPalette.secondaryText)
-                HStack(spacing: 5) {
-                    Text(place.localizedWalk(language))
-                    Text("·")
-                    if place.hasLiveStatus {
-                        Text(place.isOpenNow ? language.text("Open", "營業中") : language.text("Closed", "休息中"))
-                            .foregroundStyle(place.isOpenNow ? SnootsPalette.deepLilac : SnootsPalette.secondaryText)
-                    } else {
-                        Text(language.text("Hours unavailable", "暫無營業資訊"))
-                            .foregroundStyle(SnootsPalette.secondaryText)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .top, spacing: 10) {
+                if place.nearbyCategory != .meetups,
+                   let destination = place.resolvedAppleMapsURL {
+                    Link(destination: destination) {
+                        Text(place.localizedName(language))
+                            .font(.snootsCardTitle())
+                            .foregroundStyle(SnootsPalette.ink)
+                            .multilineTextAlignment(.leading)
                     }
+                    .accessibilityHint(language.text("Opens in Apple Maps", "在 Apple 地圖中開啟"))
+                } else {
+                    Text(place.localizedName(language))
+                        .font(.snootsCardTitle())
+                        .foregroundStyle(SnootsPalette.ink)
                 }
+
+                Spacer(minLength: 8)
+
+                if place.nearbyCategory != .meetups {
+                    Image(systemName: "heart")
+                        .font(.snootsUI(19, weight: .semibold))
+                        .foregroundStyle(SnootsPalette.ink)
+                        .frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
+                }
+            }
+
+            Text(place.localizedCategory(language))
                 .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.secondaryText)
+            HStack(spacing: 5) {
+                Text(place.localizedWalk(language))
+                Text("·")
+                if place.hasLiveStatus {
+                    Text(place.isOpenNow ? language.text("Open", "營業中") : language.text("Closed", "休息中"))
+                        .foregroundStyle(place.isOpenNow ? SnootsPalette.deepLilac : SnootsPalette.secondaryText)
+                } else {
+                    Text(language.text("Hours unavailable", "暫無營業資訊"))
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+            }
+            .font(.snootsMetadata())
+
+            if usesDatabasePlaceUI, !databaseFilterLabels.isEmpty {
+                DeclarationChips(labels: databaseFilterLabels, tint: SnootsPalette.primaryTint)
+                    .accessibilityLabel(language.text("Place filters", "地點次標籤"))
+            } else {
                 Text(place.dogAccess.label(language))
                     .font(.snootsChip())
                     .foregroundStyle(SnootsPalette.ink)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 6)
                     .background(SnootsPalette.butter, in: Capsule())
-                Label("\(place.verificationLevel.label(language)) · \(place.localizedLastConfirmed(language))", systemImage: "checkmark.seal.fill")
-                    .font(.snootsMetadata())
-                    .foregroundStyle(SnootsPalette.secondaryText)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(isSelected ? SnootsPalette.primaryTint : SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
-                    .stroke(isSelected ? SnootsPalette.ink : .clear, lineWidth: 2)
-            }
+
+            Label("\(place.verificationLevel.label(language)) · \(place.localizedLastConfirmed(language))", systemImage: "checkmark.seal.fill")
+                .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.secondaryText)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(isSelected ? SnootsPalette.primaryTint : SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                .stroke(isSelected ? SnootsPalette.ink : .clear, lineWidth: 2)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+        .onTapGesture(perform: onSelect)
         .accessibilityHint(language.text("Highlights this place on the map", "在地圖上標示此地點"))
     }
 }
