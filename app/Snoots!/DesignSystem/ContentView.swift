@@ -682,6 +682,12 @@ private struct DatabasePlaceRow: View {
                         .foregroundStyle(SnootsPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if !place.ruleLabels.isEmpty {
+                    DeclarationChips(
+                        labels: Array(place.ruleLabels.prefix(4)),
+                        tint: SnootsPalette.butter
+                    )
+                }
             }
             Spacer(minLength: 8)
             if let appleMapsURL = place.appleMapsURL {
