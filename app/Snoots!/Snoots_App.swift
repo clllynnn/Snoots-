@@ -11,8 +11,13 @@ import SwiftUI
 struct Snoots_App: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = SnootsStore()
+    @AppStorage("snoots.displayLanguage") private var displayLanguageRawValue = SnootsLanguage.traditionalChinese.rawValue
     @State private var isShowingLaunchScreen = true
     @State private var shouldShowLaunchScreenOnNextActivation = false
+
+    private var displayLanguage: SnootsLanguage {
+        SnootsLanguage(rawValue: displayLanguageRawValue) ?? .traditionalChinese
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -25,7 +30,12 @@ struct Snoots_App: App {
                             isShowingLaunchScreen = false
                         }
                 } else {
-                    ContentView(store: store)
+                    ContentView(
+                        store: store,
+                        language: displayLanguage,
+                        displayLanguageRawValue: $displayLanguageRawValue
+                    )
+                    .environment(\.locale, displayLanguage.locale)
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in

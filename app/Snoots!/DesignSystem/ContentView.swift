@@ -1,60 +1,103 @@
 import MapKit
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     let store: SnootsStore
-    @State private var selectedTab: AppTab = .match
-    @State private var presentedSheet: SnootsSheet?
+    let language: SnootsLanguage
+    @Binding var displayLanguageRawValue: String
+    @State private var selectedTab: AppTab = .feed
+    @State private var matchPath: [SnootsRoute] = []
+    @State private var mapsPath: [SnootsRoute] = []
+    @State private var profilePath: [SnootsRoute] = []
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack { PlaydatesView(store: store, presentedSheet: $presentedSheet) }
-                .tabItem { Label(AppTab.match.title, systemImage: AppTab.match.symbol) }
+            NavigationStack(path: $matchPath) {
+                PlaydatesView(store: store, language: language) { matchPath.append($0) }
+                    .navigationDestination(for: SnootsRoute.self) { route in
+                        switch route {
+                        case .match:
+                            MatchConfirmationView(
+                                candidate: store.playdate,
+                                store: store,
+                                language: language,
+                                onNavigate: { matchPath.append($0) }
+                            )
+                        case .chat:
+                            MatchChatRoom(candidate: store.playdate, store: store, language: language)
+                        case .emergency, .place:
+                            EmptyView()
+                        }
+                    }
+            }
+                .tabItem { Label(language.text("Match", "配對"), systemImage: AppTab.match.symbol) }
                 .tag(AppTab.match)
 
-            NavigationStack { MapsView(store: store, presentedSheet: $presentedSheet) }
-                .tabItem { Label(AppTab.maps.title, systemImage: AppTab.maps.symbol) }
+            NavigationStack(path: $mapsPath) {
+                MapsView(store: store, language: language) { mapsPath.append($0) }
+                    .navigationDestination(for: SnootsRoute.self) { route in
+                        switch route {
+                        case .emergency:
+                            CareView(store: store, language: language)
+                        case .place(let placeID):
+                            if let place = store.place(id: placeID) {
+                                PlaceDetailView(place: place, store: store, language: language)
+                            }
+                        case .match, .chat:
+                            EmptyView()
+                        }
+                    }
+            }
+                .tabItem { Label(language.text("Nearby", "附近"), systemImage: AppTab.maps.symbol) }
                 .tag(AppTab.maps)
 
-            NavigationStack { FeedView(store: store) }
-                .tabItem { Label(AppTab.feed.title, systemImage: AppTab.feed.symbol) }
+            NavigationStack { FeedView(store: store, language: language) }
+                .tabItem { Label(language.text("Feed", "社群"), systemImage: AppTab.feed.symbol) }
                 .tag(AppTab.feed)
 
-            NavigationStack { ProfileView(store: store, presentedSheet: $presentedSheet) }
-                .tabItem { Label(AppTab.profile.title, systemImage: AppTab.profile.symbol) }
+            NavigationStack(path: $profilePath) {
+                ProfileView(
+                    store: store,
+                    language: language,
+                    displayLanguageRawValue: $displayLanguageRawValue
+                ) { profilePath.append($0) }
+                    .navigationDestination(for: SnootsRoute.self) { route in
+                        switch route {
+                        case .place(let placeID):
+                            if let place = store.place(id: placeID) {
+                                PlaceDetailView(place: place, store: store, language: language)
+                            }
+                        case .match, .chat, .emergency:
+                            EmptyView()
+                        }
+                    }
+            }
+                .tabItem { Label(language.text("Profile", "檔案"), systemImage: AppTab.profile.symbol) }
                 .tag(AppTab.profile)
         }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            SnootsBottomNavigation(selectedTab: $selectedTab)
-        }
-        .sheet(item: $presentedSheet) { sheet in
-            switch sheet {
-            case .match:
-                MatchSheet(candidate: store.playdate, store: store)
-            case .emergency:
-                NavigationStack { CareView(store: store) }
-            case .place(let placeID):
-                if let place = store.place(id: placeID) {
-                    PlaceDetailSheet(place: place, store: store)
-                }
-            }
-        }
+        .tint(SnootsPalette.navigationActive)
+        .sensoryFeedback(.success, trigger: store.isMatched)
     }
+}
+
+enum SnootsRoute: Hashable {
+    case match
+    case chat
+    case emergency
+    case place(String)
 }
 
 struct FeedView: View {
     let store: SnootsStore
-    @State private var selectedSection: FeedSection = .feed
-
-    private var visiblePosts: [SocialPost] {
-        store.socialPosts.filter { selectedSection == .feed ? $0.kind == .photo : $0.kind == .discussion }
-    }
+    let language: SnootsLanguage
+    @State private var likedPostIDs: Set<UUID> = []
+    @State private var savedPostIDs: Set<UUID> = []
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top) {
+            LazyVStack(alignment: .leading, spacing: 22) {
+                HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Feed")
                             .font(.snootsScreenTitle())
@@ -63,59 +106,110 @@ struct FeedView: View {
                             .foregroundStyle(SnootsPalette.secondaryText)
                     }
                     Spacer()
-                    Image(systemName: "bell.badge.fill")
-                        .font(.title3)
-                        .foregroundStyle(SnootsPalette.ink)
-                        .frame(width: 44, height: 44)
-                        .background(SnootsPalette.primary, in: Circle())
-                        .accessibilityLabel("Notifications")
-                }
-
-                TrustSummaryCard(profile: store.profile)
-
-                Picker("Community section", selection: $selectedSection) {
-                    ForEach(FeedSection.allCases) { section in
-                        Text(section.title).tag(section)
+                    HStack(spacing: 4) {
+                        FeedHeaderButton(symbol: "heart")
+                        FeedHeaderButton(symbol: "paperplane")
                     }
                 }
-                .pickerStyle(.segmented)
 
-                HStack {
-                    Text(selectedSection.heading)
-                        .font(.snootsSection())
-                    Spacer()
-                    Label("Nearby", systemImage: "location.fill")
-                        .font(.snootsMetadata())
-                        .foregroundStyle(SnootsPalette.deepLilac)
-                }
+                FeedStoryStrip(stories: store.feedStories)
 
-                ForEach(visiblePosts) { post in
-                    switch post.kind {
-                    case .photo:
-                        PhotoPostCard(post: post)
-                    case .discussion:
-                        DiscussionCard(post: post)
-                    }
+                TrustSummaryCard(profile: store.profile, language: language)
+
+                ForEach(store.socialPosts) { post in
+                    FeedPostCard(
+                        post: post,
+                        language: language,
+                        isLiked: likedPostIDs.contains(post.id),
+                        isSaved: savedPostIDs.contains(post.id),
+                        onToggleLike: { toggle(post.id, in: &likedPostIDs) },
+                        onToggleSave: { toggle(post.id, in: &savedPostIDs) }
+                    )
                 }
             }
             .padding(.horizontal, 18)
-            .padding(.vertical, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 28)
         }
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
     }
+
+    private func toggle(_ id: UUID, in selection: inout Set<UUID>) {
+        if selection.contains(id) {
+            selection.remove(id)
+        } else {
+            selection.insert(id)
+        }
+    }
 }
 
-private enum FeedSection: String, CaseIterable, Identifiable {
-    case feed, forum
+private struct FeedHeaderButton: View {
+    let symbol: String
 
-    var id: Self { self }
-    var title: String { rawValue.capitalized }
-    var heading: String { self == .feed ? "From your community" : "Questions for the community" }
+    var body: some View {
+        Button(action: {}) {
+            Image(systemName: symbol)
+                .font(.title3.weight(.medium))
+                .foregroundStyle(SnootsPalette.ink)
+                .frame(width: 44, height: 44)
+                .background(SnootsPalette.surface, in: Circle())
+        }
+        .accessibilityLabel(symbol == "heart" ? "Activity" : "Messages")
+    }
+}
+
+private struct FeedStoryStrip: View {
+    let stories: [FeedStory]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                ForEach(stories) { story in
+                    Button(action: {}) {
+                        VStack(spacing: 7) {
+                            ZStack(alignment: .bottomTrailing) {
+                                Image(story.imageName)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 62, height: 62)
+                                    .clipShape(Circle())
+                                    .overlay { Circle().stroke(SnootsPalette.surface, lineWidth: 3) }
+                                    .padding(3)
+                                    .background(
+                                        AngularGradient(
+                                            colors: [SnootsPalette.primary, SnootsPalette.lime, SnootsPalette.primary],
+                                            center: .center
+                                        ),
+                                        in: Circle()
+                                    )
+
+                                if story.isCurrentUser {
+                                    Image(systemName: "plus")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(SnootsPalette.ink)
+                                        .frame(width: 20, height: 20)
+                                        .background(SnootsPalette.lime, in: Circle())
+                                        .overlay { Circle().stroke(SnootsPalette.surface, lineWidth: 2) }
+                                }
+                            }
+                            Text(story.name)
+                                .font(.snootsMetadata())
+                                .foregroundStyle(SnootsPalette.ink)
+                                .lineLimit(1)
+                        }
+                        .frame(width: 68)
+                    }
+                    .accessibilityLabel(story.name)
+                }
+            }
+        }
+    }
 }
 
 private struct TrustSummaryCard: View {
     let profile: ParentProfile
+    let language: SnootsLanguage
 
     var body: some View {
         HStack(spacing: 14) {
@@ -131,11 +225,16 @@ private struct TrustSummaryCard: View {
                 Text("ID, vet record and behavior card verified")
                     .font(.snootsMetadata())
                     .foregroundStyle(SnootsPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(SnootsPalette.ink.opacity(0.55))
+            Button(action: {}) {
+                Label("View", systemImage: "chevron.right")
+                    .labelStyle(.titleAndIcon)
+                    .font(.snootsUI(14, weight: .semibold))
+                    .foregroundStyle(SnootsPalette.navigationActive)
+            }
+            .accessibilityLabel("View trust profile")
         }
         .padding(14)
         .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
@@ -144,195 +243,356 @@ private struct TrustSummaryCard: View {
     }
 }
 
-private struct PhotoPostCard: View {
+private struct FeedPostCard: View {
     let post: SocialPost
+    let language: SnootsLanguage
+    let isLiked: Bool
+    let isSaved: Bool
+    let onToggleLike: () -> Void
+    let onToggleSave: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            PostAuthorRow(post: post)
+        VStack(alignment: .leading, spacing: 13) {
+            FeedPostAuthorRow(post: post, language: language)
             if let photoName = post.photoName {
-                PhotoTile(imageName: photoName, label: post.petName)
-                    .frame(height: 220)
+                Image(photoName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 292)
+                    .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.profileImageRadius, style: .continuous))
+                    .accessibilityLabel("Photo of \(post.petName)")
             }
-            Text(post.body)
-                .font(.snootsBody())
-            DeclarationChips(labels: post.declarations, tint: SnootsPalette.softPink)
-            HStack(spacing: 18) {
-                Label("\(post.likes)", systemImage: "heart")
-                Label("\(post.comments)", systemImage: "bubble.right")
+            HStack(spacing: 16) {
+                Button(action: onToggleLike) {
+                    Label("\(post.likes + (isLiked ? 1 : 0))", systemImage: isLiked ? "heart.fill" : "heart")
+                        .foregroundStyle(isLiked ? SnootsPalette.navigationActive : SnootsPalette.ink)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                Button(action: {}) {
+                    Label("\(post.comments)", systemImage: "bubble.right")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                Button(action: {}) {
+                    Image(systemName: "paperplane")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
                 Spacer()
-                Image(systemName: "paperplane")
-                    .accessibilityLabel("Share post")
+                Button(action: onToggleSave) {
+                    Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                        .foregroundStyle(isSaved ? SnootsPalette.navigationActive : SnootsPalette.ink)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
             }
-            .font(.snootsUI(14, weight: .medium))
-            .foregroundStyle(SnootsPalette.secondaryText)
+            .font(.snootsUI(15, weight: .semibold))
+            .buttonStyle(.plain)
+
+            Text(post.localizedBody(language))
+                .font(.snootsBody())
+                .fixedSize(horizontal: false, vertical: true)
+            DeclarationChips(labels: post.localizedDeclarations(language), tint: SnootsPalette.primaryTint)
         }
-        .padding(14)
+        .padding(15)
         .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
         .snootsCardShadow()
     }
 }
 
-private struct DiscussionCard: View {
+private struct FeedPostAuthorRow: View {
     let post: SocialPost
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Community question", systemImage: "text.bubble.fill")
-                    .font(.snootsChip())
-                    .foregroundStyle(SnootsPalette.deepLilac)
-                Spacer()
-                Text(post.timeAgo)
-                    .font(.snootsMetadata())
-                    .foregroundStyle(SnootsPalette.secondaryText)
-            }
-            Text(post.body)
-                .font(.snootsCardTitle())
-            DeclarationChips(labels: post.declarations, tint: SnootsPalette.butter)
-            Label("\(post.comments) trusted replies", systemImage: "checkmark.message.fill")
-                .font(.snootsUI(14, weight: .semibold))
-                .foregroundStyle(SnootsPalette.pink)
-        }
-        .padding(16)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous).stroke(SnootsPalette.lavender.opacity(0.35), lineWidth: 1) }
-    }
-}
-
-private struct PostAuthorRow: View {
-    let post: SocialPost
+    let language: SnootsLanguage
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "person.fill")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(SnootsPalette.ink)
-                .frame(width: 38, height: 38)
-                .background(SnootsPalette.butter, in: Circle())
+            Image(post.photoName ?? "Nori")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 42, height: 42)
+                .clipShape(Circle())
+                .overlay { Circle().stroke(SnootsPalette.primary.opacity(0.7), lineWidth: 2) }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(post.owner).font(.snootsUI(14, weight: .semibold))
                     Image(systemName: "checkmark.seal.fill")
                         .font(.caption)
-                        .foregroundStyle(SnootsPalette.lilac)
+                        .foregroundStyle(SnootsPalette.navigationActive)
                         .accessibilityLabel("Verified parent")
                 }
-                Text("with \(post.petName) · \(post.timeAgo)")
+                Text("\(post.location) · \(post.localizedTimeAgo(language))")
                     .font(.snootsMetadata())
                     .foregroundStyle(SnootsPalette.secondaryText)
             }
             Spacer()
             Image(systemName: "ellipsis")
                 .foregroundStyle(SnootsPalette.secondaryText)
-                .accessibilityLabel("Post options")
+                .frame(width: 30, height: 30)
+                .accessibilityLabel("More post options")
         }
     }
 }
 
 struct PlaydatesView: View {
     let store: SnootsStore
-    @Binding var presentedSheet: SnootsSheet?
+    let language: SnootsLanguage
+    let onNavigate: (SnootsRoute) -> Void
     @State private var isPassed = false
+    @State private var dragOffset: CGSize = .zero
+
+    private let swipeThreshold: CGFloat = 110
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Match").font(.snootsScreenTitle())
-                        Text("Compatibility before chemistry.")
-                            .font(.snootsBody())
-                            .foregroundStyle(SnootsPalette.secondaryText)
-                    }
-                    Spacer()
-                    Label("2 km", systemImage: "location.fill")
-                        .font(.snootsChip())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(SnootsPalette.lime, in: Capsule())
-                }
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(language.text("Find Paws", "找狗朋友"))
+                    .font(.snootsScreenTitle())
+                Text(language.text("Swipe right to MATCH. Swipe left to SKIP.", "向右滑即可配對，向左滑即可略過。"))
+                    .font(.snootsBody())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+            }
 
+            Spacer(minLength: 12)
+
+            Group {
                 if store.isMatched {
-                    MatchedBanner(candidate: store.playdate)
+                    MatchedBanner(candidate: store.playdate, language: language)
                 } else if isPassed {
-                    ContentUnavailableView("More checked matches nearby", systemImage: "pawprint.fill", description: Text("Mochi is still available for a leashed hello."))
-                    Button("Revisit Mochi") { isPassed = false }
-                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.pink))
+                    ContentUnavailableView(
+                        language.text("More checked matches nearby", "附近暫時沒有更多合適的配對"),
+                        systemImage: "pawprint.fill",
+                        description: Text(language.text("Mochi is still available for a leashed hello.", "Mochi 仍在等候一場牽繩初次見面。"))
+                    )
+                    Button(language.text("Revisit Mochi", "再看看 Mochi")) { isPassed = false }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
                 } else {
-                    MatchProfileCard(candidate: store.playdate)
-                    HStack(spacing: 24) {
-                        Button { isPassed = true } label: {
-                            Image(systemName: "xmark").frame(width: 58, height: 58)
-                        }
-                        .buttonStyle(CircleActionStyle(fill: SnootsPalette.primary, icon: SnootsPalette.ink))
-                        .accessibilityLabel("Pass on Mochi")
-
-                        Button { presentedSheet = .match } label: {
-                            Image(systemName: "heart.fill").frame(width: 58, height: 58)
-                        }
-                        .buttonStyle(CircleActionStyle(fill: SnootsPalette.lavender, icon: .white))
-                        .accessibilityLabel("Propose a match with Mochi")
-                    }
-                    .frame(maxWidth: .infinity)
-                    Text("Pass · propose a leashed hello")
-                        .font(.snootsMetadata())
-                        .foregroundStyle(SnootsPalette.secondaryText)
-                        .frame(maxWidth: .infinity)
+                    SwipeableMatchCard(
+                        candidate: store.playdate,
+                        language: language,
+                        dragOffset: $dragOffset,
+                        swipeThreshold: swipeThreshold,
+                        onSwipe: completeSwipe
+                    )
                 }
             }
-            .padding(18)
+            .frame(maxWidth: 390)
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 12)
         }
+        .padding(.horizontal, 18)
+        .padding(.top, 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
     }
+
+    private func completeSwipe(_ direction: MatchSwipeDirection) {
+        withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+            dragOffset = CGSize(width: direction.horizontalOffset, height: dragOffset.height)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            dragOffset = .zero
+            switch direction {
+            case .skip:
+                isPassed = true
+            case .playdate:
+                onNavigate(.match)
+            }
+        }
+    }
 }
 
-private struct MatchProfileCard: View {
+private enum MatchSwipeDirection: Equatable {
+    case skip
+    case playdate
+
+    var horizontalOffset: CGFloat {
+        switch self {
+        case .skip: -900
+        case .playdate: 900
+        }
+    }
+}
+
+private struct SwipeableMatchCard: View {
     let candidate: PlaydateCandidate
+    let language: SnootsLanguage
+    @Binding var dragOffset: CGSize
+    let swipeThreshold: CGFloat
+    let onSwipe: (MatchSwipeDirection) -> Void
+
+    private var swipeProgress: CGFloat { min(abs(dragOffset.width) / swipeThreshold, 1) }
+    private var isShowingPlaydate: Bool { dragOffset.width > 0 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PhotoTile(imageName: candidate.imageName, label: "Available now")
-                .frame(height: 292)
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("\(candidate.name), \(candidate.age)")
-                        .font(.snootsScreenTitle())
-                    Text("with \(candidate.owner) · \(candidate.distance)")
+            Image(candidate.imageName)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity)
+                .frame(height: 242)
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(candidate.name), \(localizedAge)")
+                        .font(.snootsHeading(28))
+                    Text(language.text("with \(candidate.owner) · \(localizedDistance)", "飼主 \(candidate.owner) · 距離 \(localizedDistance)"))
                         .font(.snootsMetadata())
                         .foregroundStyle(SnootsPalette.secondaryText)
                 }
-                DeclarationChips(labels: candidate.compatibility, tint: SnootsPalette.primaryTint)
-                Divider().overlay(SnootsPalette.divider)
-                Label(candidate.accountability, systemImage: "checkmark.shield.fill")
+                Text(localizedIntro)
+                    .font(.snootsUI(14))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                MatchTraitChips(labels: localizedCompatibility)
+                Label(localizedSafetyLine, systemImage: "checkmark.shield.fill")
                     .font(.snootsMetadata())
                     .foregroundStyle(SnootsPalette.lavender)
-                Text(candidate.intro)
-                    .font(.snootsBody())
             }
-            .padding(16)
+            .padding(18)
         }
         .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .overlay {
+            if dragOffset != .zero {
+                SwipeFeedbackOverlay(
+                    direction: isShowingPlaydate ? .playdate : .skip,
+                    opacity: swipeProgress
+                )
+                .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+            }
+        }
         .snootsCardShadow()
+        .rotationEffect(.degrees(Double(dragOffset.width / 20)))
+        .offset(x: dragOffset.width, y: dragOffset.height * 0.14)
+        .gesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in
+                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                    dragOffset = value.translation
+                }
+                .onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height) else {
+                        withAnimation(.snappy) { dragOffset = .zero }
+                        return
+                    }
+                    if value.translation.width > swipeThreshold {
+                        onSwipe(.playdate)
+                    } else if value.translation.width < -swipeThreshold {
+                        onSwipe(.skip)
+                    } else {
+                        withAnimation(.snappy) { dragOffset = .zero }
+                    }
+                }
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityHint(language.text("Swipe right to show interest or left to skip.", "向右滑表示有興趣，向左滑略過。"))
+    }
+
+    private var localizedCompatibility: [String] {
+        language == .english
+            ? candidate.compatibility
+            : ["慢熟", "牽繩初識", "體型相近"]
+    }
+
+    private var localizedAge: String {
+        language.text(candidate.age, "2 歲")
+    }
+
+    private var localizedDistance: String {
+        language.text(candidate.distance, "1.2 公里")
+    }
+
+    private var localizedSafetyLine: String {
+        language.text(
+            candidate.accountability,
+            "身分已驗證 · 已分享疫苗紀錄"
+        )
+    }
+
+    private var localizedIntro: String {
+        language.text(
+            candidate.intro,
+            "慢慢認識後很愛玩。偏好先一起散步 20 分鐘，再開始自由玩耍。"
+        )
+    }
+}
+
+private struct MatchTraitChips: View {
+    let labels: [String]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(labels, id: \.self) { label in
+                Text(label)
+                    .font(.snootsChip())
+                    .foregroundStyle(SnootsPalette.ink)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(SnootsPalette.primaryTint, in: Capsule())
+            }
+        }
+    }
+}
+
+private struct SwipeFeedbackOverlay: View {
+    let direction: MatchSwipeDirection
+    let opacity: CGFloat
+
+    var body: some View {
+        let isPlaydate = direction == .playdate
+        let feedbackOpacity = min(opacity * 1.35, 1)
+
+        ZStack {
+            RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous)
+                .fill(
+                    (isPlaydate ? SnootsPalette.lime : SnootsPalette.primary)
+                        .opacity(0.62 * feedbackOpacity)
+                )
+
+            HStack {
+                if !isPlaydate {
+                    feedbackIcon(isPlaydate: isPlaydate)
+                    Spacer(minLength: 0)
+                } else {
+                    Spacer(minLength: 0)
+                    feedbackIcon(isPlaydate: isPlaydate)
+                }
+            }
+            .padding(24)
+            .opacity(feedbackOpacity)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .allowsHitTesting(false)
+    }
+
+    private func feedbackIcon(isPlaydate: Bool) -> some View {
+        Image(systemName: isPlaydate ? "heart.fill" : "xmark")
+            .font(.system(size: 36, weight: .bold))
+            .foregroundStyle(SnootsPalette.ink)
+            .frame(width: 82, height: 82)
+            .background(isPlaydate ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
+            .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
     }
 }
 
 private struct MatchedBanner: View {
     let candidate: PlaydateCandidate
+    let language: SnootsLanguage
 
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "heart.circle.fill")
                 .font(.system(size: 70))
                 .foregroundStyle(SnootsPalette.pink)
-            Text("It’s a careful match!").font(.snootsScreenTitle())
-            Text("You and \(candidate.owner) agreed to a quiet, leashed first hello.")
+            Text(language.text("It’s a careful match!", "這是一場安心配對！")).font(.snootsScreenTitle())
+            Text(language.text("You and \(candidate.owner) agreed to a quiet, leashed first hello.", "你和 \(candidate.owner) 都同意先來一場安靜、牽繩的初次見面。"))
                 .font(.snootsBody())
                 .multilineTextAlignment(.center)
                 .foregroundStyle(SnootsPalette.secondaryText)
-            Label("Shared behavior cards", systemImage: "checkmark.seal.fill")
+            Label(language.text("Shared behavior cards", "已分享行為資料卡"), systemImage: "checkmark.seal.fill")
                 .font(.snootsUI(15, weight: .semibold))
                 .foregroundStyle(SnootsPalette.deepLilac)
         }
@@ -344,14 +604,15 @@ private struct MatchedBanner: View {
 
 struct CareView: View {
     let store: SnootsStore
+    let language: SnootsLanguage
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Emergency guidance").font(.snootsScreenTitle())
-                        Text("Stay with your pet. Keep it simple.")
+                        Text(language.text("Emergency guidance", "緊急處置指引")).font(.snootsScreenTitle())
+                        Text(language.text("Stay with your pet. Keep it simple.", "陪在狗狗身邊，簡單應對。"))
                             .font(.snootsBody())
                             .foregroundStyle(SnootsPalette.secondaryText)
                     }
@@ -363,38 +624,50 @@ struct CareView: View {
                         .background(SnootsPalette.careBlue, in: Circle())
                 }
 
-                Label("DEMO GUIDANCE ONLY · NOT CLINICAL TRIAGE", systemImage: "info.circle.fill")
+                Label(language.text("DEMO GUIDANCE ONLY · NOT CLINICAL TRIAGE", "僅供流程示範 · 非醫療分流"), systemImage: "info.circle.fill")
                     .font(.snootsChip())
                     .foregroundStyle(SnootsPalette.alert)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 .background(SnootsPalette.alert.opacity(0.09), in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
 
-                CareProgressCard(step: store.currentCareStep, index: store.careStepIndex, total: store.careSteps.count)
+                CareProgressCard(step: store.currentCareStep, index: store.careStepIndex, total: store.careSteps.count, language: language)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Critical symptoms noted").font(.snootsCardTitle())
-                    DeclarationChips(labels: store.criticalSymptoms, tint: SnootsPalette.softPink)
+                    Text(language.text("Critical symptoms noted", "已記錄的危急症狀")).font(.snootsCardTitle())
+                    DeclarationChips(labels: store.criticalSymptoms.map { localizedCriticalSymptom($0, language: language) }, tint: SnootsPalette.softPink)
                 }
                 .padding(16)
                 .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
-                ClinicCard(clinic: store.clinic)
+                ClinicCard(clinic: store.clinic, language: language)
 
-                Button(store.careStepIndex == store.careSteps.count - 1 ? "Demo handoff complete" : "Next scripted step") {
+                Button(store.careStepIndex == store.careSteps.count - 1 ? language.text("Demo handoff complete", "示範交接完成") : language.text("Next scripted step", "下一個示範步驟")) {
                     store.advanceCareStep()
                 }
                 .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.careBlue))
                 .disabled(store.careStepIndex == store.careSteps.count - 1)
 
-                Text("This prototype demonstrates an in-transit handoff flow. Contact local emergency services or a licensed clinic for real medical decisions.")
+                Text(language.text("This prototype demonstrates an in-transit handoff flow. Contact local emergency services or a licensed clinic for real medical decisions.", "此原型示範前往診所途中的交接流程。實際醫療決策請聯絡當地緊急服務或合格診所。"))
                     .font(.snootsMetadata())
                     .foregroundStyle(SnootsPalette.secondaryText)
             }
             .padding(18)
         }
         .background(SnootsPalette.canvas)
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle(language.text("Emergency guidance", "緊急處置指引"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .sensoryFeedback(.selection, trigger: store.careStepIndex)
+    }
+}
+
+private func localizedCriticalSymptom(_ symptom: String, language: SnootsLanguage) -> String {
+    switch symptom {
+    case "Repeated vomiting": language.text(symptom, "反覆嘔吐")
+    case "Very quiet": language.text(symptom, "異常安靜")
+    case "Possible toxin": language.text(symptom, "疑似接觸毒物")
+    default: symptom
     }
 }
 
@@ -402,35 +675,55 @@ private struct CareProgressCard: View {
     let step: CareStep
     let index: Int
     let total: Int
+    let language: SnootsLanguage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("IN TRANSIT · STEP \(index + 1) OF \(total)")
+                Text(language.text("IN TRANSIT · STEP \(index + 1) OF \(total)", "前往診所中 · 第 \(index + 1)/\(total) 步"))
                     .font(.snootsChip())
-                    .foregroundStyle(.white.opacity(0.86))
+                    .foregroundStyle(SnootsPalette.ink.opacity(0.78))
                 Spacer()
                 Image(systemName: step.symbol)
                     .font(.title2)
-                    .foregroundStyle(SnootsPalette.lime)
+                    .foregroundStyle(SnootsPalette.ink)
             }
-            Text(step.title).font(.snootsCardTitle())
-            Text(step.instruction).font(.snootsBody())
+            Text(localizedTitle).font(.snootsCardTitle())
+            Text(localizedInstruction).font(.snootsBody())
             HStack(spacing: 6) {
                 ForEach(0..<total, id: \.self) { item in
-                    Capsule().fill(item <= index ? SnootsPalette.lime : .white.opacity(0.28)).frame(height: 6)
+                    Capsule().fill(item <= index ? SnootsPalette.ink : SnootsPalette.ink.opacity(0.18)).frame(height: 6)
                 }
             }
         }
         .padding(18)
-        .foregroundStyle(.white)
+        .foregroundStyle(SnootsPalette.ink)
         .background(SnootsPalette.lavender, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
         .snootsCardShadow()
+    }
+
+    private var localizedTitle: String {
+        guard language == .traditionalChinese else { return step.title }
+        switch index {
+        case 0: return "保持乘車環境平靜"
+        case 1: return "準備交接資訊"
+        default: return "抵達後重述重點"
+        }
+    }
+
+    private var localizedInstruction: String {
+        guard language == .traditionalChinese else { return step.instruction }
+        switch index {
+        case 0: return "使用穩固的提籠或胸背帶。保持空間安靜；除非合格臨床人員指示，避免餵食或用藥。"
+        case 1: return "準備症狀開始時間、可能接觸物，以及一段可供分享的短影片。"
+        default: return "到掛號處時，清楚說明症狀與可能接觸物，後續評估由診所接手。"
+        }
     }
 }
 
 private struct ClinicCard: View {
     let clinic: Clinic
+    let language: SnootsLanguage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -439,15 +732,15 @@ private struct ClinicCard: View {
                     .font(.title)
                     .foregroundStyle(SnootsPalette.careBlue)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Destination clinic").font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
-                    Text(clinic.name).font(.snootsCardTitle())
+                    Text(language.text("Destination clinic", "目的地診所")).font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
+                    Text(clinic.localizedName(language)).font(.snootsCardTitle())
                 }
                 Spacer()
-                Text(clinic.eta).font(.snootsUI(15, weight: .semibold)).foregroundStyle(SnootsPalette.careBlue)
+                Text(clinic.localizedETA(language)).font(.snootsUI(15, weight: .semibold)).foregroundStyle(SnootsPalette.careBlue)
             }
             Divider().overlay(SnootsPalette.divider)
-            Label(clinic.address, systemImage: "location.fill")
-            Label(clinic.handoff, systemImage: "doc.text.fill")
+            Label(clinic.localizedAddress(language), systemImage: "location.fill")
+            Label(clinic.localizedHandoff(language), systemImage: "doc.text.fill")
         }
         .font(.snootsUI(14))
         .padding(16)
@@ -458,370 +751,823 @@ private struct ClinicCard: View {
 
 struct MapsView: View {
     let store: SnootsStore
-    @Binding var presentedSheet: SnootsSheet?
-    @State private var selectedCategory: MapPlace.Category?
+    let language: SnootsLanguage
+    let onNavigate: (SnootsRoute) -> Void
+    @State private var selectedCategory: NearbyCategory?
+    @State private var selectedFilters: Set<NearbyFilter> = []
+    @State private var intentQuery = ""
+    @State private var selectedPlaceID: String?
+    @State private var isShowingResults = false
+    @State private var resultsPanelDetent: NearbyResultsDetent = .compact
+    @State private var isTabBarRevealed = false
+    @State private var nearbyEditorSheet: NearbyEditorSheet?
 
-    private var visibleMapPlaces: [MapPlace] {
-        store.mapPlaces.places.filter { selectedCategory == nil || $0.category == selectedCategory }
+    private var visiblePlaces: [Place] {
+        guard let selectedCategory else { return [] }
+        return store.places.filter { place in
+            place.nearbyCategory == selectedCategory
+                && selectedFilters.allSatisfy { $0.matches(place) }
+                && matchesIntent(place)
+        }
+    }
+
+    private var markers: [NearbyMapMarker] {
+        guard visiblePlaces.count > 3 else {
+            return visiblePlaces.map { NearbyMapMarker(place: $0, language: language) }
+        }
+        let leadingPins = visiblePlaces.prefix(2).map { NearbyMapMarker(place: $0, language: language) }
+        let clustered = Array(visiblePlaces.dropFirst(2))
+        return leadingPins + [NearbyMapMarker(cluster: clustered, language: language)]
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Maps").font(.snootsScreenTitle())
-                        Text("Dog-friendly places, with the details that matter.")
-                            .font(.snootsBody())
-                            .foregroundStyle(SnootsPalette.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: isShowingResults ? 10 : 20) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(language.text("What’s Nearby", "附近有什麼"))
+                            .font(.snootsScreenTitle())
+                        if !isShowingResults {
+                            Text(language.text("1 Choose a category · 2 Choose filters", "1 選主分類 · 2 選次分類"))
+                                .font(.snootsUI(15, weight: .medium))
+                                .foregroundStyle(SnootsPalette.secondaryText)
+                        }
                     }
-                    Spacer()
+                    Spacer(minLength: 8)
+                    Button { onNavigate(.emergency) } label: {
+                        Image(systemName: "cross.case.fill")
+                            .font(.snootsUI(17, weight: .bold))
+                            .foregroundStyle(SnootsPalette.ink)
+                            .frame(width: 44, height: 44)
+                            .background(SnootsPalette.lime, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(language.text("Find emergency care", "尋找緊急醫療"))
                 }
 
-                NeighborhoodMapCard(places: visibleMapPlaces, isResolving: store.mapPlaces.isResolvingLocations)
-                EmergencyMapCard(clinic: store.clinic) { presentedSheet = .emergency }
-
-                PlaceCategoryFilter(selectedCategory: $selectedCategory)
-
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Nearby places").font(.snootsSection())
-                    Spacer()
-                    Label("\(visibleMapPlaces.count) found", systemImage: "mappin.and.ellipse")
-                        .font(.snootsMetadata())
-                        .foregroundStyle(SnootsPalette.secondaryText)
-                        .accessibilityLabel("\(visibleMapPlaces.count) nearby places found")
-                }
-                if let errorMessage = store.mapPlaces.errorMessage {
-                    ContentUnavailableView("Maps database unavailable", systemImage: "externaldrive.badge.exclamationmark", description: Text(errorMessage))
+                if isShowingResults {
+                    ResultsFilterSummaryBar(
+                        selectedCategory: selectedCategory,
+                        selectedFilters: $selectedFilters,
+                        intentQuery: $intentQuery,
+                        language: language,
+                        onEditFilters: { nearbyEditorSheet = .filters },
+                        onEditSearch: {
+                            isTabBarRevealed = false
+                            isShowingResults = false
+                        }
+                    )
                 } else {
-                    ForEach(visibleMapPlaces) { place in
-                        DatabasePlaceRow(place: place)
+                    NearbyCategoryPicker(selection: $selectedCategory, language: language)
+
+                    if selectedCategory != nil {
+                        SecondaryFilterEntry(selectedFilters: selectedFilters, language: language) {
+                            nearbyEditorSheet = .filters
+                        }
+                        Button(language.text("Show results", "顯示結果")) {
+                            selectedPlaceID = nil
+                            resultsPanelDetent = .compact
+                            isTabBarRevealed = false
+                            isShowingResults = true
+                        }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
                     }
-                }
-
-                Text("Featured nearby").font(.snootsSection())
-
-                ForEach(store.places) { place in
-                    PlaceRow(place: place, isSaved: store.isSaved(place), onOpen: { presentedSheet = .place(place.id) }, onToggleSave: { store.toggleSaved(place) })
                 }
             }
-            .padding(18)
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, isShowingResults ? 10 : 16)
+
+            if isShowingResults, selectedCategory != nil {
+                GeometryReader { proxy in
+                    let panelHeight = resultsPanelDetent.height(in: proxy.size.height)
+                    VStack(spacing: 0) {
+                        NearbyMap(markers: markers, selectedPlaceID: $selectedPlaceID, language: language)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: max(180, proxy.size.height - panelHeight))
+
+                        NearbyResultsPanel(
+                            places: visiblePlaces,
+                            selectedPlaceID: $selectedPlaceID,
+                            detent: $resultsPanelDetent,
+                            language: language,
+                            onOpen: { onNavigate(.place($0.id)) },
+                            onTabBarVisibilityChange: { isTabBarRevealed = $0 }
+                        )
+                        .frame(height: panelHeight)
+                    }
+                }
+            } else {
+                Spacer(minLength: 0)
+            }
         }
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
-        .task {
-            await store.mapPlaces.resolveLocationsIfNeeded()
-        }
-    }
-}
-
-private struct PlaceCategoryFilter: View {
-    @Binding var selectedCategory: MapPlace.Category?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Filter places").font(.snootsSection())
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    PlaceFilterButton(
-                        title: "All",
-                        symbol: "square.grid.2x2.fill",
-                        isSelected: selectedCategory == nil
-                    ) {
-                        selectedCategory = nil
-                    }
-
-                    ForEach(MapPlace.Category.allCases) { category in
-                        PlaceFilterButton(
-                            title: category.title,
-                            symbol: category.symbol,
-                            isSelected: selectedCategory == category
-                        ) {
-                            selectedCategory = category
-                        }
-                    }
-                }
-                .padding(.vertical, 2)
+        .toolbar(isShowingResults && !isTabBarRevealed ? .hidden : .visible, for: .tabBar)
+        .sheet(item: $nearbyEditorSheet) { sheet in
+            switch sheet {
+            case .filters:
+                NearbyFilterEditorSheet(selectedFilters: $selectedFilters, intentQuery: $intentQuery, language: language)
             }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Filter nearby places")
+    }
+
+    private func matchesIntent(_ place: Place) -> Bool {
+        let query = intentQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return true }
+        let searchable = [place.name, place.category, place.dogAccess.rawValue, place.intentKeywords].joined(separator: " ").lowercased()
+        return searchable.contains(query)
+            || (query.contains("indoor") && place.dogAccess == .indoorOK)
+            || ((query.contains("rain") || query.contains("雨")) && place.dogAccess == .indoorOK)
+            || ((query.contains("large") || query.contains("大型")) && place.acceptsLargeDogs)
     }
 }
 
-private struct PlaceFilterButton: View {
-    let title: String
-    let symbol: String
-    let isSelected: Bool
+enum NearbyCategory: CaseIterable, Identifiable, Hashable {
+    case meetups, places, vets
+
+    var id: Self { self }
+    func title(_ language: SnootsLanguage) -> String {
+        switch self {
+        case .meetups: language.text("Dog meetups", "狗聚")
+        case .places: language.text("Places", "地點")
+        case .vets: language.text("Veterinary care", "獸醫院")
+        }
+    }
+}
+
+private enum NearbyFilter: CaseIterable, Hashable, Identifiable {
+    case openNow, indoor, largeDogs, carrier, verified, distance
+
+    var id: Self { self }
+    var symbol: String {
+        switch self { case .openNow: "clock.fill"; case .indoor: "house.fill"; case .largeDogs: "scalemass.fill"; case .carrier: "bag.fill"; case .verified: "checkmark.seal.fill"; case .distance: "location.fill" }
+    }
+    func title(_ language: SnootsLanguage) -> String {
+        switch self {
+        case .openNow: language.text("Open now", "現在營業")
+        case .indoor: language.text("Indoor access", "可進室內")
+        case .largeDogs: language.text("Large dog", "接受大型犬")
+        case .carrier: language.text("Carrier required", "需提籠")
+        case .verified: language.text("Verified only", "只看已驗證")
+        case .distance: language.text("Within 10 min", "10 分鐘內")
+        }
+    }
+    func matches(_ place: Place) -> Bool {
+        switch self {
+        case .openNow: place.isOpenNow
+        case .indoor: place.dogAccess == .indoorOK
+        case .largeDogs: place.acceptsLargeDogs
+        case .carrier: place.dogAccess == .carrierRequired
+        case .verified: place.verificationLevel != .needsReconfirmation
+        case .distance: place.walkMinutes <= 10
+        }
+    }
+}
+
+private enum NearbyResultsDetent: Equatable {
+    case compact, expanded
+
+    func height(in availableHeight: CGFloat) -> CGFloat {
+        let reservedForMap = max(180, availableHeight * 0.34)
+        let maximumPanelHeight = max(220, availableHeight - reservedForMap)
+        let preferredHeight: CGFloat = self == .compact ? 282 : 470
+        return min(preferredHeight, maximumPanelHeight)
+    }
+
+    mutating func toggle() {
+        self = self == .compact ? .expanded : .compact
+    }
+}
+
+private enum NearbyEditorSheet: Identifiable {
+    case filters
+
+    var id: String { "nearby-filters" }
+}
+
+private struct NearbyCategoryPicker: View {
+    @Binding var selection: NearbyCategory?
+    let language: SnootsLanguage
+
+    var body: some View {
+        Picker("", selection: $selection) {
+            ForEach(NearbyCategory.allCases) { category in
+                Text(category.title(language)).tag(Optional(category))
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .accessibilityLabel(language.text("Choose a category", "選擇主分類"))
+    }
+}
+
+private struct SecondaryFilterEntry: View {
+    let selectedFilters: Set<NearbyFilter>
+    let language: SnootsLanguage
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(.snootsUI(15, weight: .semibold))
-                .foregroundStyle(SnootsPalette.ink)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 44)
-                .background(
-                    isSelected ? SnootsPalette.primary : SnootsPalette.surface,
-                    in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
-                        .stroke(isSelected ? SnootsPalette.ink : SnootsPalette.primary, lineWidth: isSelected ? 2 : 1)
-                }
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityHint("Shows only \(title.lowercased()) places")
-    }
-}
-
-private struct EmergencyMapCard: View {
-    let clinic: Clinic
-    let onOpen: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "cross.case.fill")
-                    .font(.title2)
-                    .foregroundStyle(SnootsPalette.ink)
-                    .frame(width: 44, height: 44)
-                    .background(SnootsPalette.primary, in: Circle())
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Emergency guidance")
-                        .font(.snootsCardTitle())
-                    Text("\(clinic.name) · \(clinic.eta)")
-                        .font(.snootsMetadata())
-                        .foregroundStyle(SnootsPalette.secondaryText)
-                }
+            HStack {
+                Text(selectedFilters.isEmpty
+                     ? language.text("Secondary filters", "次分類")
+                     : language.text("\(selectedFilters.count) filters", "次分類 \(selectedFilters.count) 項"))
+                    .font(.snootsUI(15, weight: .semibold))
                 Spacer()
-                Text("Open now")
-                    .font(.snootsChip())
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(SnootsPalette.primary, in: Capsule())
-            }
-            Button("Find emergency care", action: onOpen)
-                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.primary))
-        }
-        .padding(16)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous)
-                .stroke(SnootsPalette.primary, lineWidth: 2)
-        }
-        .snootsCardShadow()
-    }
-}
-
-private struct NeighborhoodMapCard: View {
-    let places: [MapPlace]
-    let isResolving: Bool
-    @State private var position = MapCameraPosition.region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5654),
-            span: MKCoordinateSpan(latitudeDelta: 0.16, longitudeDelta: 0.16)
-        )
-    )
-
-    var body: some View {
-        ZStack {
-            Map(position: $position) {
-                ForEach(places) { place in
-                    if let coordinate = place.coordinate {
-                        Marker(place.name, systemImage: place.category.symbol, coordinate: coordinate)
-                            .tint(SnootsPalette.lavender)
-                    }
-                }
-            }
-            .mapStyle(.standard(elevation: .realistic))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Map of nearby dog-friendly places in Taipei")
-            .accessibilityValue(isResolving ? "Locating places" : "\(places.filter { $0.coordinate != nil }.count) places mapped")
-            VStack {
-                Spacer()
-                HStack {
-                    Label(isResolving ? "Locating places…" : "\(places.filter { $0.coordinate != nil }.count) mapped", systemImage: "mappin.and.ellipse")
-                    Spacer()
-                    Text("Taipei")
-                }
-                .font(.snootsChip())
-                .padding(12)
-                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-            }
-            .padding(12)
-        }
-        .frame(height: 190)
-        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .snootsCardShadow()
-    }
-}
-
-private struct DatabasePlaceRow: View {
-    let place: MapPlace
-    @Environment(\.openURL) private var openURL
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: place.category.symbol)
-                .font(.title3)
-                .foregroundStyle(SnootsPalette.ink)
-                .frame(width: 40, height: 40)
-                .background(SnootsPalette.primaryTint, in: Circle())
-            VStack(alignment: .leading, spacing: 5) {
-                Text(place.name).font(.snootsCardTitle())
-                Label(place.category.title, systemImage: place.category.symbol)
+                Text(selectedFilters.isEmpty ? language.text("Choose", "選擇") : language.text("Change", "變更"))
                     .font(.snootsMetadata())
                     .foregroundStyle(SnootsPalette.secondaryText)
-                if !place.subtitle.isEmpty {
-                    Text(place.subtitle)
-                        .font(.snootsMetadata())
-                        .foregroundStyle(SnootsPalette.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !place.ruleLabels.isEmpty {
-                    DeclarationChips(
-                        labels: Array(place.ruleLabels.prefix(4)),
-                        tint: SnootsPalette.butter
-                    )
-                }
             }
-            Spacer(minLength: 8)
-            if let appleMapsURL = place.appleMapsURL {
-                Button {
-                    openURL(appleMapsURL)
-                } label: {
-                    Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                        .labelStyle(.iconOnly)
-                        .font(.body.weight(.bold))
-                        .foregroundStyle(SnootsPalette.ink)
-                        .frame(width: 44, height: 44)
-                        .background(SnootsPalette.primary, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Get directions to \(place.name) in Apple Maps")
-                .accessibilityHint("Opens Apple Maps")
+            .foregroundStyle(SnootsPalette.ink)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 48)
+            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                    .stroke(SnootsPalette.divider, lineWidth: 1)
             }
         }
-        .padding(14)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .snootsCardShadow()
+        .buttonStyle(.plain)
+        .accessibilityLabel(language.text("Edit secondary filters", "編輯次分類"))
     }
-
 }
 
-private struct PlaceRow: View {
-    let place: Place
-    let isSaved: Bool
-    let onOpen: () -> Void
-    let onToggleSave: () -> Void
+private struct ResultsFilterSummaryBar: View {
+    let selectedCategory: NearbyCategory?
+    @Binding var selectedFilters: Set<NearbyFilter>
+    @Binding var intentQuery: String
+    let language: SnootsLanguage
+    let onEditFilters: () -> Void
+    let onEditSearch: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Button(action: onOpen) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(place.imageName)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 82, height: 104)
-                        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.profileImageRadius, style: .continuous))
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(place.name).font(.snootsCardTitle()).foregroundStyle(SnootsPalette.ink)
-                        Text("\(place.category) · \(place.walk)").font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
-                        DeclarationChips(labels: Array(place.rules.prefix(3)).map(\.shortLabel), tint: SnootsPalette.butter)
-                        Text("Verified \(place.verified)").font(.snootsMetadata()).foregroundStyle(SnootsPalette.deepLilac)
+        HStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    if let selectedCategory {
+                        AppliedFilterChip(title: selectedCategory.title(language), tint: SnootsPalette.primary)
+                    }
+                    ForEach(NearbyFilter.allCases.filter { selectedFilters.contains($0) }) { filter in
+                        AppliedFilterChip(title: filter.title(language), tint: SnootsPalette.butter)
+                    }
+                    if !intentQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        AppliedFilterChip(title: intentQuery, tint: SnootsPalette.primaryTint)
+                    }
+                    if selectedFilters.isEmpty && intentQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        AppliedFilterChip(title: language.text("All conditions", "所有條件"), tint: SnootsPalette.canvas)
                     }
                 }
+                .padding(.vertical, 2)
+            }
+
+            Button(action: onEditFilters) {
+                Text(language.text("Filters", "篩選條件"))
+                    .font(.snootsUI(14, weight: .bold))
+                    .foregroundStyle(SnootsPalette.ink)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
             }
             .buttonStyle(.plain)
-            Button(action: onToggleSave) {
-                Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+            .accessibilityLabel(language.text("Edit secondary filters", "編輯次分類"))
+
+            Button(action: onEditSearch) {
+                Image(systemName: "magnifyingglass")
+                    .font(.snootsUI(15, weight: .bold))
                     .foregroundStyle(SnootsPalette.ink)
                     .frame(width: 44, height: 44)
-                    .background(SnootsPalette.primaryTint, in: Circle())
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isSaved ? "Remove \(place.name) from saved places" : "Save \(place.name)")
+            .accessibilityLabel(language.text("Edit search", "修改搜尋"))
         }
-        .padding(12)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .snootsCardShadow()
+        .frame(height: 48)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(language.text("Applied search filters", "已套用的搜尋條件"))
     }
 }
 
-struct PlaceDetailSheet: View {
-    let place: Place
-    let store: SnootsStore
+private struct AppliedFilterChip: View {
+    let title: String
+    let tint: Color
+
+    var body: some View {
+        Text(title)
+            .font(.snootsChip())
+            .foregroundStyle(SnootsPalette.ink)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 40)
+            .background(tint, in: Capsule())
+    }
+}
+
+private struct NearbyFilterEditorSheet: View {
+    @Binding var selectedFilters: Set<NearbyFilter>
+    @Binding var intentQuery: String
+    let language: SnootsLanguage
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    PhotoTile(imageName: place.imageName, label: "Rules verified")
-                        .frame(height: 210)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(place.name).font(.snootsScreenTitle())
-                        Text("\(place.category) · \(place.walk)").font(.snootsBody()).foregroundStyle(SnootsPalette.secondaryText)
-                    }
-                    Text("Before you go").font(.snootsSection())
-                    ForEach(place.rules) { rule in
-                        Label(rule.label, systemImage: rule.symbol)
-                            .font(.snootsUI(15, weight: .medium))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14)
-                            .background(SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-                    }
-                    Label("Rules confirmed \(place.verified)", systemImage: "checkmark.seal.fill")
-                        .font(.snootsUI(14, weight: .semibold))
-                        .foregroundStyle(SnootsPalette.deepLilac)
-                    Button(store.isSaved(place) ? "Saved for later" : "Save place") { store.toggleSaved(place) }
-                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.pink))
+            List {
+                Section {
+                    TextField(language.text("Optional: indoor café, rainy day place", "選填：室內咖啡廳、雨天去處"), text: $intentQuery)
+                        .textInputAutocapitalization(.never)
+                        .submitLabel(.search)
                 }
-                .padding(18)
+
+                Section {
+                    ForEach(NearbyFilter.allCases) { filter in
+                        Button {
+                            toggle(filter)
+                        } label: {
+                            HStack {
+                                Text(filter.title(language))
+                                    .font(.snootsUI(16, weight: .medium))
+                                Spacer()
+                                if selectedFilters.contains(filter) {
+                                    Image(systemName: "checkmark")
+                                        .font(.snootsUI(15, weight: .bold))
+                                        .foregroundStyle(SnootsPalette.ink)
+                                }
+                            }
+                            .foregroundStyle(SnootsPalette.ink)
+                            .frame(minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selectedFilters.contains(filter) ? .isSelected : [])
+                        .accessibilityValue(selectedFilters.contains(filter) ? language.text("Selected", "已選取") : language.text("Not selected", "未選取"))
+                    }
+                } header: {
+                    Text(language.text("Select any conditions. Changes apply immediately.", "可複選，變更會立即套用。"))
+                } footer: {
+                    if !selectedFilters.isEmpty {
+                        Button(language.text("Clear all", "清除全部"), role: .destructive) {
+                            selectedFilters.removeAll()
+                        }
+                    }
+                }
             }
-            .navigationTitle("Place details")
+            .navigationTitle(language.text("Filters", "次分類"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button(language.text("Done", "完成")) { dismiss() }
                         .font(.snootsUI(15, weight: .semibold))
                 }
             }
         }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func toggle(_ filter: NearbyFilter) {
+        if selectedFilters.contains(filter) {
+            selectedFilters.remove(filter)
+        } else {
+            selectedFilters.insert(filter)
+        }
+    }
+}
+
+private struct NearbyMapMarker: Identifiable {
+    let id: String
+    let name: String
+    let latitude: Double
+    let longitude: Double
+    let placeIDs: [String]
+
+    init(place: Place, language: SnootsLanguage) {
+        id = place.id
+        name = place.localizedName(language)
+        latitude = place.latitude
+        longitude = place.longitude
+        placeIDs = [place.id]
+    }
+
+    init(cluster: [Place], language: SnootsLanguage) {
+        id = "cluster-\(cluster.map(\.id).joined(separator: "-"))"
+        name = language.text("\(cluster.count) places", "\(cluster.count) 個地點")
+        latitude = cluster.map(\.latitude).reduce(0, +) / Double(cluster.count)
+        longitude = cluster.map(\.longitude).reduce(0, +) / Double(cluster.count)
+        placeIDs = cluster.map(\.id)
+    }
+
+    var isCluster: Bool { placeIDs.count > 1 }
+    var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
+}
+
+private struct NearbyMap: View {
+    let markers: [NearbyMapMarker]
+    @Binding var selectedPlaceID: String?
+    let language: SnootsLanguage
+    @State private var position: MapCameraPosition = .userLocation(fallback: .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5654), span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.06))))
+
+    var body: some View {
+        Map(position: $position) {
+            UserAnnotation()
+            ForEach(markers) { marker in
+                Annotation(marker.name, coordinate: marker.coordinate, anchor: .bottom) {
+                    Button {
+                        selectedPlaceID = marker.placeIDs.first
+                    } label: {
+                        NearbyMapPin(count: marker.placeIDs.count, isSelected: marker.placeIDs.contains(selectedPlaceID ?? ""))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(marker.isCluster ? language.text("\(marker.placeIDs.count) places clustered", "\(marker.placeIDs.count) 個地點群組") : marker.name)
+                }
+            }
+        }
+        .mapStyle(.standard(elevation: .realistic))
+        .overlay(alignment: .topTrailing) {
+            MapUserLocationButton()
+                .tint(SnootsPalette.ink)
+                .padding(14)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(language.text("Map centered on your location", "以你的位置為中心的地圖"))
+    }
+}
+
+private struct NearbyMapPin: View {
+    let count: Int
+    let isSelected: Bool
+
+    var body: some View {
+        Text(count == 1 ? "•" : "\(count)")
+            .font(.snootsUI(count == 1 ? 28 : 15, weight: .bold))
+            .foregroundStyle(SnootsPalette.ink)
+            .frame(width: isSelected ? 54 : 46, height: isSelected ? 54 : 46)
+            .background(isSelected ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
+            .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
+            .shadow(color: .black.opacity(isSelected ? 0.18 : 0.10), radius: isSelected ? 10 : 6, y: isSelected ? 6 : 3)
+            .offset(y: isSelected ? -6 : 0)
+            .animation(.snappy, value: isSelected)
+    }
+}
+
+private struct NearbyResultsPanel: View {
+    let places: [Place]
+    @Binding var selectedPlaceID: String?
+    @Binding var detent: NearbyResultsDetent
+    let language: SnootsLanguage
+    let onOpen: (Place) -> Void
+    let onTabBarVisibilityChange: (Bool) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button {
+                let nextDetent: NearbyResultsDetent = detent == .compact ? .expanded : .compact
+                withAnimation(.snappy) { detent = nextDetent }
+                onTabBarVisibilityChange(nextDetent == .compact)
+            } label: {
+                Capsule()
+                    .fill(SnootsPalette.ink.opacity(0.18))
+                    .frame(width: 44, height: 5)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onEnded { value in
+                        guard abs(value.translation.height) > 28 else { return }
+                        let nextDetent: NearbyResultsDetent = value.translation.height < 0 ? .expanded : .compact
+                        withAnimation(.snappy) {
+                            detent = nextDetent
+                        }
+                        onTabBarVisibilityChange(nextDetent == .compact)
+                    }
+            )
+            .onHover { isHovering in
+                if isHovering { onTabBarVisibilityChange(true) }
+            }
+            .accessibilityLabel(detent == .expanded ? language.text("Collapse results", "收合結果") : language.text("Expand results", "展開結果"))
+            .accessibilityHint(language.text("Drag up to focus on results. Drag down to reveal the native tab bar and more of the map", "向上拉可專注查看結果；向下拉可顯示原生導覽列與更多地圖"))
+
+            HStack(alignment: .firstTextBaseline) {
+                Text(language.text("Matches", "符合條件"))
+                    .font(.snootsSection())
+                Spacer()
+                Text(language.text("\(places.count) found", "找到 \(places.count) 個"))
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
+
+            if places.isEmpty {
+                ContentUnavailableView(language.text("No matches yet", "暫時沒有符合的結果"), systemImage: "pawprint.fill", description: Text(language.text("Try removing one condition.", "試著移除一個條件。")))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        ForEach(places) { place in
+                            NearbyPlaceCard(place: place, isSelected: selectedPlaceID == place.id, language: language) {
+                                selectedPlaceID = place.id
+                                onOpen(place)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 14)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .background(SnootsPalette.surface)
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: SnootsMetrics.cardRadius, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 20, y: -5)
+    }
+}
+
+private struct NearbyPlaceCard: View {
+    let place: Place
+    let isSelected: Bool
+    let language: SnootsLanguage
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(place.localizedName(language))
+                    .font(.snootsCardTitle())
+                    .foregroundStyle(SnootsPalette.ink)
+                Text(place.localizedCategory(language))
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                HStack(spacing: 5) {
+                    Text(place.localizedWalk(language))
+                    Text("·")
+                    Text(place.isOpenNow ? language.text("Open", "營業中") : language.text("Closed", "休息中"))
+                        .foregroundStyle(place.isOpenNow ? SnootsPalette.deepLilac : SnootsPalette.secondaryText)
+                }
+                .font(.snootsMetadata())
+                Text(place.dogAccess.label(language))
+                    .font(.snootsChip())
+                    .foregroundStyle(SnootsPalette.ink)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(SnootsPalette.butter, in: Capsule())
+                Label("\(place.verificationLevel.label(language)) · \(place.localizedLastConfirmed(language))", systemImage: "checkmark.seal.fill")
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(isSelected ? SnootsPalette.primaryTint : SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                    .stroke(isSelected ? SnootsPalette.ink : .clear, lineWidth: 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(language.text("Open place details", "開啟地點詳情"))
+    }
+}
+
+struct PlaceDetailView: View {
+    let place: Place
+    let store: SnootsStore
+    let language: SnootsLanguage
+    @State private var feedback: PlaceFeedback?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                    PhotoTile(imageName: place.imageName, label: place.localizedName(language), language: language)
+                        .frame(height: 210)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(place.localizedName(language)).font(.snootsScreenTitle())
+                        Text("\(place.localizedCategory(language)) · \(place.localizedWalk(language))")
+                            .font(.snootsBody())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                    }
+
+                    DogAccessPolicyCard(place: place, language: language)
+                    PracticalPlaceInfo(place: place, language: language)
+                    FeedbackCard(feedback: $feedback, language: language)
+
+                    Button(store.isSaved(place) ? language.text("Remove saved place", "移除已儲存地點") : language.text("Save place", "儲存地點")) { store.toggleSaved(place) }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                        .accessibilityValue(store.isSaved(place) ? language.text("Saved", "已儲存") : language.text("Not saved", "尚未儲存"))
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle(language.text("Place details", "地點詳情"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+    }
+}
+
+private struct DogAccessPolicyCard: View {
+    let place: Place
+    let language: SnootsLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(language.text("Dog access policy", "狗狗入場規範"), systemImage: "pawprint.fill")
+                .font(.snootsSection())
+            Text(place.policySummary(language))
+                .font(.snootsBody())
+                .foregroundStyle(SnootsPalette.secondaryText)
+
+            PolicyLine(title: language.text("Indoor access", "室內可進入？"), value: place.dogAccess.detail(language), symbol: "house.fill")
+            PolicyLine(title: language.text("Size / weight limits", "體型／重量限制"), value: place.sizeRule(language), symbol: "scalemass.fill")
+            PolicyLine(title: language.text("Equipment required", "需要的裝備"), value: place.equipmentRule(language), symbol: "link")
+            PolicyLine(title: language.text("Seating / floor rules", "座位／地面規則"), value: place.seatingRule(language), symbol: "chair.lounge.fill")
+            PolicyLine(title: language.text("Time / day restrictions", "時段／日期限制"), value: place.timeRule(language), symbol: "clock.fill")
+
+            Label("\(language.text("Source", "來源")): \(place.localizedVerificationSource(language)) · \(place.localizedLastConfirmed(language))", systemImage: "checkmark.seal.fill")
+                .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.deepLilac)
+        }
+        .padding(16)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
+    }
+}
+
+private struct PolicyLine: View {
+    let title: String
+    let value: String
+    let symbol: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.snootsUI(14, weight: .semibold))
+                .foregroundStyle(SnootsPalette.ink)
+                .frame(width: 28, height: 28)
+                .background(SnootsPalette.primaryTint, in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
+                Text(value).font(.snootsUI(14, weight: .medium))
+            }
+        }
+    }
+}
+
+private struct PracticalPlaceInfo: View {
+    let place: Place
+    let language: SnootsLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(language.text("Practical info", "實用資訊"))
+                .font(.snootsSection())
+            HStack {
+                Label(place.openingHours(language), systemImage: "clock.fill")
+                Spacer()
+                Text(place.isOpenNow ? language.text("Open now", "營業中") : language.text("Closed", "休息中"))
+                    .font(.snootsChip())
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(place.isOpenNow ? SnootsPalette.lime : SnootsPalette.canvas, in: Capsule())
+            }
+            .font(.snootsUI(14, weight: .medium))
+            Label(place.localizedAddress(language), systemImage: "location.fill")
+                .font(.snootsUI(14))
+
+            HStack(spacing: 8) {
+                PlaceActionLink(title: language.text("Call", "撥打"), symbol: "phone.fill", destination: URL(string: "tel://0227012020")!)
+                PlaceActionLink(title: language.text("Navigate", "導航"), symbol: "arrow.triangle.turn.up.right.diamond.fill", destination: URL(string: "https://maps.apple.com/?q=\(place.latitude),\(place.longitude)")!)
+                PlaceActionLink(title: language.text("Website", "網站"), symbol: "safari.fill", destination: URL(string: "https://example.com")!)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(language.text("Facilities", "設施")).font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
+                DeclarationChips(labels: place.facilities.map { $0.label(language) }, tint: SnootsPalette.butter)
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text(language.text("Real-world notes", "現場提醒")).font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
+                ForEach(place.realWorldNotes(language), id: \.self) { note in
+                    Label(note, systemImage: "text.bubble.fill")
+                        .font(.snootsUI(14))
+                }
+            }
+        }
+        .padding(16)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
+    }
+}
+
+private struct PlaceActionLink: View {
+    let title: String
+    let symbol: String
+    let destination: URL
+
+    var body: some View {
+        Link(destination: destination) {
+            Label(title, systemImage: symbol)
+                .font(.snootsUI(13, weight: .semibold))
+                .foregroundStyle(SnootsPalette.ink)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+        }
+    }
+}
+
+private enum PlaceFeedback: String, CaseIterable, Identifiable {
+    case confirm, reportChange, addCondition, markClosed
+    var id: Self { self }
+    func title(_ language: SnootsLanguage) -> String {
+        switch self {
+        case .confirm: language.text("Confirm", "確認正確")
+        case .reportChange: language.text("Report change", "回報變更")
+        case .addCondition: language.text("Add condition", "新增條件")
+        case .markClosed: language.text("Mark closed", "標示已歇業")
+        }
+    }
+}
+
+private struct FeedbackCard: View {
+    @Binding var feedback: PlaceFeedback?
+    let language: SnootsLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(language.text("Was the dog-access info correct?", "狗狗入場資訊正確嗎？"))
+                .font(.snootsCardTitle())
+            if feedback != nil {
+                Label(language.text("Thanks — your update helps other dog owners.", "謝謝，你的更新能幫助其他飼主。"), systemImage: "checkmark.circle.fill")
+                    .font(.snootsUI(14, weight: .medium))
+                    .foregroundStyle(SnootsPalette.deepLilac)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(PlaceFeedback.allCases) { option in
+                            Button(option.title(language)) { feedback = option }
+                                .font(.snootsChip())
+                                .foregroundStyle(SnootsPalette.ink)
+                                .padding(.horizontal, 11)
+                                .frame(minHeight: 40)
+                                .background(SnootsPalette.canvas, in: Capsule())
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
     }
 }
 
 struct ProfileView: View {
     let store: SnootsStore
-    @Binding var presentedSheet: SnootsSheet?
+    let language: SnootsLanguage
+    @Binding var displayLanguageRawValue: String
+    let onNavigate: (SnootsRoute) -> Void
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Profile").font(.snootsScreenTitle())
-                        Text("Your dog’s trusted details.").font(.snootsBody()).foregroundStyle(SnootsPalette.secondaryText)
+                        Text(language.text("\(store.pet.name)’s profile", "\(store.pet.name) 的檔案")).font(.snootsScreenTitle())
                     }
                     Spacer()
-                    Image(systemName: "gearshape.fill")
-                        .font(.title3)
-                        .frame(width: 44, height: 44)
-                        .background(SnootsPalette.surface, in: Circle())
-                        .accessibilityLabel("Profile settings")
+                    HStack(spacing: 8) {
+                        NavigationLink {
+                            EditProfileView(store: store, language: language)
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(SnootsPalette.ink)
+                                .frame(width: 44, height: 44)
+                                .background(SnootsPalette.surface, in: Circle())
+                        }
+                        .accessibilityLabel(language.text("Edit profile", "編輯檔案"))
+
+                        NavigationLink {
+                            LanguageSettingsView(selectedLanguageRawValue: $displayLanguageRawValue)
+                        } label: {
+                            Image(systemName: "gearshape")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(SnootsPalette.ink)
+                                .frame(width: 44, height: 44)
+                                .background(SnootsPalette.surface, in: Circle())
+                        }
+                        .accessibilityLabel(language.text("Settings", "設定"))
+                    }
                 }
 
                 HStack(spacing: 14) {
-                    PhotoTile(imageName: store.pet.imageName, label: store.pet.name)
+                    PhotoTile(
+                        imageName: store.pet.imageName,
+                        label: store.pet.name,
+                        language: language,
+                        showsLabel: false
+                    )
                         .frame(width: 104, height: 104)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(store.profile.name).font(.snootsScreenTitle())
-                        Text("with \(store.pet.name)").font(.snootsBody()).foregroundStyle(SnootsPalette.secondaryText)
-                        Label(store.profile.neighborhood, systemImage: "location.fill")
+                        Text(store.pet.name).font(.snootsScreenTitle())
+                        Text(language.text("Managed by \(store.profile.name)", "由 \(store.profile.name) 管理"))
+                            .font(.snootsBody())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                        Label(localizedNeighborhood(store.profile.neighborhood, language: language), systemImage: "location.fill")
                             .font(.snootsMetadata())
                             .foregroundStyle(SnootsPalette.deepLilac)
                     }
@@ -830,27 +1576,50 @@ struct ProfileView: View {
                 .padding(14)
                 .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
-                TrustSummaryCard(profile: store.profile)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(language.text("Interaction tags", "互動標籤")).font(.snootsSection())
+                    DeclarationChips(labels: store.pet.traits.map { localizedTrait($0, language: language) }, tint: SnootsPalette.butter)
+                }
+                .padding(16)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("\(store.pet.name)’s play card").font(.snootsSection())
-                    Text(store.pet.summary).font(.snootsBody()).foregroundStyle(SnootsPalette.secondaryText)
-                    DeclarationChips(labels: store.pet.traits, tint: SnootsPalette.butter)
-                    Label(store.pet.healthStatus, systemImage: "checkmark.shield.fill")
-                        .font(.snootsUI(14, weight: .semibold))
-                        .foregroundStyle(SnootsPalette.deepLilac)
+                    Text(language.text("Care essentials", "照護重點")).font(.snootsSection())
+                    NavigationLink {
+                        RabiesRecordView(record: store.care.rabies, language: language)
+                    } label: {
+                        CareStatusRow(
+                            symbol: "cross.case.fill",
+                            title: language.text("Rabies vaccination", "狂犬病疫苗"),
+                            detail: language.text("Verified · Valid until \(store.care.rabies.validUntil)", "已驗證 · 有效至 2026 年 9 月 14 日"),
+                            accent: SnootsPalette.lime
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    CareStatusRow(
+                        symbol: "checklist.checked",
+                        title: language.text("Other vaccinations", "其他疫苗"),
+                        detail: language.text("\(store.care.otherVaccinationsCount) records up to date", "\(store.care.otherVaccinationsCount) 項紀錄皆為最新"),
+                        accent: SnootsPalette.butter
+                    )
+                    CareStatusRow(
+                            symbol: "heart.text.square.fill",
+                            title: language.text("Health notes", "健康備註"),
+                            detail: language.text(store.care.healthNotes, "沒有過敏或持續用藥"),
+                        accent: SnootsPalette.lavenderTint
+                    )
                 }
                 .padding(16)
                 .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
                 if !store.savedPlaces.isEmpty {
-                    Text("Saved places").font(.snootsSection())
+                    Text(language.text("Saved places", "已儲存地點")).font(.snootsSection())
                     ForEach(store.savedPlaces) { place in
-                        Button { presentedSheet = .place(place.id) } label: {
+                        Button { onNavigate(.place(place.id)) } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(place.name).font(.snootsCardTitle())
-                                    Text("\(place.category) · \(place.walk)").font(.snootsMetadata())
+                                    Text(place.localizedName(language)).font(.snootsCardTitle())
+                                    Text("\(place.localizedCategory(language)) · \(place.localizedWalk(language))").font(.snootsMetadata())
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right")
@@ -861,6 +1630,7 @@ struct ProfileView: View {
                             .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
                         }
                         .buttonStyle(.plain)
+                        .accessibilityHint(language.text("Shows venue rules and save options", "顯示地點規範與儲存選項"))
                     }
                 }
             }
@@ -871,9 +1641,219 @@ struct ProfileView: View {
     }
 }
 
-struct MatchSheet: View {
+private func localizedTrait(_ trait: String, language: SnootsLanguage) -> String {
+    switch trait {
+    case "Slow introductions": language.text("Slow introductions", "慢慢認識")
+    case "Adult dogs": language.text("Adult dogs", "偏好成犬")
+    case "Long lead": language.text("Long lead", "長牽繩散步")
+    case "Calm walks": language.text("Calm walks", "平靜散步")
+    case "Needs space": language.text("Needs space", "需要一些空間")
+    default: language.text(trait, "溫和互動")
+    }
+}
+
+private func localizedNeighborhood(_ neighborhood: String, language: SnootsLanguage) -> String {
+    language.text(neighborhood, "臺北市大安區")
+}
+
+private struct CareStatusRow: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    let accent: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(SnootsPalette.ink)
+                .frame(width: 42, height: 42)
+                .background(accent, in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.snootsCardTitle())
+                Text(detail).font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct RabiesRecordView: View {
+    let record: VaccineRecord
+    let language: SnootsLanguage
+
+    var body: some View {
+        List {
+            Section {
+                Label(language.text("Verified · Valid until \(record.validUntil)", "已驗證 · 有效至 \(record.validUntil)"), systemImage: "checkmark.seal.fill")
+                    .font(.snootsCardTitle())
+                    .foregroundStyle(SnootsPalette.deepLilac)
+            }
+            Section(language.text("Record details", "疫苗紀錄")) {
+                LabeledContent(language.text("Vaccinated on", "接種日期"), value: language.text(record.vaccinatedOn, "2025 年 9 月 14 日"))
+                LabeledContent(language.text("Valid until", "有效期限"), value: language.text(record.validUntil, "2026 年 9 月 14 日"))
+                LabeledContent(language.text("Veterinary clinic", "施打診所"), value: language.text(record.clinic, "大安動物醫院"))
+                LabeledContent(language.text("Vaccine", "疫苗名稱"), value: record.manufacturer)
+                LabeledContent(language.text("Batch number", "批號"), value: record.batchNumber)
+            }
+            Section(language.text("Privacy", "隱私")) {
+                Label(language.text("Only a verified status is shared with matches.", "配對對象只會看到已驗證的狀態。"), systemImage: "lock.fill")
+                    .font(.snootsBody())
+            }
+        }
+        .navigationTitle(language.text("Rabies vaccination", "狂犬病疫苗"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct LanguageSettingsView: View {
+    @Binding var selectedLanguageRawValue: String
+
+    private var language: SnootsLanguage {
+        SnootsLanguage(rawValue: selectedLanguageRawValue) ?? .traditionalChinese
+    }
+
+    var body: some View {
+        Form {
+            Section(language.text("Display language", "顯示語言")) {
+                Picker(language.text("App language", "App 語言"), selection: $selectedLanguageRawValue) {
+                    ForEach(SnootsLanguage.allCases) { option in
+                        Text(option.label).tag(option.rawValue)
+                    }
+                }
+                .pickerStyle(.inline)
+            }
+        }
+        .navigationTitle(language.text("Settings", "設定"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct EditProfileView: View {
+    let store: SnootsStore
+    let language: SnootsLanguage
+    @Environment(\.dismiss) private var dismiss
+    @State private var ownerName: String
+    @State private var city: String
+    @State private var district: String
+    @State private var petName: String
+    @State private var socialSummary: String
+
+    init(store: SnootsStore, language: SnootsLanguage) {
+        self.store = store
+        self.language = language
+        _ownerName = State(initialValue: store.profile.name)
+        _city = State(initialValue: store.profile.neighborhood.contains("New Taipei") ? "New Taipei City" : "Taipei City")
+        _district = State(initialValue: store.profile.neighborhood.contains("Xinyi") ? "Xinyi District" : "Da’an District")
+        _petName = State(initialValue: store.pet.name)
+        _socialSummary = State(initialValue: language == .traditionalChinese ? "Nori 需要一些時間熟悉彼此，之後喜歡平靜散步與熟悉的夥伴。" : store.pet.summary)
+    }
+
+    private var suggestedTraits: [String] {
+        let text = socialSummary.lowercased()
+        var tags: [String] = []
+
+        if text.contains("slow") || text.contains("慢") { tags.append("Slow introductions") }
+        if text.contains("adult") || text.contains("成犬") { tags.append("Adult dogs") }
+        if text.contains("long lead") || text.contains("長牽繩") { tags.append("Long lead") }
+        if text.contains("calm") || text.contains("quiet") || text.contains("平靜") || text.contains("安靜") { tags.append("Calm walks") }
+        if text.contains("space") || text.contains("距離") || text.contains("空間") { tags.append("Needs space") }
+
+        return tags.isEmpty ? ["Slow introductions"] : tags
+    }
+
+    private var cities: [String] { ["Taipei City", "New Taipei City"] }
+
+    private var districts: [String] {
+        city == "Taipei City"
+            ? ["Da’an District", "Xinyi District", "Zhongshan District"]
+            : ["Banqiao District", "Xindian District", "Yonghe District"]
+    }
+
+    private func locationLabel(_ value: String) -> String {
+        switch value {
+        case "Taipei City": language.text("Taipei City", "臺北市")
+        case "New Taipei City": language.text("New Taipei City", "新北市")
+        case "Da’an District": language.text("Da’an District", "大安區")
+        case "Xinyi District": language.text("Xinyi District", "信義區")
+        case "Zhongshan District": language.text("Zhongshan District", "中山區")
+        case "Banqiao District": language.text("Banqiao District", "板橋區")
+        case "Xindian District": language.text("Xindian District", "新店區")
+        case "Yonghe District": language.text("Yonghe District", "永和區")
+        default: value
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section(language.text("Dog information", "狗狗資料")) {
+                TextField(language.text("Dog’s name", "狗狗名字"), text: $petName)
+            }
+
+            Section(language.text("Social preferences", "互動偏好")) {
+                TextField(language.text("Describe how \(petName) likes to meet and play", "描述 \(petName) 喜歡如何認識與互動"), text: $socialSummary, axis: .vertical)
+                    .lineLimit(3...5)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(language.text("Suggested tags", "建議標籤"))
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    DeclarationChips(labels: suggestedTraits.map { localizedTrait($0, language: language) }, tint: SnootsPalette.butter)
+                }
+            }
+
+            Section {
+                TextField(language.text("Owner’s name", "飼主姓名"), text: $ownerName)
+                Picker(language.text("City", "縣市"), selection: $city) {
+                    ForEach(cities, id: \.self) { city in
+                        Text(locationLabel(city)).tag(city)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: city) { _, _ in
+                    if !districts.contains(district) { district = districts[0] }
+                }
+
+                Picker(language.text("District", "行政區"), selection: $district) {
+                    ForEach(districts, id: \.self) { district in
+                        Text(locationLabel(district)).tag(district)
+                    }
+                }
+                .pickerStyle(.menu)
+            } header: {
+                HStack {
+                    Text(language.text("Owner details", "飼主資料"))
+                    Spacer()
+                    Label(language.text("Verified", "已驗證"), systemImage: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+        }
+        .navigationTitle(language.text("Edit profile", "編輯檔案"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(language.text("Save", "儲存")) {
+                    store.updateProfile(
+                        ownerName: ownerName,
+                        neighborhood: "\(district), \(city)",
+                        petName: petName,
+                        summary: socialSummary,
+                        traits: suggestedTraits
+                    )
+                    dismiss()
+                }
+                .font(.snootsUI(15, weight: .semibold))
+            }
+        }
+    }
+}
+
+struct MatchConfirmationView: View {
     let candidate: PlaydateCandidate
     let store: SnootsStore
+    let language: SnootsLanguage
+    let onNavigate: (SnootsRoute) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -884,28 +1864,169 @@ struct MatchSheet: View {
                 .foregroundStyle(SnootsPalette.pink)
                 .frame(width: 112, height: 112)
                 .background(SnootsPalette.softPink, in: Circle())
-            Text("Propose a safe hello?").font(.snootsScreenTitle())
-            Text("You’ll both see verified behavior cards before the match is confirmed.")
+            Text(language.text("\(candidate.name) is interested too!", "\(candidate.name) 也有興趣！")).font(.snootsScreenTitle())
+            Text(language.text("Review your verified behavior cards and confirm a safe first hello.", "查看彼此已驗證的互動資料卡，再確認一場安全的初次見面。"))
                 .font(.snootsBody())
                 .multilineTextAlignment(.center)
                 .foregroundStyle(SnootsPalette.secondaryText)
                 .padding(.horizontal, 26)
-            Button("Match with \(candidate.name)") {
+            Button(language.text("Confirm match", "確認配對")) {
                 store.isMatched = true
-                dismiss()
+                store.createMatchChat()
+                onNavigate(.chat)
             }
-            .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.pink))
-            Button("Not yet") { dismiss() }
+            .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+            Button(language.text("Not yet", "暫時不要")) { dismiss() }
                 .buttonStyle(SecondaryButtonStyle())
             Spacer()
         }
         .padding(22)
+        .navigationTitle(language.text("Confirm match", "確認配對"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+    }
+}
+
+private struct MatchChatRoom: View {
+    let candidate: PlaydateCandidate
+    let store: SnootsStore
+    let language: SnootsLanguage
+    @FocusState private var isComposerFocused: Bool
+    @State private var draft = ""
+
+    private var openingGreetings: [String] {
+        [
+            language.text(
+                "Hi Elena! Mochi seems lovely. Would you like to start with a walk together?",
+                "嗨 Elena！Mochi 看起來很可愛，要不要先一起散步？"
+            ),
+            language.text(
+                "Would a 20-minute parallel walk feel good for Mochi?",
+                "先安排 20 分鐘的平行散步，Mochi 會覺得舒服嗎？"
+            ),
+            language.text(
+                "What time works well for a calm first hello this week?",
+                "這週什麼時間適合來一場安靜的初次見面？"
+            )
+        ]
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 10) {
+                        Image(candidate.imageName)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 44, height: 44)
+                            .clipShape(Circle())
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(language.text("You matched with \(candidate.name)", "你和 \(candidate.name) 配對成功"))
+                                .font(.snootsCardTitle())
+                            Label(
+                                language.text("Elena · Identity verified", "Elena · 身分已驗證"),
+                                systemImage: "checkmark.seal.fill"
+                            )
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                        }
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+
+                    Text(language.text("Start with a friendly hello", "從一句友善的問候開始"))
+                        .font(.snootsSection())
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: 10) {
+                            ForEach(openingGreetings, id: \.self) { greeting in
+                                Button {
+                                    send(greeting)
+                                } label: {
+                                    Text(greeting)
+                                        .font(.snootsUI(14, weight: .medium))
+                                        .multilineTextAlignment(.leading)
+                                        .foregroundStyle(SnootsPalette.ink)
+                                        .frame(width: 230, alignment: .leading)
+                                        .padding(14)
+                                        .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 1)
+                    }
+
+                    if !store.matchChatMessages.isEmpty {
+                        Text(language.text("Messages", "訊息"))
+                            .font(.snootsSection())
+                            .padding(.top, 4)
+
+                        ForEach(store.matchChatMessages) { message in
+                            HStack {
+                                if message.isOutgoing { Spacer(minLength: 52) }
+                                Text(message.text)
+                                    .font(.snootsBody())
+                                    .foregroundStyle(SnootsPalette.ink)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 11)
+                                    .background(
+                                        message.isOutgoing ? SnootsPalette.lime : SnootsPalette.surface,
+                                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    )
+                                if !message.isOutgoing { Spacer(minLength: 52) }
+                            }
+                        }
+                    }
+                }
+                .padding(18)
+            }
+
+            HStack(spacing: 10) {
+                TextField(language.text("Write a message", "輸入訊息"), text: $draft, axis: .vertical)
+                    .font(.snootsBody())
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+                    .focused($isComposerFocused)
+                    .submitLabel(.send)
+                    .onSubmit { send(draft) }
+
+                Button { send(draft) } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(SnootsPalette.ink)
+                        .frame(width: 44, height: 44)
+                        .background(SnootsPalette.lime, in: Circle())
+                }
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+                .accessibilityLabel(language.text("Send message", "傳送訊息"))
+            }
+            .padding(14)
+            .background(SnootsPalette.canvas)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle(language.text("Chat with Elena", "與 Elena 聊天"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+    }
+
+    private func send(_ text: String) {
+        store.sendMatchChatMessage(text)
+        draft = ""
+        isComposerFocused = false
     }
 }
 
 private struct PhotoTile: View {
     let imageName: String
     let label: String
+    let language: SnootsLanguage
+    var showsLabel = true
 
     var body: some View {
         GeometryReader { proxy in
@@ -915,21 +2036,23 @@ private struct PhotoTile: View {
                     .scaledToFill()
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
-                HStack(spacing: 5) {
-                    Image(systemName: "camera.fill")
-                    Text(label)
+                if showsLabel {
+                    HStack(spacing: 5) {
+                        Image(systemName: "camera.fill")
+                        Text(label)
+                    }
+                    .font(.snootsChip())
+                    .foregroundStyle(SnootsPalette.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(SnootsPalette.butter, in: Capsule())
+                    .padding(12)
                 }
-                .font(.snootsChip())
-                .foregroundStyle(SnootsPalette.ink)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(SnootsPalette.butter, in: Capsule())
-                .padding(12)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.profileImageRadius, style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Photo of \(label)")
+        .accessibilityLabel(language.text("Photo: \(label)", "照片：\(label)"))
     }
 }
 
@@ -979,43 +2102,30 @@ private struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
-private struct CircleActionStyle: ButtonStyle {
-    let fill: Color
-    let icon: Color
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.title3.weight(.bold))
-            .foregroundStyle(icon)
-            .background(fill.opacity(configuration.isPressed ? 0.75 : 1), in: Circle())
-            .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
-            .shadow(color: .black.opacity(0.08), radius: 20, y: 6)
-    }
-}
-
 enum SnootsPalette {
-    static let background = Color(hex: 0xF7F7F4)
-    static let card = Color.white
-    static let ink = Color(hex: 0x222222)
-    static let inactive = Color(hex: 0x888888)
-    static let secondaryText = Color(hex: 0x666666)
-    static let placeholder = Color(hex: 0xA3A3A3)
-    static let divider = Color(hex: 0xECECEC)
-    static let primary = Color(hex: 0xD8FF45)
+    static let background = Color(light: 0xF7F7F4, dark: 0x11110F)
+    static let card = Color(light: 0xFFFFFF, dark: 0x1C1C1E)
+    static let ink = Color(light: 0x222222, dark: 0xF2F2F7)
+    static let inactive = Color(light: 0x888888, dark: 0xA0A0A7)
+    static let secondaryText = Color(light: 0x666666, dark: 0xB0B0B8)
+    static let placeholder = Color(light: 0xA3A3A3, dark: 0x8E8E93)
+    static let divider = Color(light: 0xECECEC, dark: 0x38383A)
+    static let primary = Color(hex: 0xB8A1FF)
     static let primaryTint = primary.opacity(0.32)
-    static let lavender = Color(hex: 0xB88EFF)
-    static let lavenderTint = lavender.opacity(0.22)
+    static let lime = Color(hex: 0xC7F36B)
+    static let navigationActive = Color(light: 0x705A9D, dark: 0xCBB9FF)
 
     static let canvas = background
     static let surface = card
-    static let lime = primary
     static let pink = primary
     static let softPink = primaryTint
-    static let lilac = lavender
+    static let lavender = primary
+    static let lavenderTint = primaryTint
+    static let lilac = primary
     static let deepLilac = ink
-    static let sky = lavender
+    static let sky = primary
     static let careBlue = primary
-    static let careTint = lavenderTint
+    static let careTint = primaryTint
     static let butter = primaryTint
     static let alert = ink
 }
@@ -1023,6 +2133,23 @@ enum SnootsPalette {
 private extension Color {
     init(hex: UInt) {
         self.init(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+
+    init(light: UInt, dark: UInt) {
+        self.init(uiColor: UIColor { traits in
+            UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
+        })
+    }
+}
+
+private extension UIColor {
+    convenience init(hex: UInt) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }
 
@@ -1048,15 +2175,22 @@ extension Font {
         .system(size: size, weight: .semibold, design: .rounded)
     }
 
-    static func snootsScreenTitle() -> Font { snootsHeading(34) }
-    static func snootsSection() -> Font { snootsHeading(20) }
-    static func snootsCardTitle() -> Font { snootsHeading(18) }
+    static func snootsScreenTitle() -> Font { .system(.largeTitle, design: .rounded).weight(.semibold) }
+    static func snootsSection() -> Font { .system(.title3, design: .rounded).weight(.semibold) }
+    static func snootsCardTitle() -> Font { .system(.headline, design: .rounded).weight(.semibold) }
     static func snootsUI(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .rounded)
+        let textStyle: Font.TextStyle
+        switch size {
+        case ..<13: textStyle = .caption
+        case ..<15: textStyle = .subheadline
+        case ..<18: textStyle = .body
+        default: textStyle = .title3
+        }
+        return .system(textStyle, design: .rounded).weight(weight)
     }
 
-    static func snootsBody() -> Font { snootsUI(16) }
-    static func snootsMetadata() -> Font { snootsUI(12, weight: .medium) }
-    static func snootsChip() -> Font { snootsUI(12, weight: .medium) }
-    static func snootsButton(_ size: CGFloat) -> Font { .system(size: size, weight: .bold, design: .rounded) }
+    static func snootsBody() -> Font { .system(.body, design: .rounded) }
+    static func snootsMetadata() -> Font { .system(.caption, design: .rounded).weight(.medium) }
+    static func snootsChip() -> Font { .system(.caption, design: .rounded).weight(.medium) }
+    static func snootsButton(_ size: CGFloat) -> Font { .system(.headline, design: .rounded).weight(.bold) }
 }

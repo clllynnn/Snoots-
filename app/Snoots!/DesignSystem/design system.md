@@ -79,3 +79,29 @@ Use rounded 2 pt line icons. Avoid sharp-cornered decoration.
 - Pair selection, trust, and urgency color with an SF Symbol or clear text.
 - Keep icon-only actions labelled for VoiceOver.
 - Respect Dynamic Type and do not rely on fixed, single-line safety instructions.
+
+## iOS Human Interface Guidelines
+
+Follow Apple's [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/) alongside this system. Snoots!' visual personality may be distinctive, but its behavior should remain immediately familiar to iOS users.
+
+### Native interaction
+
+- Prefer standard SwiftUI controls and system behaviors for navigation, sheets, menus, alerts, text input, selection, and sharing.
+- Use a tab bar only for the app's four top-level destinations. Preserve each tab's navigation state when people switch tabs.
+- Present focused, temporary tasks in sheets; use alerts only for important confirmations, errors, or irreversible choices.
+- Keep system navigation gestures, safe areas, keyboard behavior, and dismissal affordances intact. Never replace a familiar system gesture with a custom one unless the benefit is clear.
+- Make every interactive target at least 44 × 44 pt. Provide clear pressed, selected, disabled, loading, saved, and error states.
+
+### Content and feedback
+
+- Put the primary action where it is easy to find, name it with a direct verb, and avoid duplicate actions on the same screen.
+- Use concise, sentence-case labels. Prefer recognizable SF Symbols paired with text when meaning might be ambiguous.
+- Give immediate feedback for actions such as matching, saving a place, submitting a post, and requesting help. Use haptics sparingly and only to reinforce a meaningful result.
+- Keep emergency guidance calm and unambiguous. Clearly distinguish demo guidance from live medical or emergency services.
+
+### Adaptability and inclusion
+
+- Support Dynamic Type, VoiceOver, Increase Contrast, Reduce Motion, and system light/dark appearance unless a documented product decision requires otherwise.
+- Do not encode status, trust, urgency, or selection with color alone; retain a textual or symbolic cue.
+- Design layouts to reflow for larger type sizes, narrower widths, and longer localized text. Avoid truncating safety-critical content.
+- Respect privacy by requesting permissions only in context and explaining their value before invoking a system prompt.
