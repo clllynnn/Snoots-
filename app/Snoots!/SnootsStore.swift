@@ -43,9 +43,9 @@ final class SnootsStore {
         MeetupActivityType(id: "other", symbol: "person.2", title: "Other meetup", traditionalChineseTitle: "其他狗聚")
     ]
     let meetupVenues = [
-        MeetupVenue(id: "daan-forest", name: "Da’an Forest Park · East Gate", traditionalChineseName: "大安森林公園 · 東門"),
-        MeetupVenue(id: "riverside", name: "Riverside Park · Lawn", traditionalChineseName: "河濱公園 · 草地區"),
-        MeetupVenue(id: "companion", name: "Companion Cafe · Patio", traditionalChineseName: "Companion Cafe · 戶外座位")
+        MeetupVenue(id: "daan-forest", mapPlaceID: "daan-forest", name: "Da’an Forest Park · East Gate", traditionalChineseName: "大安森林公園 · 東門"),
+        MeetupVenue(id: "riverside", mapPlaceID: "xinyi-dog-park", name: "Riverside Park · Lawn", traditionalChineseName: "河濱公園 · 草地區"),
+        MeetupVenue(id: "companion", mapPlaceID: "companion", name: "Companion Cafe · Patio", traditionalChineseName: "Companion Cafe · 戶外座位")
     ]
     let meetupDurations = [
         MeetupDuration(hours: 1),
@@ -103,13 +103,14 @@ final class SnootsStore {
     ]
 
     var currentCareStep: CareStep { careSteps[careStepIndex] }
-    var savedPlaces: [Place] { places.filter { savedPlaceIDs.contains($0.id) } }
+    var allPlaces: [Place] { createdMeetups.compactMap(meetupPlace) + places }
+    var savedPlaces: [Place] { allPlaces.filter { savedPlaceIDs.contains($0.id) } }
 
     func advanceCareStep() {
         careStepIndex = min(careStepIndex + 1, careSteps.count - 1)
     }
 
-    func place(id: String) -> Place? { places.first { $0.id == id } }
+    func place(id: String) -> Place? { allPlaces.first { $0.id == id } }
     func isSaved(_ place: Place) -> Bool { savedPlaceIDs.contains(place.id) }
 
     func toggleSaved(_ place: Place) {
@@ -142,6 +143,44 @@ final class SnootsStore {
     func createMeetup(_ meetup: MeetupDraft) {
         createdMeetups.insert(meetup, at: 0)
     }
+
+    private func meetupPlace(for meetup: MeetupDraft) -> Place? {
+        guard let venue = meetupVenues.first(where: { $0.id == meetup.venueID }),
+              let basePlace = places.first(where: { $0.id == venue.mapPlaceID }) else {
+            return nil
+        }
+
+        let category: String
+        switch meetup.activityTypeID {
+        case "dining": category = "Indoor dog meetup"
+        case "park": category = "Leashed group walk"
+        default: category = "Dog meetup"
+        }
+
+        return Place(
+            id: "created-meetup-\(meetup.id.uuidString)",
+            name: meetup.title,
+            category: category,
+            nearbyCategory: .meetups,
+            region: basePlace.region,
+            walk: basePlace.walk,
+            walkMinutes: basePlace.walkMinutes,
+            imageName: basePlace.imageName,
+            rules: meetup.safetyTagIDs.contains("Leash on") ? [.indoorLeash] : [],
+            verified: "just now",
+            dogAccess: basePlace.dogAccess,
+            verificationLevel: .hostCreated,
+            lastConfirmed: "Just now",
+            verificationSource: "Created by host",
+            acceptsLargeDogs: true,
+            isOpenNow: true,
+            latitude: basePlace.latitude,
+            longitude: basePlace.longitude,
+            address: basePlace.address,
+            facilities: basePlace.facilities,
+            intentKeywords: "dog meetup \(basePlace.intentKeywords)"
+        )
+    }
 }
 
 struct MatchChatMessage: Identifiable {
@@ -163,6 +202,7 @@ struct MeetupActivityType: Identifiable {
 
 struct MeetupVenue: Identifiable {
     let id: String
+    let mapPlaceID: String
     let name: String
     let traditionalChineseName: String
 
@@ -360,6 +400,7 @@ struct Place: Identifiable {
         case "xinyi-dog-park": language.text(name, "信義河濱狗狗公園")
         case "daan-night": language.text(name, "大安夜間動物診所")
         case "xinyi-vet": language.text(name, "信義動物醫院")
+        case _ where id.hasPrefix("created-meetup-"): name
         default: name
         }
     }
@@ -387,12 +428,14 @@ struct Place: Identifiable {
         case "Host confirmed": language.text(verificationSource, "主辦方確認")
         case "Host and venue confirmed": language.text(verificationSource, "主辦方與場地方確認")
         case "Clinic confirmed": language.text(verificationSource, "診所確認")
+        case "Created by host": language.text(verificationSource, "由主辦人建立")
         default: verificationSource
         }
     }
 
     func localizedLastConfirmed(_ language: SnootsLanguage) -> String {
         switch lastConfirmed {
+        case "Just now": language.text(lastConfirmed, "剛剛")
         case "17 Jul 2026": language.text(lastConfirmed, "2026 年 7 月 17 日")
         case "16 Jul 2026": language.text(lastConfirmed, "2026 年 7 月 16 日")
         case "14 Jul 2026": language.text(lastConfirmed, "2026 年 7 月 14 日")
@@ -409,6 +452,7 @@ struct Place: Identifiable {
         case "Book bar": language.text("Book bar", "書吧")
         case "Leashed group walk": language.text("Leashed group walk", "牽繩團體散步")
         case "Indoor dog meetup": language.text("Indoor dog meetup", "室內狗聚")
+        case "Dog meetup": language.text("Dog meetup", "狗聚")
         case "Urban park": language.text("Urban park", "城市公園")
         case "Dog park": language.text("Dog park", "狗狗公園")
         case "Emergency veterinary clinic": language.text("Emergency veterinary clinic", "急診獸醫診所")
@@ -475,13 +519,14 @@ enum DogAccess: String, CaseIterable {
 }
 
 enum VerificationLevel: String {
-    case venueConfirmed, communityConfirmed, needsReconfirmation
+    case venueConfirmed, communityConfirmed, needsReconfirmation, hostCreated
 
     func label(_ language: SnootsLanguage) -> String {
         switch self {
         case .venueConfirmed: language.text("Venue confirmed", "場地方已確認")
         case .communityConfirmed: language.text("Community confirmed", "社群已確認")
         case .needsReconfirmation: language.text("Needs reconfirmation", "需再次確認")
+        case .hostCreated: language.text("Created by you", "由你建立")
         }
     }
 }

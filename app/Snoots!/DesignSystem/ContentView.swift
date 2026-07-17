@@ -8,6 +8,9 @@ struct ContentView: View {
     let language: SnootsLanguage
     @Binding var displayLanguageRawValue: String
     @State private var selectedTab: AppTab = .feed
+    @State private var selectedNearbyCategory: NearbyCategory?
+    @State private var selectedNearbyRegion: NearbyRegion = .currentLocation
+    @State private var meetupFocusRequest = 0
     @State private var matchPath: [SnootsRoute] = []
     @State private var mapsPath: [SnootsRoute] = []
     @State private var profilePath: [SnootsRoute] = []
@@ -36,7 +39,13 @@ struct ContentView: View {
                 .tag(AppTab.match)
 
             NavigationStack(path: $mapsPath) {
-                MapsView(store: store, language: language) { mapsPath.append($0) }
+                MapsView(
+                    store: store,
+                    language: language,
+                    selectedCategory: $selectedNearbyCategory,
+                    selectedRegion: $selectedNearbyRegion,
+                    meetupFocusRequest: meetupFocusRequest
+                ) { mapsPath.append($0) }
                     .navigationDestination(for: SnootsRoute.self) { route in
                         switch route {
                         case .emergency:
@@ -53,7 +62,14 @@ struct ContentView: View {
                 .tabItem { Label(language.text("Nearby", "附近"), systemImage: AppTab.maps.symbol) }
                 .tag(AppTab.maps)
 
-            NavigationStack { FeedView(store: store, language: language) }
+            NavigationStack {
+                FeedView(
+                    store: store,
+                    language: language,
+                    onViewMeetups: showMeetups,
+                    onMeetupCreated: showMeetups
+                )
+            }
                 .tabItem { Label(language.text("Feed", "社群"), systemImage: AppTab.feed.symbol) }
                 .tag(AppTab.feed)
 
@@ -80,6 +96,13 @@ struct ContentView: View {
         .tint(SnootsPalette.navigationActive)
         .sensoryFeedback(.success, trigger: store.isMatched)
     }
+
+    private func showMeetups() {
+        selectedNearbyCategory = .meetups
+        selectedNearbyRegion = .currentLocation
+        meetupFocusRequest += 1
+        selectedTab = .maps
+    }
 }
 
 enum SnootsRoute: Hashable {
@@ -92,6 +115,8 @@ enum SnootsRoute: Hashable {
 struct FeedView: View {
     let store: SnootsStore
     let language: SnootsLanguage
+    let onViewMeetups: () -> Void
+    let onMeetupCreated: () -> Void
     @State private var likedPostIDs: Set<UUID> = []
     @State private var savedPostIDs: Set<UUID> = []
     @State private var presentedSheet: FeedSheet?
@@ -111,9 +136,11 @@ struct FeedView: View {
                     }
                 }
 
-                CreateActivityButton(language: language) {
-                    presentedSheet = .createMeetup
-                }
+                CreateActivityButton(
+                    language: language,
+                    onView: onViewMeetups,
+                    onCreate: { presentedSheet = .createMeetup }
+                )
 
                 FeedStoryStrip(stories: store.feedStories, language: language)
 
@@ -137,7 +164,11 @@ struct FeedView: View {
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .createMeetup:
-                CreateMeetupSheet(store: store, language: language)
+                CreateMeetupSheet(
+                    store: store,
+                    language: language,
+                    onPublished: onMeetupCreated
+                )
             }
         }
     }
@@ -223,11 +254,12 @@ private struct FeedStoryStrip: View {
 
 private struct CreateActivityButton: View {
     let language: SnootsLanguage
+    let onView: () -> Void
     let onCreate: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            Button(action: {}) {
+            Button(action: onView) {
                 Label(language.text("View meetups", "檢視狗聚"), systemImage: "person.2")
                     .font(.snootsButton(16))
                     .foregroundStyle(SnootsPalette.ink)
@@ -255,6 +287,7 @@ private struct CreateActivityButton: View {
 private struct CreateMeetupSheet: View {
     let store: SnootsStore
     let language: SnootsLanguage
+    let onPublished: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
@@ -543,6 +576,7 @@ private struct CreateMeetupSheet: View {
             )
         )
         dismiss()
+        onPublished()
     }
 }
 
@@ -1105,17 +1139,19 @@ private struct ClinicCard: View {
 struct MapsView: View {
     let store: SnootsStore
     let language: SnootsLanguage
+    @Binding var selectedCategory: NearbyCategory?
+    @Binding var selectedRegion: NearbyRegion
+    let meetupFocusRequest: Int
     let onNavigate: (SnootsRoute) -> Void
-    @State private var selectedCategory: NearbyCategory? = nil
-    @State private var selectedRegion: NearbyRegion = .currentLocation
     @State private var selectedSubcategory: NearbySubcategory? = nil
     @State private var selectedPlaceID: String?
     @State private var resultsPanelDetent: NearbyResultsDetent = .compact
     @State private var isRegionPickerPresented = false
     @State private var hasInitializedNearby = false
+    @State private var handledMeetupFocusRequest = 0
 
     private var visiblePlaces: [Place] {
-        return store.places.filter { place in
+        return store.allPlaces.filter { place in
             (selectedCategory.map { place.nearbyCategory == $0 } ?? true)
                 && selectedRegion.matches(place)
                 && (selectedSubcategory.map { $0.matches(place) } ?? true)
@@ -1202,9 +1238,9 @@ struct MapsView: View {
             NearbyRegionPickerSheet(selection: $selectedRegion, language: language)
         }
         .onAppear {
+            handleMeetupFocusIfNeeded()
             guard !hasInitializedNearby else { return }
             hasInitializedNearby = true
-            selectedCategory = nil
             selectedSubcategory = nil
         }
         .onChange(of: selectedCategory) { _, _ in
@@ -1213,6 +1249,14 @@ struct MapsView: View {
         }
         .onChange(of: selectedRegion) { _, _ in resetResults() }
         .onChange(of: selectedSubcategory) { _, _ in resetResults(keepPanelPosition: true) }
+        .onChange(of: meetupFocusRequest) { _, _ in handleMeetupFocusIfNeeded() }
+    }
+
+    private func handleMeetupFocusIfNeeded() {
+        guard handledMeetupFocusRequest != meetupFocusRequest else { return }
+        handledMeetupFocusRequest = meetupFocusRequest
+        selectedSubcategory = nil
+        resetResults()
     }
 
     private func resetResults(keepPanelPosition: Bool = false) {
