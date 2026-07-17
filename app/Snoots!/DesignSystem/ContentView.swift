@@ -753,19 +753,19 @@ struct MapsView: View {
     let store: SnootsStore
     let language: SnootsLanguage
     let onNavigate: (SnootsRoute) -> Void
-    @State private var selectedCategory: NearbyCategory = .meetups
+    @State private var selectedCategory: NearbyCategory? = nil
     @State private var selectedRegion: NearbyRegion = .currentLocation
-    @State private var selectedFilters: Set<NearbyFilter> = []
+    @State private var selectedSubcategory: NearbySubcategory? = nil
     @State private var selectedPlaceID: String?
     @State private var resultsPanelDetent: NearbyResultsDetent = .compact
-    @State private var isActivityPickerPresented = false
     @State private var isRegionPickerPresented = false
+    @State private var hasInitializedNearby = false
 
     private var visiblePlaces: [Place] {
         return store.places.filter { place in
-            place.nearbyCategory == selectedCategory
+            (selectedCategory.map { place.nearbyCategory == $0 } ?? true)
                 && selectedRegion.matches(place)
-                && selectedFilters.allSatisfy { $0.matches(place) }
+                && (selectedSubcategory.map { $0.matches(place) } ?? true)
         }
     }
 
@@ -779,19 +779,19 @@ struct MapsView: View {
     }
 
     private var resultsSummary: String {
-        let category = selectedCategory.title(language)
+        let category = selectedCategory?.title(language) ?? language.text("All activities", "全部活動")
         let region = selectedRegion.title(language)
-        guard !selectedFilters.isEmpty else { return "\(category) · \(region)" }
-        return language.text("\(category) · \(region) · \(selectedFilters.count) filters", "\(category) · \(region) · \(selectedFilters.count) 個條件")
+        guard let selectedSubcategory else { return "\(category) · \(region)" }
+        return "\(category) · \(selectedSubcategory.title(language)) · \(region)"
     }
 
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 12) {
-                HStack(spacing: 10) {
-                    NearbyActivityButton(category: selectedCategory, language: language) {
-                        isActivityPickerPresented = true
-                    }
+                HStack(alignment: .center, spacing: 10) {
+                    Text(language.text("What’s nearby?", "附近有什麼"))
+                        .font(.snootsScreenTitle())
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                     Button { onNavigate(.emergency) } label: {
                         Image(systemName: "cross.case.fill")
@@ -804,9 +804,12 @@ struct MapsView: View {
                     .accessibilityLabel(language.text("Find emergency care", "尋找緊急醫療"))
                 }
 
-                NearbyFilterStrip(
+                NearbyCategoryTagBar(selection: $selectedCategory, language: language)
+
+                NearbySubcategoryStrip(
                     region: selectedRegion,
-                    selectedFilters: $selectedFilters,
+                    category: selectedCategory,
+                    selection: $selectedSubcategory,
                     language: language,
                     onSelectRegion: { isRegionPickerPresented = true }
                 )
@@ -842,15 +845,21 @@ struct MapsView: View {
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.visible, for: .tabBar)
-        .sheet(isPresented: $isActivityPickerPresented) {
-            NearbyActivityPickerSheet(selection: $selectedCategory, language: language)
-        }
         .sheet(isPresented: $isRegionPickerPresented) {
             NearbyRegionPickerSheet(selection: $selectedRegion, language: language)
         }
-        .onChange(of: selectedCategory) { _, _ in resetResults() }
+        .onAppear {
+            guard !hasInitializedNearby else { return }
+            hasInitializedNearby = true
+            selectedCategory = nil
+            selectedSubcategory = nil
+        }
+        .onChange(of: selectedCategory) { _, _ in
+            selectedSubcategory = nil
+            resetResults()
+        }
         .onChange(of: selectedRegion) { _, _ in resetResults() }
-        .onChange(of: selectedFilters) { _, _ in resetResults(keepPanelPosition: true) }
+        .onChange(of: selectedSubcategory) { _, _ in resetResults(keepPanelPosition: true) }
     }
 
     private func resetResults(keepPanelPosition: Bool = false) {
@@ -926,32 +935,77 @@ enum NearbyRegion: CaseIterable, Identifiable, Hashable {
     )
 }
 
-private enum NearbyFilter: CaseIterable, Hashable, Identifiable {
-    case openNow, indoor, largeDogs, carrier, verified, distance
+private enum NearbySubcategory: CaseIterable, Hashable, Identifiable {
+    case leashedGroupWalk, indoorDogMeetup
+    case freeMovement, floorAllowed, leashRequired, leashNotRequired, largeDog, mediumDog, smallDog
+    case offLeash, naturalGrass, safetyFacilities, trainingFacilities, shadeCanopy, seating, allDay, daytime
+    case emergency24Hours, residentVeterinarian, oxygenICU, pulseOximeter, bloodPanel, xRay, ultrasound
 
     var id: Self { self }
-    var symbol: String {
-        switch self { case .openNow: "clock.fill"; case .indoor: "house.fill"; case .largeDogs: "scalemass.fill"; case .carrier: "bag.fill"; case .verified: "checkmark.seal.fill"; case .distance: "location.fill" }
+
+    var category: NearbyCategory {
+        switch self {
+        case .leashedGroupWalk, .indoorDogMeetup: .meetups
+        case .freeMovement, .floorAllowed, .leashRequired, .leashNotRequired, .largeDog, .mediumDog, .smallDog: .dining
+        case .offLeash, .naturalGrass, .safetyFacilities, .trainingFacilities, .shadeCanopy, .seating, .allDay, .daytime: .parks
+        case .emergency24Hours, .residentVeterinarian, .oxygenICU, .pulseOximeter, .bloodPanel, .xRay, .ultrasound: .vets
+        }
     }
+
     func title(_ language: SnootsLanguage) -> String {
         switch self {
-        case .openNow: language.text("Open now", "現在營業")
-        case .indoor: language.text("Indoor access", "可進室內")
-        case .largeDogs: language.text("Large dog", "接受大型犬")
-        case .carrier: language.text("Carrier required", "需提籠")
-        case .verified: language.text("Verified only", "只看已驗證")
-        case .distance: language.text("Within 10 min", "10 分鐘內")
+        case .leashedGroupWalk: language.text("Leashed group walk", "牽繩團體散步")
+        case .indoorDogMeetup: language.text("Indoor dog meetup", "室內狗聚")
+        case .freeMovement: language.text("Free movement", "可自由活動")
+        case .floorAllowed: language.text("Dogs on floor", "可落地")
+        case .leashRequired: language.text("Leash required", "需要牽繩")
+        case .leashNotRequired: language.text("No leash required", "不需要牽繩")
+        case .largeDog: language.text("Large dog", "大型犬")
+        case .mediumDog: language.text("Medium dog", "中型犬")
+        case .smallDog: language.text("Small dog", "小型犬")
+        case .offLeash: language.text("Off leash", "不需要牽繩")
+        case .naturalGrass: language.text("Natural grass", "天然草皮")
+        case .safetyFacilities: language.text("Safety facilities", "安全設施")
+        case .trainingFacilities: language.text("Training facilities", "訓練設施")
+        case .shadeCanopy: language.text("Shade canopy", "遮陽棚")
+        case .seating: language.text("Seating", "休憩座椅")
+        case .allDay: language.text("Good all day", "全天適合")
+        case .daytime: language.text("Good in daytime", "適合白天")
+        case .emergency24Hours: language.text("24-hour emergency", "24 小時急診")
+        case .residentVeterinarian: language.text("Resident veterinarian", "駐診獸醫師")
+        case .oxygenICU: language.text("Oxygen ICU", "ICU 氧氣病籠")
+        case .pulseOximeter: language.text("Pulse oximeter", "血氧機")
+        case .bloodPanel: language.text("Blood panel", "全套血檢")
+        case .xRay: language.text("X-ray", "X 光")
+        case .ultrasound: language.text("Ultrasound", "超音波")
         }
     }
+
     func matches(_ place: Place) -> Bool {
         switch self {
-        case .openNow: place.isOpenNow
-        case .indoor: place.dogAccess == .indoorOK
-        case .largeDogs: place.acceptsLargeDogs
-        case .carrier: place.dogAccess == .carrierRequired
-        case .verified: place.verificationLevel != .needsReconfirmation
-        case .distance: place.walkMinutes <= 10
+        case .leashedGroupWalk: place.category == "Leashed group walk"
+        case .indoorDogMeetup: place.category == "Indoor dog meetup"
+        case .freeMovement: place.intentKeywords.contains("free roam")
+        case .floorAllowed: place.dogAccess != .carrierRequired
+        case .leashRequired: place.rules.contains(.indoorLeash)
+        case .leashNotRequired: !place.rules.contains(.indoorLeash)
+        case .largeDog: place.acceptsLargeDogs
+        case .mediumDog, .smallDog: place.nearbyCategory == .dining
+        case .offLeash: place.intentKeywords.contains("free roam")
+        case .naturalGrass: place.nearbyCategory == .parks
+        case .safetyFacilities, .trainingFacilities: place.id == "xinyi-dog-park"
+        case .shadeCanopy: place.facilities.contains(.shade)
+        case .seating: place.facilities.contains(.outdoorSeating)
+        case .allDay: place.id == "daan-forest"
+        case .daytime: place.nearbyCategory == .parks
+        case .emergency24Hours: place.id == "daan-night"
+        case .residentVeterinarian: place.id == "xinyi-vet"
+        case .oxygenICU, .pulseOximeter, .bloodPanel, .xRay, .ultrasound: place.id == "daan-night"
         }
+    }
+
+    static func options(for category: NearbyCategory) -> [Self] {
+        allCases.filter { $0.category == category }
     }
 }
 
@@ -970,138 +1024,87 @@ private enum NearbyResultsDetent: Equatable {
     }
 }
 
-private struct NearbyActivityButton: View {
-    let category: NearbyCategory
+private struct NearbyCategoryTagBar: View {
+    @Binding var selection: NearbyCategory?
     let language: SnootsLanguage
-    let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: "magnifyingglass")
-                    .font(.snootsUI(18, weight: .bold))
-                    .frame(width: 38, height: 38)
-                    .background(SnootsPalette.primaryTint, in: Circle())
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(language.text("What’s nearby?", "附近有什麼"))
-                        .font(.snootsMetadata())
-                        .foregroundStyle(SnootsPalette.secondaryText)
+        HStack(spacing: 7) {
+            ForEach(NearbyCategory.allCases) { category in
+                let isSelected = selection == category
+                Button {
+                    selection = isSelected ? nil : category
+                } label: {
                     Text(category.title(language))
-                        .font(.snootsUI(17, weight: .bold))
+                        .font(.snootsUI(14, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .foregroundStyle(SnootsPalette.ink)
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .background(isSelected ? SnootsPalette.primary : SnootsPalette.surface, in: Capsule())
+                        .overlay(Capsule().stroke(isSelected ? SnootsPalette.ink : SnootsPalette.divider, lineWidth: isSelected ? 1.5 : 1))
                 }
-
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.down")
-                    .font(.snootsUI(13, weight: .bold))
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
-            .foregroundStyle(SnootsPalette.ink)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 58)
-            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
-                    .stroke(SnootsPalette.divider, lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(language.text("Choose activity. Current selection: \(category.title(language))", "選擇活動，目前為\(category.title(language))"))
     }
 }
 
-private struct NearbyFilterStrip: View {
+private struct NearbySubcategoryStrip: View {
     let region: NearbyRegion
-    @Binding var selectedFilters: Set<NearbyFilter>
+    let category: NearbyCategory?
+    @Binding var selection: NearbySubcategory?
     let language: SnootsLanguage
     let onSelectRegion: () -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                Button(action: onSelectRegion) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "location.fill")
-                        Text(region.title(language))
-                        Image(systemName: "chevron.down")
-                            .font(.snootsUI(10, weight: .bold))
-                    }
-                    .font(.snootsChip())
-                    .foregroundStyle(SnootsPalette.ink)
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 40)
-                    .background(SnootsPalette.lavenderTint, in: Capsule())
-                    .overlay(Capsule().stroke(SnootsPalette.lavender, lineWidth: 1))
+        HStack(spacing: 8) {
+            Button(action: onSelectRegion) {
+                HStack(spacing: 6) {
+                    Image(systemName: "location.fill")
+                    Text(region.title(language))
+                    Image(systemName: "chevron.down")
+                        .font(.snootsUI(10, weight: .bold))
                 }
-                .buttonStyle(.plain)
-
-                ForEach(NearbyFilter.allCases) { filter in
-                    let isSelected = selectedFilters.contains(filter)
-                    Button {
-                        toggle(filter)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: filter.symbol)
-                            Text(filter.title(language))
-                        }
-                        .font(.snootsChip())
-                        .foregroundStyle(SnootsPalette.ink)
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 40)
-                        .background(isSelected ? SnootsPalette.primary : SnootsPalette.surface, in: Capsule())
-                        .overlay(Capsule().stroke(isSelected ? SnootsPalette.ink : SnootsPalette.divider, lineWidth: isSelected ? 1.5 : 1))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
-                }
+                .font(.snootsChip())
+                .foregroundStyle(SnootsPalette.ink)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 40)
+                .background(SnootsPalette.lavenderTint, in: Capsule())
+                .overlay(Capsule().stroke(SnootsPalette.lavender, lineWidth: 1))
             }
-        }
-        .contentMargins(.horizontal, 1, for: .scrollContent)
-    }
+            .buttonStyle(.plain)
+            .fixedSize(horizontal: true, vertical: false)
 
-    private func toggle(_ filter: NearbyFilter) {
-        if selectedFilters.contains(filter) {
-            selectedFilters.remove(filter)
-        } else {
-            selectedFilters.insert(filter)
-        }
-    }
-}
-
-private struct NearbyActivityPickerSheet: View {
-    @Binding var selection: NearbyCategory
-    let language: SnootsLanguage
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List(NearbyCategory.allCases) { category in
-                Button {
-                    selection = category
-                    dismiss()
-                } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: category.symbol)
-                            .font(.snootsUI(17, weight: .bold))
-                            .frame(width: 36, height: 36)
-                            .background(selection == category ? SnootsPalette.primary : SnootsPalette.canvas, in: Circle())
-                        Text(category.title(language))
-                            .font(.snootsUI(17, weight: .semibold))
-                        Spacer()
-                        if selection == category {
-                            Image(systemName: "checkmark")
-                                .font(.snootsUI(15, weight: .bold))
+            if let category {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(NearbySubcategory.options(for: category)) { subcategory in
+                            let isSelected = selection == subcategory
+                            Button {
+                                selection = isSelected ? nil : subcategory
+                            } label: {
+                                Text(subcategory.title(language))
+                                    .font(.snootsChip())
+                                    .foregroundStyle(SnootsPalette.ink)
+                                    .padding(.horizontal, 12)
+                                    .frame(minHeight: 40)
+                                    .background(isSelected ? SnootsPalette.primary : SnootsPalette.surface, in: Capsule())
+                                    .overlay(Capsule().stroke(isSelected ? SnootsPalette.ink : SnootsPalette.divider, lineWidth: isSelected ? 1.5 : 1))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                         }
                     }
-                    .foregroundStyle(SnootsPalette.ink)
-                    .frame(minHeight: 48)
                 }
-                .buttonStyle(.plain)
+                .id(category)
+                .contentMargins(.horizontal, 1, for: .scrollContent)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipped()
             }
-            .navigationTitle(language.text("Choose activity", "選擇活動"))
-            .navigationBarTitleDisplayMode(.inline)
         }
-        .presentationDetents([.medium])
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
