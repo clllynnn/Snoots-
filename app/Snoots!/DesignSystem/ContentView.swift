@@ -480,7 +480,7 @@ private struct CreateMeetupSheet: View {
                             Divider().padding(.leading, 52)
 
                             Stepper(value: $attendeeLimit, in: 2...20) {
-                                Label("\\(language.text(\"Up to\", \"最多\")) \\(attendeeLimit) \\(language.text(\"dogs\", \"隻狗狗\"))", systemImage: "dog")
+                                Label("\(language.text("Up to", "最多")) \(attendeeLimit) \(language.text("dogs", "隻狗狗"))", systemImage: "dog")
                                     .font(.snootsBody())
                             }
                             .tint(SnootsPalette.navigationActive)

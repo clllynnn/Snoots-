@@ -226,7 +226,7 @@ struct MeetupDuration: Identifiable {
     var id: Int { hours }
 
     func localizedLabel(_ language: SnootsLanguage) -> String {
-        language.text("\\(hours) hour\\(hours == 1 ? \"\" : \"s\")", "\\(hours) 小時")
+        language.text("\(hours) hour\(hours == 1 ? "" : "s")", "\(hours) 小時")
     }
 }
 
