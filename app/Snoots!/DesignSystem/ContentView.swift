@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var selectedNearbyCategory: NearbyCategory?
     @State private var selectedNearbyRegion: NearbyRegion = .currentLocation
     @State private var meetupFocusRequest = 0
+    @State private var meetupFocusTargetID: String?
     @State private var matchPath: [SnootsRoute] = []
     @State private var mapsPath: [SnootsRoute] = []
     @State private var profilePath: [SnootsRoute] = []
@@ -44,7 +45,8 @@ struct ContentView: View {
                     language: language,
                     selectedCategory: $selectedNearbyCategory,
                     selectedRegion: $selectedNearbyRegion,
-                    meetupFocusRequest: meetupFocusRequest
+                    meetupFocusRequest: meetupFocusRequest,
+                    meetupFocusTargetID: meetupFocusTargetID
                 ) { mapsPath.append($0) }
                     .navigationDestination(for: SnootsRoute.self) { route in
                         switch route {
@@ -66,7 +68,6 @@ struct ContentView: View {
                 FeedView(
                     store: store,
                     language: language,
-                    onViewMeetups: showMeetups,
                     onMeetupCreated: showMeetups
                 )
             }
@@ -97,9 +98,10 @@ struct ContentView: View {
         .sensoryFeedback(.success, trigger: store.isMatched)
     }
 
-    private func showMeetups() {
+    private func showMeetups(_ meetupPlaceID: String) {
+        meetupFocusTargetID = meetupPlaceID
         selectedNearbyCategory = .meetups
-        selectedNearbyRegion = .currentLocation
+        selectedNearbyRegion = store.place(id: meetupPlaceID)?.region ?? .currentLocation
         meetupFocusRequest += 1
         selectedTab = .maps
     }
@@ -115,11 +117,11 @@ enum SnootsRoute: Hashable {
 struct FeedView: View {
     let store: SnootsStore
     let language: SnootsLanguage
-    let onViewMeetups: () -> Void
-    let onMeetupCreated: () -> Void
+    let onMeetupCreated: (String) -> Void
     @State private var likedPostIDs: Set<UUID> = []
     @State private var savedPostIDs: Set<UUID> = []
     @State private var presentedSheet: FeedSheet?
+    @State private var pendingMeetupFocusID: String?
 
     var body: some View {
         ScrollView {
@@ -138,7 +140,7 @@ struct FeedView: View {
 
                 CreateActivityButton(
                     language: language,
-                    onView: onViewMeetups,
+                    onView: { presentedSheet = .myMeetups },
                     onCreate: { presentedSheet = .createMeetup }
                 )
 
@@ -161,16 +163,31 @@ struct FeedView: View {
         }
         .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(item: $presentedSheet) { sheet in
+        .sheet(item: $presentedSheet, onDismiss: focusPendingMeetup) { sheet in
             switch sheet {
             case .createMeetup:
                 CreateMeetupSheet(
                     store: store,
                     language: language,
-                    onPublished: onMeetupCreated
+                    onPublished: { pendingMeetupFocusID = $0 }
+                )
+            case .myMeetups:
+                MyMeetupsSheet(
+                    store: store,
+                    language: language,
+                    onShowOnMap: {
+                        pendingMeetupFocusID = $0
+                        presentedSheet = nil
+                    }
                 )
             }
         }
+    }
+
+    private func focusPendingMeetup() {
+        guard let pendingMeetupFocusID else { return }
+        self.pendingMeetupFocusID = nil
+        onMeetupCreated(pendingMeetupFocusID)
     }
 
     private func toggle(_ id: UUID, in selection: inout Set<UUID>) {
@@ -183,8 +200,14 @@ struct FeedView: View {
 
     private enum FeedSheet: Identifiable {
         case createMeetup
+        case myMeetups
 
-        var id: String { "createMeetup" }
+        var id: String {
+            switch self {
+            case .createMeetup: "createMeetup"
+            case .myMeetups: "myMeetups"
+            }
+        }
     }
 }
 
@@ -287,7 +310,7 @@ private struct CreateActivityButton: View {
 private struct CreateMeetupSheet: View {
     let store: SnootsStore
     let language: SnootsLanguage
-    let onPublished: () -> Void
+    let onPublished: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
@@ -561,7 +584,7 @@ private struct CreateMeetupSheet: View {
 
     private func publish() {
         guard let selectedType, let selectedVenue else { return }
-        store.createMeetup(
+        let meetupPlaceID = store.createMeetup(
             MeetupDraft(
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 activityTypeID: selectedType.id,
@@ -575,8 +598,127 @@ private struct CreateMeetupSheet: View {
                 hasCoverPhoto: activityPhoto != nil
             )
         )
+        onPublished(meetupPlaceID)
         dismiss()
-        onPublished()
+    }
+}
+
+private struct MyMeetupsSheet: View {
+    let store: SnootsStore
+    let language: SnootsLanguage
+    let onShowOnMap: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var meetupPendingCancellationID: UUID?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if store.createdMeetups.isEmpty {
+                    ContentUnavailableView {
+                        Label(language.text("No meetups yet", "尚未建立狗聚"), systemImage: "person.2")
+                    } description: {
+                        Text(language.text("Meetups you publish will appear here for you to manage.", "你發佈的狗聚會集中顯示在這裡，方便後續管理。"))
+                    }
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 14) {
+                            ForEach(store.createdMeetups) { meetup in
+                                meetupCard(meetup)
+                            }
+                        }
+                        .padding(18)
+                    }
+                    .background(SnootsPalette.canvas)
+                }
+            }
+            .navigationTitle(language.text("My meetups", "我的狗聚"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(language.text("Done", "完成")) { dismiss() }
+                }
+            }
+            .confirmationDialog(
+                language.text("Cancel this meetup?", "要取消這場狗聚嗎？"),
+                isPresented: cancellationDialogBinding,
+                titleVisibility: .visible
+            ) {
+                Button(language.text("Cancel meetup", "取消狗聚"), role: .destructive) {
+                    if let meetupPendingCancellationID {
+                        store.deleteMeetup(id: meetupPendingCancellationID)
+                    }
+                    meetupPendingCancellationID = nil
+                }
+                Button(language.text("Keep meetup", "保留狗聚"), role: .cancel) {
+                    meetupPendingCancellationID = nil
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var cancellationDialogBinding: Binding<Bool> {
+        Binding(
+            get: { meetupPendingCancellationID != nil },
+            set: { if !$0 { meetupPendingCancellationID = nil } }
+        )
+    }
+
+    private func meetupCard(_ meetup: MeetupDraft) -> some View {
+        let activity = store.meetupActivityTypes.first { $0.id == meetup.activityTypeID }
+        let venue = store.meetupVenues.first { $0.id == meetup.venueID }
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(meetup.title)
+                        .font(.snootsCardTitle())
+                    Text(activity?.localizedTitle(language) ?? language.text("Dog meetup", "狗聚"))
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                Spacer()
+                Text(language.text("Published", "已發佈"))
+                    .font(.snootsMetadata())
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(SnootsPalette.lime, in: Capsule())
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Label(meetup.startDate.formatted(date: .abbreviated, time: .shortened), systemImage: "calendar")
+                Label(venue?.localizedName(language) ?? language.text("Meetup venue", "狗聚地點"), systemImage: "mappin.and.ellipse")
+                Label(language.text("Up to \(meetup.attendeeLimit) dogs", "最多 \(meetup.attendeeLimit) 隻狗狗"), systemImage: "pawprint.fill")
+            }
+            .font(.snootsUI(14))
+            .foregroundStyle(SnootsPalette.secondaryText)
+
+            HStack(spacing: 10) {
+                Button {
+                    onShowOnMap(store.meetupPlaceID(for: meetup))
+                } label: {
+                    Label(language.text("Show on map", "在地圖查看"), systemImage: "map.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(SnootsPalette.primary)
+
+                Button(role: .destructive) {
+                    meetupPendingCancellationID = meetup.id
+                } label: {
+                    Image(systemName: "trash")
+                        .frame(width: 22)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel(language.text("Cancel meetup", "取消狗聚"))
+            }
+            .font(.snootsButton(15))
+        }
+        .padding(16)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
     }
 }
 
@@ -1142,6 +1284,7 @@ struct MapsView: View {
     @Binding var selectedCategory: NearbyCategory?
     @Binding var selectedRegion: NearbyRegion
     let meetupFocusRequest: Int
+    let meetupFocusTargetID: String?
     let onNavigate: (SnootsRoute) -> Void
     @State private var selectedSubcategory: NearbySubcategory? = nil
     @State private var selectedPlaceID: String?
@@ -1257,6 +1400,11 @@ struct MapsView: View {
         handledMeetupFocusRequest = meetupFocusRequest
         selectedSubcategory = nil
         resetResults()
+        let targetID = meetupFocusTargetID
+        Task { @MainActor in
+            await Task.yield()
+            selectedPlaceID = targetID
+        }
     }
 
     private func resetResults(keepPanelPosition: Bool = false) {
@@ -1548,6 +1696,7 @@ private struct NearbyMapMarker: Identifiable {
     let latitude: Double
     let longitude: Double
     let placeIDs: [String]
+    let isUserCreated: Bool
 
     init(place: Place, language: SnootsLanguage) {
         id = place.id
@@ -1555,6 +1704,7 @@ private struct NearbyMapMarker: Identifiable {
         latitude = place.latitude
         longitude = place.longitude
         placeIDs = [place.id]
+        isUserCreated = place.verificationLevel == .hostCreated
     }
 
     init(cluster: [Place], language: SnootsLanguage) {
@@ -1563,6 +1713,7 @@ private struct NearbyMapMarker: Identifiable {
         latitude = cluster.map(\.latitude).reduce(0, +) / Double(cluster.count)
         longitude = cluster.map(\.longitude).reduce(0, +) / Double(cluster.count)
         placeIDs = cluster.map(\.id)
+        isUserCreated = cluster.contains { $0.verificationLevel == .hostCreated }
     }
 
     var isCluster: Bool { placeIDs.count > 1 }
@@ -1584,7 +1735,22 @@ private struct NearbyMap: View {
                     Button {
                         selectedPlaceID = marker.placeIDs.first
                     } label: {
-                        NearbyMapPin(count: marker.placeIDs.count, isSelected: marker.placeIDs.contains(selectedPlaceID ?? ""))
+                        VStack(spacing: 4) {
+                            if marker.isUserCreated && !marker.isCluster {
+                                Text(language.text("Your meetup", "你的狗聚"))
+                                    .font(.snootsUI(11, weight: .bold))
+                                    .foregroundStyle(SnootsPalette.ink)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(SnootsPalette.surface, in: Capsule())
+                                    .overlay(Capsule().stroke(SnootsPalette.ink, lineWidth: 1))
+                            }
+                            NearbyMapPin(
+                                count: marker.placeIDs.count,
+                                isSelected: marker.placeIDs.contains(selectedPlaceID ?? ""),
+                                isUserCreated: marker.isUserCreated
+                            )
+                        }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(marker.isCluster ? language.text("\(marker.placeIDs.count) places clustered", "\(marker.placeIDs.count) 個地點群組") : marker.name)
@@ -1621,11 +1787,12 @@ private struct NearbyMap: View {
 private struct NearbyMapPin: View {
     let count: Int
     let isSelected: Bool
+    let isUserCreated: Bool
 
     var body: some View {
         Group {
             if count == 1 {
-                Image(systemName: "mappin.circle.fill")
+                Image(systemName: isUserCreated ? "person.2.fill" : "mappin.circle.fill")
                     .font(.snootsUI(23, weight: .bold))
             } else {
                 Text("\(count)")
@@ -1634,7 +1801,7 @@ private struct NearbyMapPin: View {
         }
             .foregroundStyle(SnootsPalette.ink)
             .frame(width: isSelected ? 54 : 46, height: isSelected ? 54 : 46)
-            .background(isSelected ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
+            .background(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
             .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
             .shadow(color: .black.opacity(isSelected ? 0.18 : 0.10), radius: isSelected ? 10 : 6, y: isSelected ? 6 : 3)
             .offset(y: isSelected ? -6 : 0)

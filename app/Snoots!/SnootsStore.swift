@@ -140,8 +140,18 @@ final class SnootsStore {
         matchChatMessages.append(MatchChatMessage(text: trimmedText, isOutgoing: true))
     }
 
-    func createMeetup(_ meetup: MeetupDraft) {
+    @discardableResult
+    func createMeetup(_ meetup: MeetupDraft) -> String {
         createdMeetups.insert(meetup, at: 0)
+        return meetupPlaceID(for: meetup)
+    }
+
+    func deleteMeetup(id: UUID) {
+        createdMeetups.removeAll { $0.id == id }
+    }
+
+    func meetupPlaceID(for meetup: MeetupDraft) -> String {
+        "created-meetup-\(meetup.id.uuidString)"
     }
 
     private func meetupPlace(for meetup: MeetupDraft) -> Place? {
@@ -158,7 +168,7 @@ final class SnootsStore {
         }
 
         return Place(
-            id: "created-meetup-\(meetup.id.uuidString)",
+            id: meetupPlaceID(for: meetup),
             name: meetup.title,
             category: category,
             nearbyCategory: .meetups,
