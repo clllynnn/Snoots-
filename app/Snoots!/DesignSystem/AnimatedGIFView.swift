@@ -12,17 +12,56 @@ struct AnimatedGIFView: UIViewRepresentable {
     let sourceName: String
     let fallbackImageName: String
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeUIView(context: Context) -> FlexibleAnimatedImageView {
         let imageView = FlexibleAnimatedImageView()
         imageView.contentMode = .scaleAspectFit
         imageView.clipsToBounds = true
-        imageView.image = Self.animatedImage(sourceName: sourceName) ?? UIImage(named: fallbackImageName)
+        imageView.image = UIImage(named: fallbackImageName)
+        context.coordinator.load(sourceName: sourceName, into: imageView)
         return imageView
     }
 
     func updateUIView(_ imageView: FlexibleAnimatedImageView, context: Context) {
-        guard imageView.image == nil else { return }
-        imageView.image = Self.animatedImage(sourceName: sourceName) ?? UIImage(named: fallbackImageName)
+        if imageView.image == nil {
+            imageView.image = UIImage(named: fallbackImageName)
+        }
+        context.coordinator.load(sourceName: sourceName, into: imageView)
+    }
+
+    static func dismantleUIView(_ imageView: FlexibleAnimatedImageView, coordinator: Coordinator) {
+        coordinator.cancel()
+    }
+
+    @MainActor
+    final class Coordinator {
+        private var loadedSourceName: String?
+        private var loadingTask: Task<Void, Never>?
+
+        func load(sourceName: String, into imageView: FlexibleAnimatedImageView) {
+            guard loadedSourceName != sourceName else { return }
+            loadedSourceName = sourceName
+            loadingTask?.cancel()
+
+            loadingTask = Task {
+                let result = await Task.detached(priority: .userInitiated) {
+                    SendableImage(image: AnimatedGIFView.animatedImage(sourceName: sourceName))
+                }.value
+
+                guard !Task.isCancelled,
+                      loadedSourceName == sourceName,
+                      let image = result.image else { return }
+                imageView.image = image
+            }
+        }
+
+        func cancel() {
+            loadingTask?.cancel()
+            loadingTask = nil
+        }
     }
 
     private static func animatedImage(sourceName: String) -> UIImage? {
@@ -69,4 +108,8 @@ struct AnimatedGIFView: UIViewRepresentable {
         let delay = gifProperties[kCGImagePropertyGIFDelayTime as String] as? TimeInterval
         return max(unclampedDelay ?? delay ?? 0.1, 0.02)
     }
+}
+
+private struct SendableImage: @unchecked Sendable {
+    let image: UIImage?
 }

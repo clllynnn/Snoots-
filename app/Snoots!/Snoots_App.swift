@@ -37,6 +37,7 @@ struct Snoots_App: App {
                     )
                     .environment(\.locale, displayLanguage.locale)
                     .task {
+                        await store.mapPlaces.loadBundledPlacesIfNeeded()
                         await store.mapPlaces.refreshFromRemoteIfConfigured()
                     }
                 }

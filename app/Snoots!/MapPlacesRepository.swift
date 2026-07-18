@@ -3,7 +3,7 @@ import MapKit
 import Observation
 import SQLite3
 
-struct MapPlace: Identifiable {
+struct MapPlace: Identifiable, Sendable {
     let id: String
     let category: Category
     let name: String
@@ -15,7 +15,7 @@ struct MapPlace: Identifiable {
     let filterIDs: Set<String>
     var coordinate: CLLocationCoordinate2D?
 
-    enum Category: String, CaseIterable, Identifiable {
+    enum Category: String, CaseIterable, Identifiable, Sendable {
         case restaurant = "pet_friendly_restaurant"
         case park = "pet_friendly_park"
         case hospital = "animal_hospital"
@@ -70,9 +70,23 @@ final class MapPlacesRepository {
     private(set) var errorMessage: String?
     private(set) var isResolvingLocations = false
     private var hasResolvedLocations = false
+    private var hasLoadedBundledPlaces = false
 
-    init() {
-        loadPlaces()
+    private struct BundledLoadResult: Sendable {
+        let places: [MapPlace]
+        let errorMessage: String?
+    }
+
+    func loadBundledPlacesIfNeeded() async {
+        guard !hasLoadedBundledPlaces else { return }
+        hasLoadedBundledPlaces = true
+
+        let result = await Task.detached(priority: .userInitiated) {
+            Self.readBundledPlaces()
+        }.value
+
+        places = result.places
+        errorMessage = result.errorMessage
     }
 
     func refreshFromRemoteIfConfigured() async {
@@ -145,16 +159,20 @@ final class MapPlacesRepository {
         }
     }
 
-    private func loadPlaces() {
+    private nonisolated static func readBundledPlaces() -> BundledLoadResult {
         guard let databaseURL = Bundle.main.url(forResource: "maps_database", withExtension: "sqlite") else {
-            errorMessage = "The bundled maps database could not be found."
-            return
+            return BundledLoadResult(
+                places: [],
+                errorMessage: "The bundled maps database could not be found."
+            )
         }
 
         var database: OpaquePointer?
         guard sqlite3_open_v2(databaseURL.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
-            errorMessage = "The maps database could not be opened."
-            return
+            return BundledLoadResult(
+                places: [],
+                errorMessage: "The maps database could not be opened."
+            )
         }
         defer { sqlite3_close(database) }
 
@@ -180,8 +198,10 @@ final class MapPlacesRepository {
 
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
-            errorMessage = "The maps data could not be read."
-            return
+            return BundledLoadResult(
+                places: [],
+                errorMessage: "The maps data could not be read."
+            )
         }
         defer { sqlite3_finalize(statement) }
 
@@ -201,7 +221,7 @@ final class MapPlacesRepository {
                     location: string(from: statement, column: 4),
                     appleMapsURL: string(from: statement, column: 5).flatMap(URL.init(string:)),
                     sourceURL: string(from: statement, column: 6).flatMap(URL.init(string:)),
-                    ruleLabels: ruleLabels(
+                    ruleLabels: Self.ruleLabels(
                         acceptedDogSize: string(from: statement, column: 7),
                         groundAllowed: string(from: statement, column: 8),
                         leashRequired: string(from: statement, column: 9),
@@ -212,15 +232,15 @@ final class MapPlacesRepository {
                 )
             )
         }
-        places = loadedPlaces
+        return BundledLoadResult(places: loadedPlaces, errorMessage: nil)
     }
 
-    private func string(from statement: OpaquePointer?, column: Int32) -> String? {
+    private nonisolated static func string(from statement: OpaquePointer?, column: Int32) -> String? {
         guard let value = sqlite3_column_text(statement, column) else { return nil }
         return String(cString: value)
     }
 
-    private func ruleLabels(
+    private nonisolated static func ruleLabels(
         acceptedDogSize: String?,
         groundAllowed: String?,
         leashRequired: String?,
