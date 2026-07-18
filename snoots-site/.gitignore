@@ -1,0 +1,6 @@
+dist/
+node_modules/
+design-qa*.png
+design-qa.md
+public/assets/snoots-product-film.m4v
+public/assets/snoots-product-film.mov
