@@ -1731,7 +1731,7 @@ private struct NearbyMap: View {
     @State private var position: MapCameraPosition = NearbyRegion.currentLocation.cameraPosition
 
     var body: some View {
-        Map(position: $position) {
+        Map(position: $position, interactionModes: [.pan, .zoom]) {
             UserAnnotation()
             ForEach(markers) { marker in
                 Annotation(marker.name, coordinate: marker.coordinate, anchor: .bottom) {
@@ -1795,18 +1795,21 @@ private struct NearbyMapPin: View {
     var body: some View {
         Group {
             if count == 1 {
-                Image(systemName: isUserCreated ? "person.2.fill" : "mappin.circle.fill")
-                    .font(.snootsUI(23, weight: .bold))
+                Image(systemName: "mappin")
+                    .font(.snootsUI(isSelected ? 44 : 38, weight: .bold))
+                    .foregroundStyle(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary)
+                    .frame(width: isSelected ? 54 : 46, height: isSelected ? 54 : 46)
+                    .shadow(color: .black.opacity(isSelected ? 0.24 : 0.16), radius: isSelected ? 8 : 5, y: isSelected ? 5 : 3)
             } else {
                 Text("\(count)")
                     .font(.snootsUI(15, weight: .bold))
+                    .foregroundStyle(SnootsPalette.ink)
+                    .frame(width: isSelected ? 54 : 46, height: isSelected ? 54 : 46)
+                    .background(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
+                    .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
+                    .shadow(color: .black.opacity(isSelected ? 0.18 : 0.10), radius: isSelected ? 10 : 6, y: isSelected ? 6 : 3)
             }
         }
-            .foregroundStyle(SnootsPalette.ink)
-            .frame(width: isSelected ? 54 : 46, height: isSelected ? 54 : 46)
-            .background(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
-            .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
-            .shadow(color: .black.opacity(isSelected ? 0.18 : 0.10), radius: isSelected ? 10 : 6, y: isSelected ? 6 : 3)
             .offset(y: isSelected ? -6 : 0)
             .animation(.snappy, value: isSelected)
     }
