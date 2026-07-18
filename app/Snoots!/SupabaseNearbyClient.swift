@@ -44,6 +44,7 @@ struct RemoteNearbyPlace: Decodable, Sendable {
     let dogAccessLabel: String?
     let verificationLevel: String
     let verifiedAt: String?
+    let openingHours: [String: String]?
     let filterIDs: [String]
     let distanceMeters: Double
 
@@ -56,6 +57,7 @@ struct RemoteNearbyPlace: Decodable, Sendable {
         case dogAccessLabel = "dog_access_label"
         case verificationLevel = "verification_level"
         case verifiedAt = "verified_at"
+        case openingHours = "opening_hours"
         case filterIDs = "filter_ids"
         case distanceMeters = "distance_meters"
     }

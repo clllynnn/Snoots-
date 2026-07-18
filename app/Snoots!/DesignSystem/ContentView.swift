@@ -1907,8 +1907,17 @@ private struct NearbyPlaceCard: View {
             .map { $0.title(language) }
     }
 
-    private var usesDatabasePlaceUI: Bool {
-        place.nearbyCategory != .meetups && !place.filterIDs.isEmpty
+    private var unavailableText: String {
+        language.text("Unable to fetch data", "無法抓取資料")
+    }
+
+    private var displayedPlaceName: String {
+        let name = place.localizedName(language).trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? unavailableText : name
+    }
+
+    private var displayedFilterLabels: [String] {
+        databaseFilterLabels.isEmpty ? [unavailableText] : databaseFilterLabels
     }
 
     var body: some View {
@@ -1917,14 +1926,14 @@ private struct NearbyPlaceCard: View {
                 if place.nearbyCategory != .meetups,
                    let destination = place.resolvedAppleMapsURL {
                     Link(destination: destination) {
-                        Text(place.localizedName(language))
+                        Text(displayedPlaceName)
                             .font(.snootsCardTitle())
                             .foregroundStyle(SnootsPalette.ink)
                             .multilineTextAlignment(.leading)
                     }
                     .accessibilityHint(language.text("Opens in Apple Maps", "在 Apple 地圖中開啟"))
                 } else {
-                    Text(place.localizedName(language))
+                    Text(displayedPlaceName)
                         .font(.snootsCardTitle())
                         .foregroundStyle(SnootsPalette.ink)
                 }
@@ -1940,37 +1949,16 @@ private struct NearbyPlaceCard: View {
                 }
             }
 
-            Text(place.localizedCategory(language))
+            Text(place.localizedOpeningHoursData(language))
                 .font(.snootsMetadata())
                 .foregroundStyle(SnootsPalette.secondaryText)
-            HStack(spacing: 5) {
-                Text(place.localizedWalk(language))
-                Text("·")
-                if place.hasLiveStatus {
-                    Text(place.isOpenNow ? language.text("Open", "營業中") : language.text("Closed", "休息中"))
-                        .foregroundStyle(place.isOpenNow ? SnootsPalette.deepLilac : SnootsPalette.secondaryText)
-                } else {
-                    Text(language.text("Hours unavailable", "暫無營業資訊"))
-                        .foregroundStyle(SnootsPalette.secondaryText)
-                }
-            }
-            .font(.snootsMetadata())
 
-            if usesDatabasePlaceUI, !databaseFilterLabels.isEmpty {
-                DeclarationChips(labels: databaseFilterLabels, tint: SnootsPalette.primaryTint)
-                    .accessibilityLabel(language.text("Place filters", "地點次標籤"))
-            } else {
-                Text(place.dogAccess.label(language))
-                    .font(.snootsChip())
-                    .foregroundStyle(SnootsPalette.ink)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(SnootsPalette.butter, in: Capsule())
-            }
+            Text(place.localizedDistanceFromCurrentLocation(language))
+                .font(.snootsUI(16, weight: .semibold))
+                .foregroundStyle(SnootsPalette.ink)
 
-            Label("\(place.verificationLevel.label(language)) · \(place.localizedLastConfirmed(language))", systemImage: "checkmark.seal.fill")
-                .font(.snootsMetadata())
-                .foregroundStyle(SnootsPalette.secondaryText)
+            DeclarationChips(labels: displayedFilterLabels, tint: SnootsPalette.primaryTint)
+                .accessibilityLabel(language.text("Place filters", "地點次標籤"))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)

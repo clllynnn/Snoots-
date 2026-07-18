@@ -17,6 +17,7 @@ struct MapPlace: Identifiable {
     let dogAccessLabel: String?
     let verificationLevel: String
     let verifiedAt: String?
+    let openingHours: [String: String]
     let distanceMeters: Double?
     var coordinate: CLLocationCoordinate2D?
 
@@ -140,6 +141,7 @@ final class MapPlacesRepository {
                     dogAccessLabel: place.dogAccessLabel,
                     verificationLevel: place.verificationLevel,
                     verifiedAt: place.verifiedAt,
+                    openingHours: place.openingHours ?? [:],
                     distanceMeters: place.distanceMeters,
                     coordinate: CLLocationCoordinate2D(
                         latitude: place.latitude,
@@ -242,6 +244,7 @@ final class MapPlacesRepository {
                     dogAccessLabel: nil,
                     verificationLevel: "needs_reconfirmation",
                     verifiedAt: nil,
+                    openingHours: [:],
                     distanceMeters: nil,
                     coordinate: nil
                 )
