@@ -1797,16 +1797,15 @@ private struct NearbyMapPin: View {
             if count == 1 {
                 ZStack(alignment: .top) {
                     NearbyMapPinShape()
-                        .fill(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary)
+                        .fill(SnootsPalette.surface.opacity(0.96))
                         .overlay {
                             NearbyMapPinShape()
-                                .stroke(SnootsPalette.ink, lineWidth: 2)
+                                .stroke(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary, lineWidth: 3)
                         }
 
                     Circle()
-                        .fill(SnootsPalette.surface)
+                        .fill(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary)
                         .frame(width: isSelected ? 14 : 12, height: isSelected ? 14 : 12)
-                        .overlay(Circle().stroke(SnootsPalette.ink.opacity(0.16), lineWidth: 1))
                         .padding(.top, isSelected ? 10 : 9)
                 }
                     .frame(width: isSelected ? 42 : 36, height: isSelected ? 54 : 46)
@@ -2006,10 +2005,6 @@ private struct NearbyPlaceCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(isSelected ? SnootsPalette.primaryTint : SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
-                .stroke(isSelected ? SnootsPalette.ink : .clear, lineWidth: 2)
-        }
         .contentShape(RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
         .onTapGesture(perform: onSelect)
         .accessibilityHint(language.text("Highlights this place on the map", "在地圖上標示此地點"))
