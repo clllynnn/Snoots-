@@ -1954,7 +1954,7 @@ private struct NearbyPlaceCard: View {
                 .foregroundStyle(SnootsPalette.secondaryText)
 
             Text(place.localizedDistanceFromCurrentLocation(language))
-                .font(.snootsUI(16, weight: .semibold))
+                .font(.snootsUI(14, weight: .medium))
                 .foregroundStyle(SnootsPalette.ink)
 
             DeclarationChips(labels: displayedFilterLabels, tint: SnootsPalette.primaryTint)
