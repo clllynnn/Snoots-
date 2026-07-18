@@ -1795,10 +1795,21 @@ private struct NearbyMapPin: View {
     var body: some View {
         Group {
             if count == 1 {
-                Image(systemName: "mappin")
-                    .font(.snootsUI(isSelected ? 44 : 38, weight: .bold))
-                    .foregroundStyle(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary)
-                    .frame(width: isSelected ? 54 : 46, height: isSelected ? 54 : 46)
+                ZStack(alignment: .top) {
+                    NearbyMapPinShape()
+                        .fill(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary)
+                        .overlay {
+                            NearbyMapPinShape()
+                                .stroke(SnootsPalette.ink, lineWidth: 2)
+                        }
+
+                    Circle()
+                        .fill(SnootsPalette.surface)
+                        .frame(width: isSelected ? 14 : 12, height: isSelected ? 14 : 12)
+                        .overlay(Circle().stroke(SnootsPalette.ink.opacity(0.16), lineWidth: 1))
+                        .padding(.top, isSelected ? 10 : 9)
+                }
+                    .frame(width: isSelected ? 42 : 36, height: isSelected ? 54 : 46)
                     .shadow(color: .black.opacity(isSelected ? 0.24 : 0.16), radius: isSelected ? 8 : 5, y: isSelected ? 5 : 3)
             } else {
                 Text("\(count)")
@@ -1812,6 +1823,35 @@ private struct NearbyMapPin: View {
         }
             .offset(y: isSelected ? -6 : 0)
             .animation(.snappy, value: isSelected)
+    }
+}
+
+private struct NearbyMapPinShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addCurve(
+            to: CGPoint(x: rect.minX, y: rect.height * 0.43),
+            control1: CGPoint(x: rect.width * 0.39, y: rect.height * 0.78),
+            control2: CGPoint(x: rect.minX, y: rect.height * 0.68)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.midX, y: rect.minY),
+            control1: CGPoint(x: rect.minX, y: rect.height * 0.19),
+            control2: CGPoint(x: rect.width * 0.22, y: rect.minY)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.maxX, y: rect.height * 0.43),
+            control1: CGPoint(x: rect.width * 0.78, y: rect.minY),
+            control2: CGPoint(x: rect.maxX, y: rect.height * 0.19)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.midX, y: rect.maxY),
+            control1: CGPoint(x: rect.maxX, y: rect.height * 0.68),
+            control2: CGPoint(x: rect.width * 0.61, y: rect.height * 0.78)
+        )
+        path.closeSubpath()
+        return path
     }
 }
 
