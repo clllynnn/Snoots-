@@ -1326,15 +1326,6 @@ struct MapsView: View {
         )
     }
 
-    private var markers: [NearbyMapMarker] {
-        guard visiblePlaces.count > 3 else {
-            return visiblePlaces.map { NearbyMapMarker(place: $0, language: language) }
-        }
-        let leadingPins = visiblePlaces.prefix(2).map { NearbyMapMarker(place: $0, language: language) }
-        let clustered = Array(visiblePlaces.dropFirst(2))
-        return leadingPins + [NearbyMapMarker(cluster: clustered, language: language)]
-    }
-
     private var resultsSummary: String {
         language.text("Filtered results", "篩選結果")
     }
@@ -1376,7 +1367,7 @@ struct MapsView: View {
                 let panelHeight = resultsPanelDetent.height(in: proxy.size.height)
                 VStack(spacing: 0) {
                     NearbyMap(
-                        markers: markers,
+                        places: visiblePlaces,
                         selectedPlaceID: $selectedPlaceID,
                         region: $selectedRegion,
                         language: language
@@ -1700,6 +1691,8 @@ private struct NearbyMapMarker: Identifiable {
     let longitude: Double
     let placeIDs: [String]
     let isUserCreated: Bool
+    let latitudeDelta: Double
+    let longitudeDelta: Double
 
     init(place: Place, language: SnootsLanguage) {
         id = place.id
@@ -1708,6 +1701,8 @@ private struct NearbyMapMarker: Identifiable {
         longitude = place.longitude
         placeIDs = [place.id]
         isUserCreated = place.verificationLevel == .hostCreated
+        latitudeDelta = 0
+        longitudeDelta = 0
     }
 
     init(cluster: [Place], language: SnootsLanguage) {
@@ -1717,19 +1712,35 @@ private struct NearbyMapMarker: Identifiable {
         longitude = cluster.map(\.longitude).reduce(0, +) / Double(cluster.count)
         placeIDs = cluster.map(\.id)
         isUserCreated = cluster.contains { $0.verificationLevel == .hostCreated }
+        latitudeDelta = (cluster.map(\.latitude).max() ?? latitude) - (cluster.map(\.latitude).min() ?? latitude)
+        longitudeDelta = (cluster.map(\.longitude).max() ?? longitude) - (cluster.map(\.longitude).min() ?? longitude)
     }
 
     var isCluster: Bool { placeIDs.count > 1 }
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
+
+    var focusRegion: MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(
+                latitudeDelta: max(latitudeDelta * 1.7, 0.006),
+                longitudeDelta: max(longitudeDelta * 1.7, 0.006)
+            )
+        )
+    }
 }
 
 private struct NearbyMap: View {
-    let markers: [NearbyMapMarker]
+    let places: [Place]
     @Binding var selectedPlaceID: String?
     @Binding var region: NearbyRegion
     let language: SnootsLanguage
     @State private var position: MapCameraPosition = NearbyRegion.currentLocation.cameraPosition
     @State private var visibleRegion = NearbyRegion.currentLocation.mapRegion
+
+    private var markers: [NearbyMapMarker] {
+        dynamicMarkers(for: places, in: visibleRegion)
+    }
 
     var body: some View {
         Map(position: $position, interactionModes: [.pan, .zoom]) {
@@ -1737,7 +1748,11 @@ private struct NearbyMap: View {
             ForEach(markers) { marker in
                 Annotation("", coordinate: marker.coordinate, anchor: .bottom) {
                     Button {
-                        selectedPlaceID = marker.placeIDs.first
+                        if marker.isCluster {
+                            zoomToCluster(marker)
+                        } else {
+                            selectedPlaceID = marker.placeIDs.first
+                        }
                     } label: {
                         VStack(spacing: 4) {
                             if marker.isUserCreated && !marker.isCluster {
@@ -1844,6 +1859,57 @@ private struct NearbyMap: View {
         withAnimation(.snappy) {
             position = .region(zoomedRegion)
         }
+    }
+
+    private func zoomToCluster(_ marker: NearbyMapMarker) {
+        visibleRegion = marker.focusRegion
+        withAnimation(.snappy) {
+            position = .region(marker.focusRegion)
+        }
+    }
+
+    private func dynamicMarkers(
+        for places: [Place],
+        in mapRegion: MKCoordinateRegion
+    ) -> [NearbyMapMarker] {
+        guard !places.isEmpty else { return [] }
+
+        if max(mapRegion.span.latitudeDelta, mapRegion.span.longitudeDelta) <= 0.008 {
+            return places
+                .sorted(by: placeSortOrder)
+                .map { NearbyMapMarker(place: $0, language: language) }
+        }
+
+        let latitudeThreshold = max(mapRegion.span.latitudeDelta * 0.16, 0.00025)
+        let longitudeThreshold = max(mapRegion.span.longitudeDelta * 0.24, 0.00025)
+        var groups: [[Place]] = []
+
+        for place in places.sorted(by: placeSortOrder) {
+            if let groupIndex = groups.firstIndex(where: { group in
+                let latitude = group.map(\.latitude).reduce(0, +) / Double(group.count)
+                let longitude = group.map(\.longitude).reduce(0, +) / Double(group.count)
+                return abs(place.latitude - latitude) <= latitudeThreshold
+                    && abs(place.longitude - longitude) <= longitudeThreshold
+            }) {
+                groups[groupIndex].append(place)
+            } else {
+                groups.append([place])
+            }
+        }
+
+        return groups.map { group in
+            if group.count == 1, let place = group.first {
+                return NearbyMapMarker(place: place, language: language)
+            }
+            return NearbyMapMarker(cluster: group, language: language)
+        }
+    }
+
+    private func placeSortOrder(_ lhs: Place, _ rhs: Place) -> Bool {
+        if lhs.latitude == rhs.latitude {
+            return lhs.longitude < rhs.longitude
+        }
+        return lhs.latitude < rhs.latitude
     }
 }
 
