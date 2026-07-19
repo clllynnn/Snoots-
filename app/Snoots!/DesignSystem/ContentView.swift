@@ -1693,6 +1693,7 @@ private struct NearbyMapMarker: Identifiable {
     let isUserCreated: Bool
     let latitudeDelta: Double
     let longitudeDelta: Double
+    let distanceMeters: Double
 
     init(place: Place, language: SnootsLanguage) {
         id = place.id
@@ -1703,6 +1704,7 @@ private struct NearbyMapMarker: Identifiable {
         isUserCreated = place.verificationLevel == .hostCreated
         latitudeDelta = 0
         longitudeDelta = 0
+        distanceMeters = Self.annotationDistance(for: place)
     }
 
     init(cluster: [Place], language: SnootsLanguage) {
@@ -1714,6 +1716,7 @@ private struct NearbyMapMarker: Identifiable {
         isUserCreated = cluster.contains { $0.verificationLevel == .hostCreated }
         latitudeDelta = (cluster.map(\.latitude).max() ?? latitude) - (cluster.map(\.latitude).min() ?? latitude)
         longitudeDelta = (cluster.map(\.longitude).max() ?? longitude) - (cluster.map(\.longitude).min() ?? longitude)
+        distanceMeters = cluster.map(Self.annotationDistance).min() ?? .greatestFiniteMagnitude
     }
 
     var isCluster: Bool { placeIDs.count > 1 }
@@ -1727,6 +1730,15 @@ private struct NearbyMapMarker: Identifiable {
                 longitudeDelta: max(longitudeDelta * 1.7, 0.006)
             )
         )
+    }
+
+    private static func annotationDistance(for place: Place) -> Double {
+        if let distanceMeters = place.distanceMeters,
+           distanceMeters.isFinite,
+           distanceMeters >= 0 {
+            return distanceMeters
+        }
+        return Double(place.walkMinutes) * 80
     }
 }
 
@@ -1773,6 +1785,7 @@ private struct NearbyMap: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .zIndex(max(0, 1_000_000 - marker.distanceMeters))
                     .accessibilityLabel(marker.isCluster ? language.text("\(marker.placeIDs.count) places clustered", "\(marker.placeIDs.count) 個地點群組") : marker.name)
                 }
             }
@@ -1878,6 +1891,7 @@ private struct NearbyMap: View {
             return places
                 .sorted(by: placeSortOrder)
                 .map { NearbyMapMarker(place: $0, language: language) }
+                .sorted(by: markerDisplayOrder)
         }
 
         let latitudeThreshold = max(mapRegion.span.latitudeDelta * 0.16, 0.00025)
@@ -1897,19 +1911,30 @@ private struct NearbyMap: View {
             }
         }
 
-        return groups.map { group in
-            if group.count == 1, let place = group.first {
-                return NearbyMapMarker(place: place, language: language)
+        return groups
+            .map { group in
+                if group.count == 1, let place = group.first {
+                    return NearbyMapMarker(place: place, language: language)
+                }
+                return NearbyMapMarker(cluster: group, language: language)
             }
-            return NearbyMapMarker(cluster: group, language: language)
-        }
+            .sorted(by: markerDisplayOrder)
     }
 
     private func placeSortOrder(_ lhs: Place, _ rhs: Place) -> Bool {
-        if lhs.latitude == rhs.latitude {
-            return lhs.longitude < rhs.longitude
+        let lhsDistance = lhs.distanceMeters ?? Double(lhs.walkMinutes) * 80
+        let rhsDistance = rhs.distanceMeters ?? Double(rhs.walkMinutes) * 80
+        if lhsDistance == rhsDistance {
+            return lhs.id < rhs.id
         }
-        return lhs.latitude < rhs.latitude
+        return lhsDistance < rhsDistance
+    }
+
+    private func markerDisplayOrder(_ lhs: NearbyMapMarker, _ rhs: NearbyMapMarker) -> Bool {
+        if lhs.distanceMeters == rhs.distanceMeters {
+            return lhs.id > rhs.id
+        }
+        return lhs.distanceMeters > rhs.distanceMeters
     }
 }
 
@@ -2072,20 +2097,9 @@ private struct NearbyPlaceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 10) {
-                if place.nearbyCategory != .meetups,
-                   let destination = place.resolvedAppleMapsURL {
-                    Link(destination: destination) {
-                        Text(displayedPlaceName)
-                            .font(.snootsCardTitle())
-                            .foregroundStyle(SnootsPalette.ink)
-                            .multilineTextAlignment(.leading)
-                    }
-                    .accessibilityHint(language.text("Opens in Apple Maps", "在 Apple 地圖中開啟"))
-                } else {
-                    Text(displayedPlaceName)
-                        .font(.snootsCardTitle())
-                        .foregroundStyle(SnootsPalette.ink)
-                }
+                Text(displayedPlaceName)
+                    .font(.snootsCardTitle())
+                    .foregroundStyle(SnootsPalette.ink)
 
                 Spacer(minLength: 8)
 
