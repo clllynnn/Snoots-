@@ -96,58 +96,64 @@ function Screenshot({ image, label, onOpen, priority = false }) {
   return (
     <button className="screenshot" onClick={() => onOpen(image)} aria-label={`放大查看：${label}`}>
       <img src={image.src} alt={image.alt} loading={priority ? "eager" : "lazy"} />
-      <span>點一下看完整畫面 <ArrowUpRight weight="bold" /></span>
+      <span>點一下看完整畫面 <ArrowUpRight weight="regular" /></span>
     </button>
   );
 }
 
 function VideoBanner() {
   const videoRef = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isEngaged, setIsEngaged] = useState(false);
+  const [shouldAutoplay] = useState(() => (
+    typeof window !== "undefined" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ));
 
-  const playInline = () => {
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !shouldAutoplay) return undefined;
+    video.play().catch(() => {});
+    return () => video.pause();
+  }, [shouldAutoplay]);
+
+  const engageFilm = () => {
+    if (isEngaged) return;
     const video = videoRef.current;
     if (!video) return;
-    setIsPlaying(true);
-    video.play().catch(() => setIsPlaying(false));
-  };
-
-  const resetPreview = () => {
-    const video = videoRef.current;
-    if (video) video.currentTime = 1;
-    setIsPlaying(false);
+    video.currentTime = 0;
+    setIsEngaged(true);
+    video.play().catch(() => {});
   };
 
   return (
-    <section className={`video-banner${isPlaying ? " is-playing" : ""}`} aria-labelledby="hero-title">
+    <section className={`video-banner${isEngaged ? " is-engaged" : ""}`} aria-labelledby="hero-title">
       <video
         ref={videoRef}
         className="video-banner__media"
         src="/assets/snoots-product-film-web.m4v"
         poster="/assets/snoots-product-film-poster.jpg"
-        controls={isPlaying}
+        autoPlay={shouldAutoplay}
+        muted
+        loop
+        controls={isEngaged}
         playsInline
-        preload="metadata"
-        onPlay={() => setIsPlaying(true)}
-        onEnded={resetPreview}
+        preload="auto"
         aria-label="Snoots 產品介紹影片"
       >
         你的瀏覽器目前無法播放這支影片。
       </video>
 
-      <div className="video-banner__content">
-        <p className="eyebrow eyebrow--light"><PawPrint weight="fill" /> 給每一個想安心出門的你</p>
-        <h1 id="hero-title">先懂牠，<br />再一起出門。</h1>
+      <div className="video-banner__content" aria-hidden={isEngaged} inert={isEngaged}>
+        <p className="eyebrow eyebrow--light"><PawPrint weight="regular" /> 給每一個想安心出門的你</p>
+        <h1 id="hero-title">
+          <span>從暸解你的狗狗開始，</span>
+          <span>再一起探索世界。</span>
+        </h1>
         <p>Snoots 把分散的狗友、場地規則與活動資訊整理好，再用 AI 陪你判斷：這一次，適合牠嗎？</p>
         <div className="hero-actions">
-          <a className="button button--lime" href="#experience">探索 Snoots <ArrowRight weight="bold" /></a>
-          <button className="button button--white" onClick={playInline}><Play weight="fill" /> 觀看 15 秒介紹</button>
+          <a className="button button--lime" href="#experience">探索 Snoots <ArrowRight weight="regular" /></a>
+          <button className="button button--white" onClick={engageFilm} aria-label="觀看 15 秒 Snoots 產品介紹影片"><Play weight="fill" /> 觀看 15 秒介紹</button>
         </div>
       </div>
-
-      <button className="video-banner__play" onClick={playInline} aria-label="播放 Snoots 產品介紹影片">
-        <Play weight="fill" />
-      </button>
 
       <div className="video-banner__meta">
         <span>16:9 PRODUCT FILM</span>
@@ -167,7 +173,7 @@ function Problems() {
       <div className="problem-grid">
         {problems.map(({ icon: Icon, title, copy }) => (
           <article key={title}>
-            <Icon weight="duotone" />
+            <Icon weight="regular" />
             <div><h3>{title}</h3><p>{copy}</p></div>
           </article>
         ))}
@@ -181,9 +187,12 @@ function Journey({ onOpen }) {
     <section className="journey section-pad" id="experience">
       <div className="journey__intro">
         <p className="eyebrow">核心體驗</p>
-        <h2>從附近探索，<br />走到安心參加。</h2>
+        <h2>
+          <span>從附近探索，</span>
+          <span>走到安心參加。</span>
+        </h2>
         <p>Snoots 不以增加 App 停留時間為目標。我們想縮短的是「找到資訊」到「真的帶狗出門見面」的距離。</p>
-        <a className="text-link" href="#match">也可以先找到想認識的狗 <ArrowRight weight="bold" /></a>
+        <a className="text-link" href="#match">也可以先找到想認識的狗 <ArrowRight weight="regular" /></a>
       </div>
 
       <div className="journey__screen">
@@ -228,7 +237,7 @@ function SocialFlow({ onOpen }) {
     <section className="social-flow section-pad" id="match">
       <div className="social-flow__heading">
         <p className="eyebrow">另一條路</p>
-        <h2>先找到對的夥伴，<br />再一起開啟新的冒險。</h2>
+        <h2><span>先找到對的夥伴，</span><span>再一起開啟新的冒險。</span></h2>
         <p>滑卡只是認識的開始。Snoots 讓配對、聊天與發起狗聚成為一條完整的線下見面路徑。</p>
       </div>
 
@@ -248,23 +257,23 @@ function MoreFeatures({ onOpen }) {
   return (
     <section className="more-features section-pad" id="features">
       <div className="section-heading section-heading--split">
-        <div><p className="eyebrow">完整功能</p><h2>更多功能，<br />守護每一次出門。</h2></div>
+        <div><p className="eyebrow">完整功能</p><h2><span>更多功能，</span><span>守護每一次出門。</span></h2></div>
         <p>從社群裡看見真實互動，也把狗狗的個性與照護資訊放在同一個地方。需要幫助時，緊急照護仍然保持清楚、直接而且隨時可用。</p>
       </div>
 
       <div className="feature-grid">
         <article className="feature feature--community">
-          <div className="feature__copy"><ChatCircleDots weight="duotone" /><h3>社群動態</h3><p>看看附近狗友的日常，也能直接檢視或發起狗聚。</p></div>
+          <div className="feature__copy"><ChatCircleDots weight="regular" /><h3>社群動態</h3><p>看看附近狗友的日常，也能直接檢視或發起狗聚。</p></div>
           <Screenshot image={screenshots.community} label="社群動態" onOpen={onOpen} />
         </article>
 
         <article className="feature feature--profile">
-          <div className="feature__copy"><PawPrint weight="duotone" /><h3>狗狗檔案與照護重點</h3><p>把互動標籤、飲水、餵食、疫苗與健康備註整理在一起。</p></div>
+          <div className="feature__copy"><PawPrint weight="regular" /><h3>狗狗檔案與照護重點</h3><p>把互動標籤、飲水、餵食、疫苗與健康備註整理在一起。</p></div>
           <Screenshot image={screenshots.profile} label="狗狗檔案" onOpen={onOpen} />
         </article>
 
         <article className="feature feature--care">
-          <div className="feature__copy"><FirstAid weight="duotone" /><h3>緊急照護地圖層</h3><p>需要時立即看到夜間急診、電話、導航入口與最後確認時間。基本安全資訊不會被鎖在付費牆後面。</p></div>
+          <div className="feature__copy"><FirstAid weight="regular" /><h3>緊急照護地圖層</h3><p>需要時立即看到夜間急診、電話、導航入口與最後確認時間。基本安全資訊不會被鎖在付費牆後面。</p></div>
           <div className="care-facts">
             <span><CheckCircle weight="fill" /> 24 小時與夜間急診</span>
             <span><CheckCircle weight="fill" /> 距離、電話與導航</span>
@@ -280,14 +289,14 @@ function Trust() {
   return (
     <section className="trust section-pad" id="safety">
       <div className="trust__heading">
-        <Sparkle weight="duotone" />
+        <Sparkle weight="regular" />
         <div><p className="eyebrow">AI 的界線</p><h2>AI 是指引，<br />不是保證。</h2></div>
       </div>
       <p className="trust__lede">Snoots 的 AI 會把自家狗狗、活動方式與場地規則放在一起，給你能理解的建議；最後的判斷，仍然回到主人與現場資訊。</p>
       <div className="trust__rules">
-        <article><ShieldCheck weight="duotone" /><strong>不保證安全</strong><p>AI 不保證狗狗不會衝突，也不會自動核准報名。</p></article>
-        <article><FirstAid weight="duotone" /><strong>不做醫療診斷</strong><p>急診資訊幫助你採取行動，不取代合格獸醫的判斷。</p></article>
-        <article><PawPrint weight="duotone" /><strong>不憑品種猜個性</strong><p>建議只使用主人、主揪與已確認的場地資料。</p></article>
+        <article><ShieldCheck weight="regular" /><strong>不保證安全</strong><p>AI 不保證狗狗不會衝突，也不會自動核准報名。</p></article>
+        <article><FirstAid weight="regular" /><strong>不做醫療診斷</strong><p>急診資訊幫助你採取行動，不取代合格獸醫的判斷。</p></article>
+        <article><PawPrint weight="regular" /><strong>不憑品種猜個性</strong><p>建議只使用主人、主揪與已確認的場地資料。</p></article>
       </div>
     </section>
   );
@@ -300,7 +309,7 @@ function Footer() {
         <p className="eyebrow">準備好，一起出門</p>
         <h2>把線上的認識，<br />帶到真實世界。</h2>
         <p>從附近的一次散步開始，陪牠找到真正適合的新朋友。</p>
-        <a className="button button--dark" href="#top">探索 Snoots <ArrowUpRight weight="bold" /></a>
+        <a className="button button--dark" href="#top">探索 Snoots <ArrowUpRight weight="regular" /></a>
       </div>
       <div className="footer-cta__bottom"><Brand /><span>© 2026 Snoots!　給每一個想安心出門的你。</span></div>
     </footer>
@@ -320,7 +329,7 @@ function Modal({ image, onClose }) {
   return (
     <div className="modal modal--image" role="dialog" aria-modal="true" onMouseDown={onClose}>
       <div className="modal__panel" onMouseDown={(event) => event.stopPropagation()}>
-        <button className="modal__close" onClick={onClose} aria-label="關閉"><X weight="bold" /></button>
+        <button className="modal__close" onClick={onClose} aria-label="關閉"><X weight="regular" /></button>
         <img src={image.src} alt={image.alt} />
       </div>
     </div>
@@ -341,7 +350,7 @@ export function App() {
           <a href="#features">功能</a>
           <a href="#safety">安全界線</a>
         </nav>
-        <a className="button button--lime button--small" href="#download">下載 iOS App <ArrowUpRight weight="bold" /></a>
+        <a className="button button--lime button--small" href="#download">下載 iOS App <ArrowUpRight weight="regular" /></a>
       </header>
 
       <main>
