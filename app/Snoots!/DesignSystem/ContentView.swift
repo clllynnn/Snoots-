@@ -1729,12 +1729,13 @@ private struct NearbyMap: View {
     @Binding var region: NearbyRegion
     let language: SnootsLanguage
     @State private var position: MapCameraPosition = NearbyRegion.currentLocation.cameraPosition
+    @State private var visibleRegion = NearbyRegion.currentLocation.mapRegion
 
     var body: some View {
         Map(position: $position, interactionModes: [.pan, .zoom]) {
             UserAnnotation()
             ForEach(markers) { marker in
-                Annotation(marker.name, coordinate: marker.coordinate, anchor: .bottom) {
+                Annotation("", coordinate: marker.coordinate, anchor: .bottom) {
                     Button {
                         selectedPlaceID = marker.placeIDs.first
                     } label: {
@@ -1749,6 +1750,7 @@ private struct NearbyMap: View {
                                     .overlay(Capsule().stroke(SnootsPalette.ink, lineWidth: 1))
                             }
                             NearbyMapPin(
+                                name: marker.name,
                                 count: marker.placeIDs.count,
                                 isSelected: marker.placeIDs.contains(selectedPlaceID ?? ""),
                                 isUserCreated: marker.isUserCreated
@@ -1761,33 +1763,92 @@ private struct NearbyMap: View {
             }
         }
         .mapStyle(.standard(elevation: .realistic))
-        .overlay(alignment: .topTrailing) {
-            Button {
-                region = .currentLocation
-            } label: {
-                Image(systemName: "location.fill")
-                    .font(.snootsUI(16, weight: .bold))
-                    .foregroundStyle(SnootsPalette.ink)
-                    .frame(width: 44, height: 44)
-                    .background(SnootsPalette.surface, in: Circle())
-                    .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-            }
-                .buttonStyle(.plain)
-                .padding(14)
-                .accessibilityLabel(language.text("Use current location", "使用目前位置"))
+        .accessibilityLabel(language.text("Nearby results map", "附近結果地圖"))
+        .onMapCameraChange(frequency: .continuous) { context in
+            visibleRegion = context.region
         }
-        .onAppear { position = region.cameraPosition }
+        .overlay(alignment: .topTrailing) {
+            VStack(spacing: 10) {
+                Button {
+                    region = .currentLocation
+                    withAnimation(.snappy) {
+                        position = NearbyRegion.currentLocation.cameraPosition
+                    }
+                } label: {
+                    Image(systemName: "location.fill")
+                        .font(.snootsUI(16, weight: .bold))
+                        .foregroundStyle(SnootsPalette.ink)
+                        .frame(width: 44, height: 44)
+                        .background(SnootsPalette.surface, in: Circle())
+                        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(language.text("Use current location", "使用目前位置"))
+
+                VStack(spacing: 0) {
+                    mapZoomButton(systemName: "plus", label: language.text("Zoom in", "放大地圖")) {
+                        zoomMap(by: 0.55)
+                    }
+
+                    Divider()
+                        .frame(width: 28)
+
+                    mapZoomButton(systemName: "minus", label: language.text("Zoom out", "縮小地圖")) {
+                        zoomMap(by: 1.8)
+                    }
+                }
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(SnootsPalette.divider, lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+            }
+            .padding(14)
+        }
+        .onAppear {
+            visibleRegion = region.mapRegion
+            position = region.cameraPosition
+        }
         .onChange(of: region) { _, newRegion in
+            visibleRegion = newRegion.mapRegion
             withAnimation(.snappy) {
                 position = newRegion.cameraPosition
             }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(language.text("Nearby results map", "附近結果地圖"))
+    }
+
+    private func mapZoomButton(
+        systemName: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.snootsUI(16, weight: .bold))
+                .foregroundStyle(SnootsPalette.ink)
+                .frame(width: 44, height: 40)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func zoomMap(by factor: Double) {
+        let latitudeDelta = min(max(visibleRegion.span.latitudeDelta * factor, 0.002), 120)
+        let longitudeDelta = min(max(visibleRegion.span.longitudeDelta * factor, 0.002), 180)
+        let zoomedRegion = MKCoordinateRegion(
+            center: visibleRegion.center,
+            span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
+        )
+        visibleRegion = zoomedRegion
+        withAnimation(.snappy) {
+            position = .region(zoomedRegion)
+        }
     }
 }
 
 private struct NearbyMapPin: View {
+    let name: String
     let count: Int
     let isSelected: Bool
     let isUserCreated: Bool
@@ -1795,62 +1856,42 @@ private struct NearbyMapPin: View {
     var body: some View {
         Group {
             if count == 1 {
-                ZStack(alignment: .top) {
-                    NearbyMapPinShape()
-                        .fill(SnootsPalette.surface.opacity(0.96))
-                        .overlay {
-                            NearbyMapPinShape()
-                                .stroke(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary, lineWidth: 3)
-                        }
-
-                    Circle()
-                        .fill(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary)
-                        .frame(width: isSelected ? 14 : 12, height: isSelected ? 14 : 12)
-                        .padding(.top, isSelected ? 10 : 9)
-                }
-                    .frame(width: isSelected ? 42 : 36, height: isSelected ? 54 : 46)
-                    .shadow(color: .black.opacity(isSelected ? 0.24 : 0.16), radius: isSelected ? 8 : 5, y: isSelected ? 5 : 3)
-            } else {
-                Text("\(count)")
-                    .font(.snootsUI(15, weight: .bold))
+                Text(name)
+                    .font(.snootsUI(12, weight: isSelected ? .bold : .semibold))
                     .foregroundStyle(SnootsPalette.ink)
-                    .frame(width: isSelected ? 54 : 46, height: isSelected ? 54 : 46)
-                    .background(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
-                    .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
-                    .shadow(color: .black.opacity(isSelected ? 0.18 : 0.10), radius: isSelected ? 10 : 6, y: isSelected ? 6 : 3)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: 156, minHeight: 34)
+                    .background(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        if !isSelected && !isUserCreated {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(SnootsPalette.divider, lineWidth: 1)
+                        }
+                    }
+                    .shadow(color: .black.opacity(isSelected ? 0.18 : 0.12), radius: isSelected ? 8 : 5, y: isSelected ? 5 : 3)
+                    .scaleEffect(isSelected ? 1.06 : 1)
+            } else {
+                Text(name)
+                    .font(.snootsUI(12, weight: .bold))
+                    .foregroundStyle(SnootsPalette.ink)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: 156, minHeight: 34)
+                    .background(isSelected ? SnootsPalette.lime : SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        if !isSelected {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(SnootsPalette.primary.opacity(0.6), lineWidth: 1)
+                        }
+                    }
+                    .shadow(color: .black.opacity(isSelected ? 0.18 : 0.12), radius: isSelected ? 8 : 5, y: isSelected ? 5 : 3)
+                    .scaleEffect(isSelected ? 1.06 : 1)
             }
         }
             .offset(y: isSelected ? -6 : 0)
             .animation(.snappy, value: isSelected)
-    }
-}
-
-private struct NearbyMapPinShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
-        path.addCurve(
-            to: CGPoint(x: rect.minX, y: rect.height * 0.43),
-            control1: CGPoint(x: rect.width * 0.39, y: rect.height * 0.78),
-            control2: CGPoint(x: rect.minX, y: rect.height * 0.68)
-        )
-        path.addCurve(
-            to: CGPoint(x: rect.midX, y: rect.minY),
-            control1: CGPoint(x: rect.minX, y: rect.height * 0.19),
-            control2: CGPoint(x: rect.width * 0.22, y: rect.minY)
-        )
-        path.addCurve(
-            to: CGPoint(x: rect.maxX, y: rect.height * 0.43),
-            control1: CGPoint(x: rect.width * 0.78, y: rect.minY),
-            control2: CGPoint(x: rect.maxX, y: rect.height * 0.19)
-        )
-        path.addCurve(
-            to: CGPoint(x: rect.midX, y: rect.maxY),
-            control1: CGPoint(x: rect.maxX, y: rect.height * 0.68),
-            control2: CGPoint(x: rect.width * 0.61, y: rect.height * 0.78)
-        )
-        path.closeSubpath()
-        return path
     }
 }
 
