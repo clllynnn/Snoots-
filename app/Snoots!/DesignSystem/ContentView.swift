@@ -1302,11 +1302,13 @@ struct MapsView: View {
             candidates = store.allPlaces
         }
 
-        return candidates.filter { place in
-            (selectedCategory.map { place.nearbyCategory == $0 } ?? true)
-                && selectedRegion.matches(place)
-                && localMeetupMatches(place)
-        }
+        return candidates
+            .filter { place in
+                (selectedCategory.map { place.nearbyCategory == $0 } ?? true)
+                    && selectedRegion.matches(place)
+                    && localMeetupMatches(place)
+            }
+            .sorted(by: nearbyDistanceOrder)
     }
 
     private var availableFilterOptions: [MapFilterOption] {
@@ -1441,6 +1443,15 @@ struct MapsView: View {
             default: true
             }
         }
+    }
+
+    private func nearbyDistanceOrder(_ lhs: Place, _ rhs: Place) -> Bool {
+        let lhsDistance = lhs.distanceMeters ?? Double(lhs.walkMinutes) * 80
+        let rhsDistance = rhs.distanceMeters ?? Double(rhs.walkMinutes) * 80
+        if lhsDistance == rhsDistance {
+            return lhs.id < rhs.id
+        }
+        return lhsDistance < rhsDistance
     }
 }
 
@@ -1754,6 +1765,12 @@ private struct NearbyMap: View {
         dynamicMarkers(for: places, in: visibleRegion)
     }
 
+    private var placesFocusSignature: [String] {
+        places
+            .sorted(by: placeSortOrder)
+            .map(\.id)
+    }
+
     var body: some View {
         Map(position: $position, interactionModes: [.pan, .zoom]) {
             UserAnnotation()
@@ -1835,14 +1852,25 @@ private struct NearbyMap: View {
             .padding(14)
         }
         .onAppear {
-            visibleRegion = region.mapRegion
-            position = region.cameraPosition
+            if places.isEmpty {
+                visibleRegion = region.mapRegion
+                position = region.cameraPosition
+            } else {
+                focusNearestResult(animated: false)
+            }
         }
         .onChange(of: region) { _, newRegion in
-            visibleRegion = newRegion.mapRegion
-            withAnimation(.snappy) {
-                position = newRegion.cameraPosition
+            if places.isEmpty {
+                visibleRegion = newRegion.mapRegion
+                withAnimation(.snappy) {
+                    position = newRegion.cameraPosition
+                }
+            } else {
+                focusNearestResult(animated: true)
             }
+        }
+        .onChange(of: placesFocusSignature) { _, _ in
+            focusNearestResult(animated: true)
         }
     }
 
@@ -1881,6 +1909,25 @@ private struct NearbyMap: View {
         }
     }
 
+    private func focusNearestResult(animated: Bool) {
+        guard let nearestPlace = places.sorted(by: placeSortOrder).first else { return }
+        let focusedRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: nearestPlace.latitude,
+                longitude: nearestPlace.longitude
+            ),
+            span: MKCoordinateSpan(latitudeDelta: 0.022, longitudeDelta: 0.022)
+        )
+        visibleRegion = focusedRegion
+        if animated {
+            withAnimation(.snappy) {
+                position = .region(focusedRegion)
+            }
+        } else {
+            position = .region(focusedRegion)
+        }
+    }
+
     private func dynamicMarkers(
         for places: [Place],
         in mapRegion: MKCoordinateRegion
@@ -1894,11 +1941,13 @@ private struct NearbyMap: View {
                 .sorted(by: markerDisplayOrder)
         }
 
+        let sortedPlaces = places.sorted(by: placeSortOrder)
+        guard let nearestPlace = sortedPlaces.first else { return [] }
         let latitudeThreshold = max(mapRegion.span.latitudeDelta * 0.16, 0.00025)
         let longitudeThreshold = max(mapRegion.span.longitudeDelta * 0.24, 0.00025)
         var groups: [[Place]] = []
 
-        for place in places.sorted(by: placeSortOrder) {
+        for place in sortedPlaces.dropFirst() {
             if let groupIndex = groups.firstIndex(where: { group in
                 let latitude = group.map(\.latitude).reduce(0, +) / Double(group.count)
                 let longitude = group.map(\.longitude).reduce(0, +) / Double(group.count)
@@ -1911,14 +1960,15 @@ private struct NearbyMap: View {
             }
         }
 
-        return groups
+        var clusteredMarkers = groups
             .map { group in
                 if group.count == 1, let place = group.first {
                     return NearbyMapMarker(place: place, language: language)
                 }
                 return NearbyMapMarker(cluster: group, language: language)
             }
-            .sorted(by: markerDisplayOrder)
+        clusteredMarkers.append(NearbyMapMarker(place: nearestPlace, language: language))
+        return clusteredMarkers.sorted(by: markerDisplayOrder)
     }
 
     private func placeSortOrder(_ lhs: Place, _ rhs: Place) -> Bool {
