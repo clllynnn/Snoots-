@@ -30,11 +30,17 @@ struct Snoots_App: App {
                             isShowingLaunchScreen = false
                         }
                 } else {
-                    ContentView(
-                        store: store,
-                        language: displayLanguage,
-                        displayLanguageRawValue: $displayLanguageRawValue
-                    )
+                    Group {
+                        if store.hasCompletedOnboarding {
+                            ContentView(
+                                store: store,
+                                language: displayLanguage,
+                                displayLanguageRawValue: $displayLanguageRawValue
+                            )
+                        } else {
+                            OnboardingFlow(store: store, language: displayLanguage)
+                        }
+                    }
                     .environment(\.locale, displayLanguage.locale)
                     .task {
                         await store.mapPlaces.refreshFromRemoteIfConfigured()

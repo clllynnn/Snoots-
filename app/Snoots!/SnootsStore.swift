@@ -8,10 +8,14 @@ final class SnootsStore {
     var pet = PetProfile(
         name: "Nori",
         imageName: "Nori",
+        age: "2 years",
+        size: "Medium",
+        socialStyle: "Slow to warm up",
         summary: "A thoughtful walker who prefers a little space before joining in.",
         traits: ["Slow introductions", "Adult dogs", "Long lead"],
         healthStatus: "Vaccinations and behavior card verified"
     )
+    var hasCompletedOnboarding = false
     let feedingMonitor = FeedingMonitor(
         isOnline: true,
         lastFedHoursAgo: 3,
@@ -128,6 +132,27 @@ final class SnootsStore {
         pet.name = petName
         pet.summary = summary
         pet.traits = traits
+    }
+
+    func completeOnboarding(
+        ownerName: String,
+        neighborhood: String,
+        petName: String,
+        petAge: String,
+        petSize: String,
+        socialStyle: String,
+        traits: [String]
+    ) {
+        profile.name = ownerName
+        profile.neighborhood = neighborhood
+        profile.petName = petName
+        pet.name = petName
+        pet.age = petAge
+        pet.size = petSize
+        pet.socialStyle = socialStyle
+        pet.traits = traits
+        pet.summary = "\(petName) is \(socialStyle.lowercased()) and is most comfortable with \(traits.joined(separator: ", ").lowercased())."
+        hasCompletedOnboarding = true
     }
 
     func createMatchChat() {
@@ -264,6 +289,9 @@ struct ParentProfile {
 struct PetProfile {
     var name: String
     let imageName: String
+    var age: String
+    var size: String
+    var socialStyle: String
     var summary: String
     var traits: [String]
     let healthStatus: String
