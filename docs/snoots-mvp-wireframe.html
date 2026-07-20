@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Snoots! 一日 MVP 團隊審閱用互動原型">
-  <title>Snoots! MVP 團隊審閱原型</title>
+  <meta name="description" content="Snoots! 清單優先 MVP 互動原型與畫面回饋工具">
+  <title>Snoots! MVP 互動審稿原型</title>
   <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,701 +12,1408 @@
   <style>
     :root {
       color-scheme: light;
-      --canvas: #fffffc;
+      --canvas: #fffef9;
       --surface: #ffffff;
-      --ink: #14141a;
-      --secondary: #666673;
+      --surface-soft: #f7f7f2;
+      --ink: #17171d;
+      --secondary: #686873;
       --pink: #ff4085;
+      --pink-dark: #d91f68;
       --soft-pink: #ffe3f0;
       --lilac: #b885ff;
       --deep-lilac: #4a2e7a;
       --sky: #52adff;
-      --care-blue: #146ee0;
-      --care-tint: #e3f0ff;
+      --sky-soft: #e3f2ff;
       --lime: #c7ff3d;
       --butter: #ffe891;
-      --alert: #b31c40;
-      --line: #e8e8e3;
-      --radius-card: 20px;
-      --radius-small: 14px;
-      --shadow: 0 8px 22px rgba(20, 20, 26, .08);
+      --green: #187b54;
+      --red: #b3284c;
+      --line: #e5e5df;
+      --radius-large: 24px;
+      --radius-card: 18px;
+      --radius-small: 12px;
+      --shadow: 0 10px 28px rgba(20, 20, 26, .09);
+      --phone-width: 390px;
     }
 
     * { box-sizing: border-box; }
 
+    html { min-width: 320px; }
+
     body {
       margin: 0;
       min-height: 100vh;
-      background: #f3f3ee;
+      background: #efefe9;
       color: var(--ink);
-      font-family: "Inter", system-ui, sans-serif;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "PingFang TC", sans-serif;
       -webkit-font-smoothing: antialiased;
     }
 
-    button, a { font: inherit; }
+    button, input, textarea { font: inherit; }
     button { color: inherit; }
-    button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible {
+    button, [role="button"] { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, textarea:focus-visible, [contenteditable="true"]:focus-visible {
       outline: 3px solid var(--sky);
       outline-offset: 3px;
     }
 
-    .review-shell {
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2, h3 { font-family: "Nunito", system-ui, sans-serif; }
+
+    .review-app {
       min-height: 100vh;
       display: grid;
-      grid-template-columns: minmax(310px, 430px) minmax(390px, 1fr);
+      grid-template-columns: 292px minmax(430px, 1fr) 370px;
     }
 
-    .review-panel {
+    .workspace-nav,
+    .feedback-panel {
+      height: 100vh;
       position: sticky;
       top: 0;
-      height: 100vh;
-      overflow: auto;
-      padding: 42px clamp(24px, 4vw, 54px);
+      overflow-y: auto;
       background: var(--surface);
+    }
+
+    .workspace-nav {
+      z-index: 5;
+      padding: 30px 24px;
       border-right: 1px solid var(--line);
     }
 
-    .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 16px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: .08em;
-      text-transform: uppercase;
+    .feedback-panel {
+      z-index: 5;
+      padding: 28px 24px 36px;
+      border-left: 1px solid var(--line);
     }
 
-    .eyebrow::before {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--lime);
-      border: 2px solid var(--ink);
-      content: "";
-    }
+    .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .brand-row h1 { margin-bottom: 0; font-size: 36px; line-height: 1; font-weight: 900; }
+    .version-badge { padding: 6px 9px; border-radius: 999px; background: var(--lime); border: 1px solid var(--ink); font-size: 10px; font-weight: 800; }
+    .workspace-lede { margin: 16px 0 22px; color: var(--secondary); font-size: 13px; line-height: 1.6; }
 
-    h1, h2, h3, p { margin-top: 0; }
-    h1, h2, h3 { font-family: "Nunito", system-ui, sans-serif; }
-    h1 { margin-bottom: 10px; font-size: clamp(36px, 5vw, 54px); line-height: .98; font-weight: 900; }
-    .review-lede { max-width: 36ch; color: var(--secondary); line-height: 1.6; }
+    .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 5px; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 15px; }
+    .mode-button { min-height: 42px; padding: 0 10px; border: 0; border-radius: 11px; background: transparent; cursor: pointer; font-size: 12px; font-weight: 800; }
+    .mode-button.is-active { background: var(--ink); color: white; box-shadow: 0 3px 10px rgba(20,20,26,.12); }
+    .mode-explainer { margin: 9px 2px 0; min-height: 34px; color: var(--secondary); font-size: 11px; line-height: 1.5; }
 
-    .flow-callout {
-      margin: 28px 0;
-      padding: 18px;
-      background: var(--lime);
-      border: 2px solid var(--ink);
-      border-radius: var(--radius-card);
-    }
+    .workspace-section { margin-top: 24px; }
+    .workspace-section h2 { margin-bottom: 10px; font-size: 15px; }
+    .scene-list { display: grid; gap: 8px; }
+    .scene-button { width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); cursor: pointer; text-align: left; }
+    .scene-button:hover { border-color: var(--ink); }
+    .scene-button.is-active { background: var(--soft-pink); border-color: var(--pink); }
+    .scene-button strong { font-size: 12px; }
+    .scene-button span { color: var(--secondary); font-size: 10px; }
 
-    .flow-callout strong { display: block; margin-bottom: 6px; font-family: "Nunito"; font-size: 20px; }
-    .flow-callout p { margin-bottom: 0; font-size: 14px; line-height: 1.55; }
+    .decision-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+    .decision-list li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; color: var(--secondary); font-size: 11px; line-height: 1.45; }
+    .decision-list li::before { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; background: var(--lime); color: var(--ink); content: "✓"; font-size: 10px; font-weight: 900; }
 
-    .scenario-list { display: grid; gap: 10px; margin: 22px 0 30px; }
-    .scenario-button {
-      width: 100%;
-      min-height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 14px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: var(--surface);
-      cursor: pointer;
-      text-align: left;
-    }
-    .scenario-button:hover { border-color: var(--ink); }
-    .scenario-button.is-active { background: var(--soft-pink); border-color: var(--pink); }
-    .scenario-button span:last-child { font-size: 12px; color: var(--secondary); }
+    .file-card { padding: 13px; border-radius: 14px; background: var(--sky-soft); border: 1px solid #bcdcff; }
+    .file-card strong { display: block; margin-bottom: 5px; font-size: 12px; }
+    .file-card p { margin-bottom: 10px; color: #315d83; font-size: 10px; line-height: 1.45; }
+    .file-status { display: flex; align-items: center; gap: 6px; margin-top: 9px; color: var(--secondary); font-size: 10px; }
+    .file-status::before { width: 8px; height: 8px; border-radius: 50%; background: #aaa; content: ""; }
+    .file-status.is-linked::before { background: var(--green); }
 
-    .review-group { margin-top: 24px; }
-    .review-group h2 { margin-bottom: 10px; font-size: 18px; }
-    .review-group ul { margin: 0; padding-left: 19px; color: var(--secondary); font-size: 14px; line-height: 1.65; }
-    .review-group li + li { margin-top: 5px; }
-    .editable-note { border-radius: 8px; }
+    .tiny-button { min-height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); cursor: pointer; font-size: 11px; font-weight: 700; }
+    .tiny-button:hover { border-color: var(--ink); }
 
-    .prototype-stage {
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 34px;
-      overflow: hidden;
-    }
+    .prototype-stage { min-height: 100vh; display: grid; place-items: center; padding: 32px; overflow: hidden; }
 
     .phone {
-      width: min(390px, calc(100vw - 36px));
-      height: min(844px, calc(100vh - 52px));
-      min-height: 650px;
+      width: min(var(--phone-width), calc(100vw - 40px));
+      height: min(844px, calc(100vh - 42px));
+      min-height: 680px;
       position: relative;
       overflow: hidden;
       background: var(--canvas);
       border: 8px solid var(--ink);
       border-radius: 46px;
-      box-shadow: 0 26px 70px rgba(20, 20, 26, .22);
+      box-shadow: 0 28px 74px rgba(20, 20, 26, .22);
     }
 
-    .phone::before {
-      position: absolute;
-      z-index: 20;
-      top: 10px;
-      left: 50%;
-      width: 112px;
-      height: 28px;
-      border-radius: 20px;
-      background: var(--ink);
-      transform: translateX(-50%);
-      content: "";
-    }
+    .phone::before { position: absolute; z-index: 40; top: 9px; left: 50%; width: 112px; height: 28px; border-radius: 20px; background: var(--ink); transform: translateX(-50%); content: ""; }
 
-    .app-screen {
-      display: none;
-      height: 100%;
-      overflow-y: auto;
-      padding: 48px 18px 98px;
-      scrollbar-width: none;
-    }
+    .app-screen { display: none; height: 100%; overflow-y: auto; padding: 48px 16px 116px; scrollbar-width: none; }
     .app-screen::-webkit-scrollbar { display: none; }
     .app-screen.is-visible { display: block; }
 
-    .screen-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
-    .screen-header h2 { margin-bottom: 2px; font-size: 34px; line-height: 1; }
-    .screen-header p { margin-bottom: 0; color: var(--secondary); font-size: 13px; }
+    .screen-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+    .screen-header h2 { margin-bottom: 2px; font-size: 31px; line-height: 1; }
+    .screen-header p { margin-bottom: 0; color: var(--secondary); font-size: 11px; line-height: 1.45; }
+    .avatar-button { width: 42px; height: 42px; flex: 0 0 auto; padding: 0; overflow: hidden; border: 2px solid var(--surface); border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 2px var(--pink); cursor: pointer; }
+    .avatar-button img { width: 100%; height: 100%; object-fit: cover; }
+    .mini-avatars .avatar-button { width: 27px; height: 27px; margin-left: -7px; border: 2px solid white; box-shadow: none; }
 
-    .icon-button {
-      width: 44px;
-      height: 44px;
-      flex: 0 0 auto;
-      display: grid;
-      place-items: center;
-      border: 0;
-      border-radius: 50%;
-      background: var(--surface);
-      cursor: pointer;
-    }
+    .content-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 10px; padding: 4px; border-radius: 14px; background: var(--surface-soft); }
+    .content-tab { min-height: 40px; border: 0; border-radius: 11px; background: transparent; cursor: pointer; font-size: 11px; font-weight: 800; }
+    .content-tab.is-active { background: var(--surface); color: var(--pink-dark); box-shadow: 0 2px 8px rgba(20,20,26,.08); }
 
-    .back-button {
-      min-height: 44px;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin: -4px 0 10px;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .filter-row, .chip-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
-    .filter-row { margin-bottom: 12px; }
-    .filter-chip, .info-chip {
-      white-space: nowrap;
-      border: 0;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .filter-chip { min-height: 40px; padding: 0 14px; background: var(--surface); cursor: pointer; }
-    .filter-chip.is-active { background: var(--ink); color: white; }
-    .info-chip { padding: 7px 10px; background: var(--butter); }
+    .filter-row, .chip-row { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+    .filter-row { margin-bottom: 10px; }
+    .filter-row::-webkit-scrollbar, .chip-row::-webkit-scrollbar { display: none; }
+    .filter-chip, .info-chip { flex: 0 0 auto; white-space: nowrap; border-radius: 999px; font-size: 10px; font-weight: 700; }
+    .filter-chip { min-height: 36px; padding: 0 12px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
+    .filter-chip.is-active { background: var(--ink); border-color: var(--ink); color: white; }
+    .info-chip { padding: 6px 9px; background: var(--butter); }
     .info-chip.pink { background: var(--soft-pink); }
-    .info-chip.blue { background: var(--care-tint); color: #0a4da6; }
+    .info-chip.blue { background: var(--sky-soft); color: #165b95; }
+    .info-chip.green { background: #ddf7e9; color: var(--green); }
 
-    .map {
-      height: 355px;
-      position: relative;
-      overflow: hidden;
-      border-radius: var(--radius-card);
-      background: var(--lime);
-      border: 1px solid rgba(20,20,26,.12);
-    }
+    .compact-map { height: 148px; position: relative; overflow: hidden; margin-bottom: 12px; border: 1px solid rgba(20,20,26,.12); border-radius: var(--radius-card); background: var(--lime); transition: height .25s ease; }
+    .compact-map.is-expanded { height: 310px; }
     .map-road { position: absolute; background: var(--surface); border: 1px solid rgba(20,20,26,.08); }
-    .road-a { width: 500px; height: 34px; top: 92px; left: -70px; transform: rotate(18deg); }
-    .road-b { width: 480px; height: 30px; top: 208px; left: -42px; transform: rotate(-24deg); }
-    .road-c { width: 28px; height: 470px; top: -40px; left: 215px; transform: rotate(9deg); }
-    .park-label { position: absolute; top: 145px; left: 24px; font-family: "Nunito"; font-size: 18px; font-weight: 800; transform: rotate(-7deg); }
+    .road-a { width: 500px; height: 30px; top: 45px; left: -70px; transform: rotate(15deg); }
+    .road-b { width: 470px; height: 26px; top: 112px; left: -36px; transform: rotate(-19deg); }
+    .road-c { width: 24px; height: 350px; top: -75px; left: 230px; transform: rotate(8deg); }
+    .park-label { position: absolute; top: 82px; left: 22px; font-family: "Nunito"; font-size: 13px; font-weight: 900; transform: rotate(-5deg); }
+    .map-pin { width: 35px; height: 35px; position: absolute; z-index: 3; display: grid; place-items: center; border: 2px solid white; border-radius: 50% 50% 50% 7px; box-shadow: 0 4px 10px rgba(20,20,26,.18); transform: rotate(-45deg); }
+    .map-pin span { transform: rotate(45deg); color: white; font-size: 9px; font-weight: 900; }
+    .map-pin.event-a { top: 31px; left: 142px; background: var(--pink); }
+    .map-pin.event-b { top: 91px; left: 280px; background: var(--pink); }
+    .map-pin.event-c { top: 90px; left: 76px; background: var(--pink); }
+    .map-pin.place-a { top: 25px; left: 284px; background: var(--sky); }
+    .map-pin.place-b { top: 91px; left: 188px; background: var(--sky); }
+    .map-pin.care-a { top: 26px; left: 58px; background: #146ee0; }
+    .map-control { position: absolute; z-index: 5; right: 9px; bottom: 9px; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.96); cursor: pointer; font-size: 9px; font-weight: 800; }
 
-    .map-pin {
-      width: 50px;
-      height: 50px;
-      position: absolute;
-      z-index: 3;
-      display: grid;
-      place-items: center;
-      border: 3px solid var(--surface);
-      border-radius: 50% 50% 50% 8px;
-      box-shadow: 0 5px 12px rgba(20,20,26,.2);
-      transform: rotate(-45deg);
-      cursor: pointer;
-    }
-    .map-pin span { transform: rotate(45deg); font-size: 11px; font-weight: 800; }
-    .map-pin.event { top: 96px; left: 152px; background: var(--pink); color: white; }
-    .map-pin.place { top: 210px; left: 262px; background: var(--sky); color: white; }
-    .map-pin.care { top: 54px; left: 280px; background: var(--care-blue); color: white; }
-    .map-pin.secondary { top: 252px; left: 74px; background: var(--pink); color: white; }
-    .map-pin[hidden] { display: none; }
+    .list-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 2px 2px 9px; }
+    .list-heading h3 { margin-bottom: 0; font-size: 17px; }
+    .list-heading span { color: var(--secondary); font-size: 9px; }
 
-    .map-legend { position: absolute; right: 12px; bottom: 12px; padding: 9px 11px; border-radius: 12px; background: rgba(255,255,255,.94); font-size: 11px; font-weight: 700; }
-    .legend-dot { width: 8px; height: 8px; display: inline-block; margin-right: 4px; border-radius: 50%; background: var(--pink); }
+    .listing-view { display: none; }
+    .listing-view.is-visible { display: block; }
+    .listing-stack { display: grid; gap: 10px; }
+    .place-category-row { display: flex; gap: 7px; margin: 0 0 10px; overflow-x: auto; scrollbar-width: none; }
+    .place-category-row::-webkit-scrollbar { display: none; }
 
-    .preview-card, .card {
-      margin-top: 12px;
-      padding: 15px;
-      border-radius: var(--radius-card);
-      background: var(--surface);
-      box-shadow: var(--shadow);
-    }
-    .preview-card { display: none; }
-    .preview-card.is-visible { display: block; }
-    .preview-top { display: flex; justify-content: space-between; gap: 12px; }
-    .preview-top h3 { margin-bottom: 4px; font-size: 19px; line-height: 1.15; }
-    .preview-top p { margin-bottom: 0; color: var(--secondary); font-size: 12px; }
-    .status-badge { height: fit-content; padding: 7px 9px; border-radius: 999px; background: var(--lime); font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .activity-card, .place-card, .care-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); box-shadow: 0 4px 14px rgba(20,20,26,.05); }
+    .activity-card { display: grid; grid-template-columns: 86px 1fr; min-height: 146px; cursor: pointer; }
+    .activity-card:hover { border-color: var(--pink); }
+    .activity-card.is-selected { border: 2px solid var(--pink); box-shadow: 0 0 0 3px var(--soft-pink); }
+    .activity-date { display: flex; flex-direction: column; justify-content: space-between; padding: 14px 11px; background: var(--surface-soft); border-right: 1px solid var(--line); }
+    .activity-date strong { font-family: "Nunito"; font-size: 25px; line-height: .95; }
+    .activity-date span { color: var(--secondary); font-size: 9px; font-weight: 700; }
+    .activity-body { min-width: 0; padding: 13px 13px 12px; }
+    .activity-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .activity-title-row h3 { margin-bottom: 3px; font-size: 15px; line-height: 1.16; }
+    .activity-meta { margin-bottom: 8px; color: var(--secondary); font-size: 9px; line-height: 1.45; }
+    .select-activity { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 2px solid #c9c9c3; border-radius: 9px; background: white; cursor: pointer; font-size: 0; }
+    .select-activity::before { content: "✓"; opacity: 0; font-size: 14px; font-weight: 900; }
+    .activity-card.is-selected .select-activity { border-color: var(--pink); background: var(--pink); color: white; }
+    .activity-card.is-selected .select-activity::before { opacity: 1; }
+    .participant-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
+    .mini-avatars { display: flex; align-items: center; padding-left: 7px; }
+    .mini-avatar { width: 27px; height: 27px; margin-left: -7px; overflow: hidden; border: 2px solid white; border-radius: 50%; background: var(--soft-pink); }
+    .mini-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .participant-line span { color: var(--secondary); font-size: 9px; }
 
-    .primary-button, .secondary-button {
-      min-height: 48px;
-      width: 100%;
-      margin-top: 14px;
-      border-radius: 999px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-    .primary-button { border: 0; background: var(--pink); color: white; }
-    .primary-button.care { background: var(--care-blue); }
-    .primary-button.is-joined { background: var(--ink); }
-    .secondary-button { border: 1px solid var(--line); background: var(--surface); }
-    .text-button { min-height: 44px; border: 0; background: transparent; color: var(--deep-lilac); font-weight: 700; cursor: pointer; }
+    .place-card { display: grid; grid-template-columns: 104px 1fr; min-height: 154px; }
+    .place-card[hidden] { display: none; }
+    .place-card > img { width: 100%; height: 100%; object-fit: cover; }
+    .place-card-media { min-height: 100%; display: grid; place-items: center; background: var(--lime); font-family: "Nunito", sans-serif; font-size: 34px; font-weight: 900; }
+    .place-card-media.park { background: #dff5cb; }
+    .place-card-media.sport { background: var(--sky-soft); }
+    .place-card-media.zone { background: var(--soft-pink); }
+    .place-card-body { min-width: 0; padding: 13px; }
+    .place-card h3 { margin-bottom: 3px; font-size: 16px; }
+    .place-card p { margin-bottom: 9px; color: var(--secondary); font-size: 9px; line-height: 1.45; }
+    .place-card .chip-row { flex-wrap: wrap; overflow: visible; }
+    .place-card .info-chip { font-size: 9px; }
+    .card-link { min-height: 34px; margin-top: 9px; padding: 0; border: 0; background: transparent; color: var(--pink-dark); cursor: pointer; font-size: 10px; font-weight: 800; }
 
-    .hero-event {
-      min-height: 176px;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      padding: 18px;
-      border-radius: var(--radius-card);
-      background: var(--lime);
-      border: 2px solid var(--ink);
-    }
-    .hero-event .kicker { width: fit-content; margin-bottom: auto; padding: 7px 10px; border-radius: 999px; background: var(--surface); font-size: 11px; font-weight: 700; }
-    .hero-event h2 { max-width: 10ch; margin-bottom: 5px; font-size: 30px; line-height: .98; }
-    .hero-event p { margin-bottom: 0; font-size: 13px; }
+    .care-card { padding: 14px; background: var(--sky-soft); border-color: #bdddf8; }
+    .care-card h3 { margin-bottom: 4px; font-size: 16px; }
+    .care-card p { margin-bottom: 10px; color: #315d83; font-size: 10px; line-height: 1.5; }
 
-    .detail-section { margin-top: 20px; }
-    .detail-section h3 { margin-bottom: 10px; font-size: 19px; }
-    .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .fact { padding: 12px; border-radius: var(--radius-small); background: var(--surface); border: 1px solid var(--line); }
-    .fact span { display: block; margin-bottom: 4px; color: var(--secondary); font-size: 11px; }
-    .fact strong { font-size: 13px; }
+    .selection-dock { position: absolute; z-index: 25; right: 12px; bottom: 82px; left: 12px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid rgba(20,20,26,.12); border-radius: 18px; background: rgba(255,255,255,.96); box-shadow: 0 12px 30px rgba(20,20,26,.18); backdrop-filter: blur(14px); }
+    .selection-dock[hidden] { display: none; }
+    .selection-summary strong { display: block; margin-bottom: 2px; font-size: 11px; }
+    .selection-summary span { color: var(--secondary); font-size: 9px; }
+    .compare-button { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--pink); color: white; cursor: pointer; font-size: 11px; font-weight: 800; }
+    .compare-button:disabled { background: #d6d6d1; color: #777; cursor: not-allowed; }
 
-    .dog-row { display: flex; gap: 10px; }
-    .dog-avatar { width: 58px; text-align: center; font-size: 11px; font-weight: 600; }
-    .dog-avatar img { width: 52px; height: 52px; display: block; margin: 0 auto 5px; object-fit: cover; border: 3px solid var(--surface); border-radius: 50%; box-shadow: 0 0 0 2px var(--lime); }
-    .dog-avatar.more div { width: 52px; height: 52px; display: grid; place-items: center; margin: 0 auto 5px; border-radius: 50%; background: var(--soft-pink); font-weight: 800; }
-
-    .ai-card { padding: 16px; border-radius: var(--radius-card); background: var(--care-tint); border: 1px solid #b7d7ff; }
-    .ai-label { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 11px; font-weight: 700; color: #0a4da6; }
-    .ai-card h3 { margin-bottom: 7px; font-size: 22px; }
-    .ai-card p { margin-bottom: 10px; font-size: 13px; line-height: 1.55; }
-    .ai-card small { display: block; color: var(--secondary); font-size: 10px; line-height: 1.45; }
-    .ai-loading { display: flex; align-items: center; gap: 10px; min-height: 78px; }
-    .spinner { width: 22px; height: 22px; border: 3px solid #b7d7ff; border-top-color: var(--care-blue); border-radius: 50%; animation: spin .8s linear infinite; }
+    .back-button { min-height: 42px; display: inline-flex; align-items: center; gap: 5px; margin: -5px 0 8px; padding: 0; border: 0; background: transparent; cursor: pointer; font-size: 11px; font-weight: 800; }
+    .activity-detail-hero { min-height: 162px; display: flex; flex-direction: column; justify-content: space-between; padding: 17px; border-radius: var(--radius-card); background: var(--lime); border: 1px solid rgba(20,20,26,.12); }
+    .activity-detail-hero span { width: fit-content; padding: 6px 9px; border-radius: 999px; background: white; font-size: 9px; font-weight: 800; }
+    .activity-detail-hero h2 { max-width: 8ch; margin-bottom: 4px; font-size: 30px; line-height: 1; }
+    .activity-detail-hero p { margin-bottom: 0; color: #3f4c1b; font-size: 10px; font-weight: 700; }
+    .detail-summary { margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+    .detail-summary p { margin-bottom: 0; color: var(--secondary); font-size: 10px; line-height: 1.55; }
+    .detail-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .detail-fact { min-height: 70px; padding: 11px; border-radius: 14px; background: var(--surface-soft); }
+    .detail-fact span { display: block; margin-bottom: 4px; color: var(--secondary); font-size: 8px; }
+    .detail-fact strong { font-size: 10px; line-height: 1.4; }
+    .detail-participants { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); cursor: pointer; text-align: left; }
+    .detail-participants:disabled { cursor: not-allowed; opacity: .62; }
+    .detail-participants strong { display: block; margin-bottom: 2px; font-size: 10px; }
+    .detail-participants span { color: var(--secondary); font-size: 9px; }
+    .detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .detail-actions button { margin-top: 0; }
+    .detail-action-status { margin-top: 8px; padding: 9px 11px; border-radius: 12px; background: var(--soft-pink); color: var(--pink-dark); font-size: 9px; line-height: 1.45; }
+    .detail-cta { position: sticky; bottom: -100px; margin-top: 14px; padding-top: 10px; background: linear-gradient(transparent, var(--canvas) 24%); }
+    .compare-intro { padding: 14px; border-radius: var(--radius-card); background: var(--sky-soft); border: 1px solid #bdddf8; }
+    .compare-intro strong { display: block; margin-bottom: 4px; font-size: 12px; }
+    .compare-toolbar { margin-top: 12px; padding: 13px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-soft); }
+    .compare-toolbar-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+    .compare-toolbar-head strong { font-size: 12px; }
+    .compare-status { color: var(--secondary); font-size: 10px; line-height: 1.45; }
+    .compare-status strong { color: var(--ink); }
+    .compare-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 9px; }
+    .compare-actions #adjust-comparison { grid-column: 1 / -1; }
+    .compare-actions.has-history #adjust-comparison { grid-column: auto; }
+    .compare-actions .secondary-button { min-height: 38px; margin-top: 0; font-size: 10px; }
+    .compare-actions .secondary-button[hidden] { display: none; }
+    .ai-empty { margin-top: 12px; padding: 15px; border: 1px dashed var(--line); border-radius: var(--radius-card); background: var(--surface); color: var(--secondary); font-size: 10px; line-height: 1.5; }
+    .ai-empty strong { display: block; margin-bottom: 4px; color: var(--ink); font-size: 12px; }
+    .compare-intro p { margin-bottom: 0; color: #315d83; font-size: 10px; line-height: 1.5; }
+    .ai-loader { min-height: 170px; display: grid; place-items: center; text-align: center; }
+    .spinner { width: 28px; height: 28px; margin: 0 auto 12px; border: 3px solid #bdddf8; border-top-color: var(--pink); border-radius: 50%; animation: spin .75s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .result-stack { display: grid; gap: 11px; margin-top: 12px; }
+    .result-card { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+    .result-card.is-top { border: 2px solid var(--pink); }
+    .result-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .result-card h3 { margin-bottom: 3px; font-size: 16px; }
+    .result-card p { margin-bottom: 9px; color: var(--secondary); font-size: 10px; line-height: 1.5; }
+    .result-badge { flex: 0 0 auto; padding: 6px 8px; border-radius: 999px; background: var(--lime); font-size: 9px; font-weight: 900; }
+    .result-badge.caution { background: var(--butter); }
+    .reason-list { margin: 9px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+    .reason-list li { display: grid; grid-template-columns: 14px 1fr; gap: 6px; font-size: 9px; line-height: 1.4; }
+    .reason-list li::before { content: "✓"; color: var(--green); font-weight: 900; }
+    .participant-action { width: 100%; min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 11px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-soft); cursor: pointer; text-align: left; }
+    .participant-action strong { font-size: 10px; }
+    .participant-action span { color: var(--secondary); font-size: 9px; }
+    .ai-disclaimer { margin: 12px 2px 0; color: var(--secondary); font-size: 8px; line-height: 1.45; }
 
-    .match-photo { height: 330px; width: 100%; object-fit: cover; border-radius: var(--radius-card); }
-    .match-name { margin: -70px 12px 0; position: relative; padding: 14px; border-radius: 16px; background: rgba(255,255,255,.94); }
-    .match-name h2 { margin-bottom: 2px; font-size: 30px; }
-    .match-name p { margin-bottom: 0; color: var(--secondary); font-size: 12px; }
-    .match-actions { display: flex; justify-content: center; gap: 18px; margin: 22px 0; }
-    .round-action { width: 64px; height: 64px; border: 0; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow); cursor: pointer; font-size: 20px; font-weight: 900; }
-    .round-action.like { width: 76px; height: 76px; background: var(--pink); color: white; }
+    .swipe-context { margin-bottom: 12px; padding: 9px 11px; border-radius: 12px; background: var(--soft-pink); color: var(--pink-dark); font-size: 9px; font-weight: 800; }
+    .swipe-deck { height: 470px; position: relative; }
+    .swipe-card { height: 100%; position: absolute; inset: 0; overflow: hidden; border-radius: 25px; background: var(--surface); box-shadow: var(--shadow); touch-action: none; transform-origin: 50% 100%; transition: transform .25s ease, opacity .25s ease; }
+    .swipe-card.is-behind { transform: scale(.965) translateY(9px); }
+    .swipe-card.is-gone-left { transform: translateX(-130%) rotate(-18deg); opacity: 0; }
+    .swipe-card.is-gone-right { transform: translateX(130%) rotate(18deg); opacity: 0; }
+    .swipe-photo { width: 100%; height: 315px; object-fit: cover; }
+    .swipe-card-body { padding: 15px; }
+    .swipe-card-body h3 { margin-bottom: 2px; font-size: 24px; }
+    .swipe-card-body p { margin-bottom: 10px; color: var(--secondary); font-size: 10px; }
+    .swipe-stamp { position: absolute; z-index: 3; top: 26px; padding: 7px 10px; border: 3px solid currentColor; border-radius: 10px; opacity: 0; font-family: "Nunito"; font-size: 20px; font-weight: 900; transform: rotate(-10deg); }
+    .swipe-stamp.like { left: 22px; color: var(--green); }
+    .swipe-stamp.pass { right: 22px; color: var(--red); transform: rotate(10deg); }
+    .swipe-actions { display: flex; justify-content: center; gap: 20px; margin-top: 14px; }
+    .swipe-action { width: 62px; height: 62px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); box-shadow: var(--shadow); cursor: pointer; font-size: 23px; font-weight: 900; }
+    .swipe-action.like { width: 72px; height: 72px; background: var(--pink); color: white; }
+    .swipe-empty { height: 470px; display: none; place-items: center; padding: 28px; border: 1px dashed var(--line); border-radius: 25px; text-align: center; }
+    .swipe-empty.is-visible { display: grid; }
+    .swipe-empty h3 { margin-bottom: 5px; font-size: 22px; }
+    .swipe-empty p { color: var(--secondary); font-size: 10px; line-height: 1.5; }
+    .swipe-status { margin: 10px 0 0; padding: 10px 11px; border-radius: 12px; background: var(--surface-soft); color: var(--secondary); font-size: 9px; line-height: 1.45; }
+    .swipe-status.is-success { background: var(--lime); color: var(--ink); }
 
-    .recommendation { display: none; padding: 16px; border-radius: var(--radius-card); background: var(--soft-pink); border: 1px solid var(--pink); }
-    .recommendation.is-visible { display: block; }
-    .recommendation h3 { margin-bottom: 5px; font-size: 20px; }
-    .recommendation p { margin-bottom: 0; color: var(--secondary); font-size: 13px; line-height: 1.5; }
+    .friends-intro { padding: 14px; border-radius: var(--radius-card); background: var(--lime); border: 1px solid rgba(20,20,26,.12); }
+    .friends-intro h2 { margin-bottom: 4px; font-size: 27px; }
+    .friends-intro p { margin-bottom: 0; color: #3f4c1b; font-size: 10px; line-height: 1.45; }
+    .friend-card, .chat-history { margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+    .friend-card { display: flex; align-items: center; gap: 11px; }
+    .friend-card img { width: 54px; height: 54px; flex: 0 0 auto; border-radius: 16px; object-fit: cover; }
+    .friend-card h3 { margin-bottom: 3px; font-size: 16px; }
+    .friend-card p, .chat-history p { margin-bottom: 0; color: var(--secondary); font-size: 9px; line-height: 1.5; }
+    .friend-card .info-chip { margin-left: auto; }
+    .chat-history h3 { margin-bottom: 8px; font-size: 15px; }
+    .chat-row { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 9px 0; border-top: 1px solid var(--line); }
+    .chat-row:first-of-type { border-top: 0; padding-top: 0; }
+    .chat-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+    .chat-row strong { display: block; margin-bottom: 2px; font-size: 10px; }
 
-    .place-image { width: 100%; height: 210px; object-fit: cover; border-radius: var(--radius-card); }
-    .rule-list { display: grid; gap: 8px; }
-    .rule { padding: 12px 13px; border-radius: var(--radius-small); background: var(--surface); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
-    .locked-card { position: relative; overflow: hidden; padding: 16px; border-radius: var(--radius-card); background: var(--surface); border: 2px dashed var(--lilac); }
-    .locked-card::after { position: absolute; inset: 0; background: rgba(255,255,255,.55); backdrop-filter: blur(3px); content: ""; }
-    .locked-content { opacity: .45; }
-    .lock-overlay { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; padding: 22px; text-align: center; }
-    .lock-overlay strong { font-family: "Nunito"; font-size: 18px; }
-    .lock-overlay span { display: block; margin-top: 5px; color: var(--secondary); font-size: 11px; }
+    .place-hero { width: 100%; height: 205px; object-fit: cover; border-radius: var(--radius-card); }
+    .place-title { margin: 13px 0 0; }
+    .place-title h2 { margin-bottom: 3px; font-size: 27px; }
+    .place-title p { margin-bottom: 0; color: var(--secondary); font-size: 10px; }
+    .rule-section { margin-top: 18px; }
+    .rule-section h3 { margin-bottom: 9px; font-size: 16px; }
+    .primary-rules { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+    .rule-row { display: grid; grid-template-columns: 88px 1fr; gap: 10px; padding: 12px; }
+    .rule-row + .rule-row { border-top: 1px solid var(--line); }
+    .rule-row span { color: var(--secondary); font-size: 9px; }
+    .rule-row strong { font-size: 11px; line-height: 1.4; }
+    .amenity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .amenity { min-height: 70px; padding: 11px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+    .amenity strong { display: block; margin-bottom: 4px; font-size: 10px; }
+    .amenity span { color: var(--secondary); font-size: 9px; line-height: 1.4; }
+    .verify-note { margin-top: 10px; padding: 10px 11px; border-radius: 12px; background: var(--surface-soft); color: var(--secondary); font-size: 9px; line-height: 1.5; }
 
-    .clinic-card { padding: 16px; border-radius: var(--radius-card); background: var(--care-tint); border: 1px solid #b7d7ff; }
-    .clinic-card h3 { margin-bottom: 4px; font-size: 19px; }
-    .clinic-card p { margin-bottom: 9px; color: var(--secondary); font-size: 12px; line-height: 1.45; }
-    .demo-data { display: inline-block; margin-bottom: 10px; padding: 5px 8px; border-radius: 999px; background: var(--butter); font-size: 10px; font-weight: 700; }
-
-    .bottom-nav {
-      position: absolute;
-      z-index: 15;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      height: 82px;
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      align-items: start;
-      padding: 10px 8px 0;
-      background: rgba(255,255,255,.96);
-      border-top: 1px solid var(--line);
-    }
-    .nav-button { min-height: 54px; display: grid; place-items: center; gap: 3px; border: 0; background: transparent; color: var(--secondary); cursor: pointer; font-size: 10px; font-weight: 600; }
-    .nav-button::before { width: 20px; height: 20px; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 7px; content: ""; }
+    .bottom-nav { position: absolute; z-index: 20; right: 0; bottom: 0; left: 0; height: 76px; display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px 7px 0; background: rgba(255,255,255,.97); border-top: 1px solid var(--line); backdrop-filter: blur(14px); }
+    .nav-button { min-height: 52px; display: grid; place-items: center; align-content: center; gap: 4px; border: 0; background: transparent; color: var(--secondary); cursor: pointer; font-size: 9px; font-weight: 700; }
+    .nav-icon { width: 19px; height: 19px; border: 2px solid currentColor; border-radius: 7px; }
     .nav-button.is-active { color: var(--pink); }
-    .nav-button.is-active::before { background: var(--soft-pink); }
+    .nav-button.is-active .nav-icon { background: var(--soft-pink); }
 
-    .toast { position: absolute; z-index: 40; right: 18px; bottom: 92px; left: 18px; display: none; padding: 13px 15px; border-radius: 14px; background: var(--ink); color: white; font-size: 13px; text-align: center; }
+    .toast { position: absolute; z-index: 80; right: 16px; bottom: 88px; left: 16px; display: none; padding: 12px 14px; border-radius: 13px; background: var(--ink); color: white; font-size: 10px; line-height: 1.4; text-align: center; }
     .toast.is-visible { display: block; animation: toast-in .2s ease-out; }
     @keyframes toast-in { from { transform: translateY(8px); opacity: 0; } }
 
-    .modal-backdrop { position: absolute; z-index: 50; inset: 0; display: none; align-items: flex-end; background: rgba(20,20,26,.45); }
+    .modal-backdrop { position: absolute; z-index: 70; inset: 0; display: none; align-items: flex-end; background: rgba(20,20,26,.46); }
     .modal-backdrop.is-visible { display: flex; }
-    .modal { width: 100%; padding: 24px 20px 34px; border-radius: 28px 28px 0 0; background: var(--surface); }
-    .modal h2 { margin-bottom: 7px; font-size: 26px; }
-    .modal p { color: var(--secondary); font-size: 13px; line-height: 1.5; }
+    .modal { width: 100%; padding: 22px 18px 30px; border-radius: 28px 28px 0 0; background: var(--surface); }
+    .modal h2 { margin-bottom: 5px; font-size: 23px; }
+    .modal p { color: var(--secondary); font-size: 10px; line-height: 1.5; }
+    .dog-detail-modal .modal-dog-image { width: 96px; height: 96px; margin-bottom: 10px; border-radius: 24px; object-fit: cover; }
+    .dog-detail-modal .chip-row { flex-wrap: wrap; overflow: visible; margin: 12px 0 4px; }
+    .primary-button, .secondary-button { width: 100%; min-height: 46px; margin-top: 9px; border-radius: 999px; cursor: pointer; font-size: 11px; font-weight: 800; }
+    .primary-button { border: 0; background: var(--pink); color: white; }
+    .secondary-button { border: 1px solid var(--line); background: var(--surface); }
 
-    .review-hint { margin-top: 20px; color: var(--secondary); font-size: 11px; line-height: 1.5; }
+    .feedback-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .feedback-header h2 { margin-bottom: 4px; font-size: 24px; }
+    .feedback-header p { margin-bottom: 0; color: var(--secondary); font-size: 11px; line-height: 1.45; }
+    .feedback-count { flex: 0 0 auto; min-width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; background: var(--soft-pink); color: var(--pink-dark); font-size: 11px; font-weight: 900; }
 
-    @media (max-width: 900px) {
-      .review-shell { grid-template-columns: 1fr; }
-      .review-panel { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
-      .prototype-stage { min-height: auto; padding: 28px 16px 44px; }
-      .phone { height: 760px; }
+    .selected-target { margin-top: 18px; padding: 13px; border-radius: 14px; background: var(--surface-soft); border: 1px solid var(--line); }
+    .selected-target span { display: block; margin-bottom: 4px; color: var(--secondary); font-size: 9px; }
+    .selected-target strong { font-size: 12px; }
+    .selected-target.is-empty strong { color: var(--secondary); font-weight: 600; }
+
+    .feedback-type { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+    .type-button { min-height: 38px; padding: 0 5px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); cursor: pointer; font-size: 9px; font-weight: 800; }
+    .type-button.is-active { border-color: var(--pink); background: var(--soft-pink); color: var(--pink-dark); }
+    .feedback-label { display: block; margin: 14px 0 7px; font-size: 10px; font-weight: 800; }
+    .feedback-textarea { width: 100%; min-height: 112px; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); color: var(--ink); font-size: 11px; line-height: 1.55; }
+    .feedback-textarea::placeholder { color: #aaa; }
+    .save-feedback { width: 100%; min-height: 45px; margin-top: 9px; border: 0; border-radius: 999px; background: var(--pink); color: white; cursor: pointer; font-size: 11px; font-weight: 800; }
+    .save-feedback:disabled { background: #d3d3ce; color: #777; cursor: not-allowed; }
+
+    .feedback-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 24px; }
+    .feedback-list-heading h3 { margin-bottom: 0; font-size: 15px; }
+    .feedback-list { display: grid; gap: 8px; margin-top: 9px; }
+    .feedback-empty { padding: 18px 12px; border: 1px dashed var(--line); border-radius: 13px; color: var(--secondary); font-size: 10px; line-height: 1.5; text-align: center; }
+    .feedback-item { padding: 11px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+    .feedback-item-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .feedback-item-type { padding: 4px 6px; border-radius: 999px; background: var(--soft-pink); color: var(--pink-dark); font-size: 8px; font-weight: 900; }
+    .feedback-item strong { display: block; margin-top: 6px; font-size: 10px; }
+    .feedback-item p { margin: 5px 0 0; color: var(--secondary); font-size: 10px; line-height: 1.45; }
+    .feedback-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .feedback-actions button { min-height: 30px; padding: 0 8px; border: 0; border-radius: 999px; background: var(--surface-soft); cursor: pointer; color: var(--secondary); font-size: 8px; font-weight: 800; }
+    .feedback-actions button:hover { color: var(--ink); }
+
+    .export-area { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .export-area h3 { margin-bottom: 5px; font-size: 15px; }
+    .export-area p { color: var(--secondary); font-size: 9px; line-height: 1.45; }
+    .export-grid { display: grid; gap: 8px; margin-top: 11px; }
+    .export-button { min-height: 58px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); cursor: pointer; color: var(--ink); text-align: left; }
+    .export-button strong, .export-button span { display: block; }
+    .export-button strong { font-size: 11px; font-weight: 900; }
+    .export-button span { margin-top: 3px; color: var(--secondary); font-size: 8px; font-weight: 600; line-height: 1.4; }
+    .export-button.primary { border-color: var(--pink); background: var(--soft-pink); color: var(--pink-dark); }
+    .export-button.codex { border-color: var(--ink); background: var(--ink); color: white; }
+    .export-button.codex span { color: rgba(255,255,255,.72); }
+    .export-file-tools { margin-top: 10px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+    .export-file-tools summary { min-height: 42px; display: flex; align-items: center; padding: 0 11px; cursor: pointer; color: var(--secondary); font-size: 9px; font-weight: 800; }
+    .export-file-tools[open] summary { border-bottom: 1px solid var(--line); }
+    .export-file-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 9px; }
+    .export-file-grid .export-button { min-height: 42px; padding: 0 9px; text-align: center; font-size: 8px; font-weight: 800; }
+    .export-file-grid .export-button:first-child { grid-column: 1 / -1; }
+
+    [data-review-id] { position: relative; }
+    body[data-review-mode="comment"] [data-review-id] { outline: 1px dashed rgba(255,64,133,.6); outline-offset: 3px; cursor: crosshair !important; }
+    body[data-review-mode="comment"] [data-review-id]:hover { outline: 3px solid var(--pink); background-color: rgba(255,227,240,.28); }
+    body[data-review-mode="comment"] [data-review-id].is-review-target { outline: 4px solid var(--pink); outline-offset: 4px; }
+    [data-review-count]:not([data-review-count="0"])::after { min-width: 20px; height: 20px; position: absolute; z-index: 60; top: -9px; right: -8px; display: grid; place-items: center; padding: 0 5px; border: 2px solid white; border-radius: 999px; background: var(--pink); color: white; content: attr(data-review-count); font-size: 8px; font-weight: 900; pointer-events: none; }
+
+    [contenteditable="true"] { border-radius: 5px; }
+    [contenteditable="true"]:hover { box-shadow: inset 0 -1px 0 var(--lilac); }
+
+    .mobile-feedback-toggle { display: none; }
+
+    @media (max-width: 1180px) {
+      .review-app { grid-template-columns: 260px minmax(420px, 1fr); }
+      .feedback-panel { width: 360px; position: fixed; right: 0; z-index: 100; box-shadow: -20px 0 50px rgba(20,20,26,.18); transform: translateX(102%); transition: transform .25s ease; }
+      .feedback-panel.is-open { transform: translateX(0); }
+      .mobile-feedback-toggle { min-height: 42px; display: inline-flex; align-items: center; padding: 0 13px; border: 0; border-radius: 999px; background: var(--pink); color: white; cursor: pointer; font-size: 10px; font-weight: 800; }
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: 1024px) {
+      .prototype-stage { padding-right: 18px; padding-left: 18px; }
+    }
+
+    @media (max-width: 768px) {
+      .review-app { grid-template-columns: 1fr; }
+      .workspace-nav { height: auto; position: relative; padding: 18px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .workspace-lede, .decision-list, .file-card { display: none; }
+      .workspace-section { margin-top: 14px; }
+      .scene-list { grid-template-columns: repeat(5, minmax(110px, 1fr)); overflow-x: auto; }
+      .scene-button { min-width: 110px; }
+      .prototype-stage { min-height: auto; padding: 22px 12px 38px; }
+      .phone { height: 780px; }
+      .feedback-panel { width: min(390px, 100vw); }
+    }
+
+    @media (max-width: 430px) {
       body { background: var(--canvas); }
-      .review-panel { padding: 28px 20px; }
-      .review-group { display: none; }
+      .workspace-nav { position: sticky; top: 0; z-index: 90; padding: 10px 12px; }
+      .brand-row h1 { font-size: 25px; }
+      .version-badge, .workspace-section { display: none; }
+      .mode-switch { margin-top: 8px; }
+      .mode-explainer { display: none; }
       .prototype-stage { padding: 0; }
-      .phone { width: 100%; height: 844px; min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; }
+      .phone { width: 100%; height: calc(100vh - 108px); min-height: 650px; border: 0; border-radius: 0; box-shadow: none; }
+      .phone::before { display: none; }
+      .app-screen { padding-top: 18px; }
+      .feedback-panel { top: 0; height: 100vh; }
     }
 
-    @media (min-width: 1024px) { .prototype-stage { padding: 48px; } }
-    @media (min-width: 1440px) { .review-shell { grid-template-columns: 460px 1fr; } }
-    @media (prefers-color-scheme: dark) { body { background: #ecece6; } }
-    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+    @media (max-width: 375px) {
+      .screen-header h2 { font-size: 28px; }
+      .activity-detail-hero h2 { font-size: 27px; }
+    }
+
+    @media (min-width: 1440px) { .prototype-stage { padding: 44px; } }
+    @media (prefers-color-scheme: dark) { body { background: #e9e9e3; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
   </style>
 </head>
-<body>
-  <main class="review-shell">
-    <aside class="review-panel" aria-labelledby="review-title">
-      <div class="eyebrow">團隊審閱原型</div>
-      <h1 id="review-title">Snoots!</h1>
-      <p class="review-lede" data-pretext contenteditable="true">這不是最終視覺稿，而是一張讓全隊三人（包含 Dennis）共同確認產品主線、資訊層級與分工邊界的可操作原型。</p>
-
-      <div class="flow-callout">
-        <strong>一天只完成這個故事</strong>
-        <p>地圖發現狗聚 → AI 判斷是否適合 Nori → 報名成功 → 真實帶狗見面。</p>
+<body data-review-mode="interact">
+  <main class="review-app">
+    <aside class="workspace-nav" aria-labelledby="review-title">
+      <div class="brand-row">
+        <h1 id="review-title">Snoots!</h1>
+        <span class="version-badge">MVP 審稿</span>
       </div>
+      <p class="workspace-lede" data-pretext>直接操作原型，或切到留言模式點選畫面區塊。完成後可以複製成給組員閱讀的討論版，或交給 Codex 施工的詳細版。</p>
 
-      <nav class="scenario-list" aria-label="原型情境">
-        <button class="scenario-button is-active" data-scenario="map" type="button"><strong>1. 核心流程</strong><span>地圖與活動</span></button>
-        <button class="scenario-button" data-scenario="dogs" type="button"><strong>2. 滑卡入口</strong><span>配對接活動</span></button>
-        <button class="scenario-button" data-scenario="care" type="button"><strong>3. 急診照護圖層</strong><span>急診資訊</span></button>
-        <button class="scenario-button" data-scenario="place" type="button"><strong>4. 付費牆示意</strong><span>地點詳情</span></button>
-      </nav>
+      <div class="mode-switch" role="group" aria-label="審稿模式">
+        <button class="mode-button is-active" data-mode="interact" type="button">操作原型</button>
+        <button class="mode-button" data-mode="comment" type="button">點選留言</button>
+      </div>
+      <p class="mode-explainer" id="mode-explainer">現在可以勾選活動、切換地點、查看 AI 結果與左右滑狗狗。</p>
+      <button class="mobile-feedback-toggle" id="open-feedback" type="button">開啟意見面板</button>
 
-      <section class="review-group">
-        <h2>已定案</h2>
-        <ul>
-          <li>地圖切入，線下見面是結果。</li>
-          <li>滑卡保留，配對後接公開活動。</li>
-          <li>AI 聚焦活動適合度與原因說明。</li>
-          <li>急診照護收進地圖，基本安全資訊不鎖付費牆。</li>
+      <section class="workspace-section">
+        <h2>快速跳到畫面</h2>
+        <nav class="scene-list" aria-label="原型畫面">
+          <button class="scene-button is-active" data-scene="discover" type="button"><strong>探索清單</strong><span>勾選活動</span></button>
+          <button class="scene-button" data-scene="activity" type="button"><strong>活動詳情</strong><span>資訊與參加犬</span></button>
+          <button class="scene-button" data-scene="compare" type="button"><strong>AI 比較</strong><span>排序與原因</span></button>
+          <button class="scene-button" data-scene="swipe" type="button"><strong>參加犬</strong><span>左右滑</span></button>
+          <button class="scene-button" data-scene="friends" type="button"><strong>狗友頁</strong><span>配對與聊天</span></button>
+          <button class="scene-button" data-scene="place" type="button"><strong>地點規則</strong><span>主要與次要</span></button>
+        </nav>
+      </section>
+
+      <section class="workspace-section">
+        <h2>本版方向</h2>
+        <ul class="decision-list">
+          <li>地圖縮小，活動與地點卡片是主要內容。</li>
+          <li>使用者勾選 2 至 3 場活動，再由 AI 比較。</li>
+          <li>從 AI 結果的參加犬頭像進入左右滑。</li>
+          <li>店家卡片先顯示體型、落地方式與牽繩規則。</li>
+          <li>地點可依餐廳、咖啡廳與三種戶外空間篩選。</li>
         </ul>
       </section>
 
-      <section class="review-group">
-        <h2>請團隊審閱</h2>
-        <ul>
-          <li>三種地圖標記是否一眼能分辨？</li>
-          <li>適合度的理由是否夠可信、沒有過度承諾？</li>
-          <li>滑卡接公開活動是否自然？</li>
-          <li>哪些進階地點資訊值得未來付費？</li>
-        </ul>
+      <section class="workspace-section file-card">
+        <strong>讓下一個 Codex 直接讀回饋</strong>
+        <p>點「連結回饋檔」，將檔案存到專案的 docs 資料夾。之後每次儲存意見，都會同步更新該檔案。</p>
+        <button class="tiny-button" id="link-feedback-file" type="button">連結回饋檔</button>
+        <div class="file-status" id="file-status">尚未連結，意見會先存在瀏覽器</div>
       </section>
-
-      <p class="review-hint">可點左側四個情境或手機下方導覽。部分說明文字可直接點選修改，用來現場討論措辭；重新整理後會恢復。</p>
     </aside>
 
-    <section class="prototype-stage" aria-label="Snoots 手機原型">
+    <section class="prototype-stage" aria-label="Snoots 手機互動原型">
       <div class="phone">
-        <section class="app-screen is-visible" id="screen-map" aria-labelledby="map-title">
-          <header class="screen-header">
+        <section class="app-screen is-visible" id="screen-discover" aria-labelledby="discover-title">
+          <header class="screen-header" data-review-id="discover-header" data-review-label="探索頁標題與日期範圍" data-review-count="0">
             <div>
-              <h2 id="map-title">附近</h2>
-              <p>大安區 · 今天到週末</p>
+              <h2 id="discover-title" data-copy-id="discover-title" data-pretext contenteditable="true">附近可以去哪？</h2>
+              <p data-copy-id="discover-subtitle" data-pretext contenteditable="true">大安區 · 今天到週末</p>
             </div>
-            <button class="icon-button" type="button" aria-label="篩選">≡</button>
+            <button class="avatar-button" type="button" aria-label="查看 Nori 的檔案"><img src="../app/Snoots!/Assets.xcassets/Nori.imageset/nori.jpg" alt="Nori"></button>
           </header>
 
-          <div class="filter-row" role="tablist" aria-label="地圖圖層">
-            <button class="filter-chip is-active" data-layer="all" role="tab" aria-selected="true" type="button">全部</button>
-            <button class="filter-chip" data-layer="event" role="tab" aria-selected="false" type="button">狗聚</button>
-            <button class="filter-chip" data-layer="place" role="tab" aria-selected="false" type="button">地點</button>
-            <button class="filter-chip" data-layer="care" role="tab" aria-selected="false" type="button">急診</button>
+          <div class="content-tabs" role="tablist" aria-label="探索內容" data-review-id="content-tabs" data-review-label="狗聚、地點與狗狗醫院分類" data-review-count="0">
+            <button class="content-tab is-active" data-content-tab="activities" role="tab" aria-selected="true" type="button">狗聚</button>
+            <button class="content-tab" data-content-tab="places" role="tab" aria-selected="false" type="button">地點</button>
+            <button class="content-tab" data-content-tab="care" role="tab" aria-selected="false" type="button">狗狗醫院</button>
           </div>
 
-          <div class="map" aria-label="大安區示意地圖">
+          <div class="filter-row" data-review-id="activity-filters" data-review-label="活動篩選條件" data-review-count="0">
+            <button class="filter-chip is-active" type="button">本週末</button>
+            <button class="filter-chip" type="button">2 km 內</button>
+            <button class="filter-chip" type="button">小型犬</button>
+            <button class="filter-chip" type="button">慢熟友善</button>
+          </div>
+
+          <div class="compact-map" id="compact-map" aria-label="大安區活動與地點位置示意" data-review-id="compact-map" data-review-label="縮小後的地圖比例與位置" data-review-count="0">
             <div class="map-road road-a"></div><div class="map-road road-b"></div><div class="map-road road-c"></div>
             <div class="park-label">大安森林公園</div>
-            <button class="map-pin event" data-pin="event" type="button" aria-label="小型犬慢走團"><span>團</span></button>
-            <button class="map-pin event secondary" data-pin="event-alt" type="button" aria-label="週三固定散步團"><span>團</span></button>
-            <button class="map-pin place" data-pin="place" type="button" aria-label="Companion Cafe"><span>店</span></button>
-            <button class="map-pin care" data-pin="care" type="button" aria-label="大安夜間動物醫院"><span>醫</span></button>
-            <div class="map-legend"><span class="legend-dot"></span>本週有活動</div>
+            <div class="map-pin event-a" data-map-kind="activities"><span>團</span></div>
+            <div class="map-pin event-b" data-map-kind="activities"><span>團</span></div>
+            <div class="map-pin event-c" data-map-kind="activities"><span>團</span></div>
+            <div class="map-pin place-a" data-map-kind="places" hidden><span>店</span></div>
+            <div class="map-pin place-b" data-map-kind="places" hidden><span>店</span></div>
+            <div class="map-pin care-a" data-map-kind="care" hidden><span>醫</span></div>
+            <button class="map-control" id="toggle-map" type="button">展開地圖</button>
           </div>
 
-          <article class="preview-card is-visible" id="preview-event">
-            <div class="preview-top">
-              <div><h3>小型犬慢走團</h3><p>週六 16:00 · 大安森林公園 · 尚有 2 組</p></div>
-              <span class="status-badge">適合 Nori</span>
-            </div>
-            <div class="chip-row" style="margin-top:12px"><span class="info-chip">全程牽繩</span><span class="info-chip pink">慢熟友善</span></div>
-            <button class="primary-button" id="open-activity" type="button">查看活動與適合度</button>
-          </article>
+          <section class="listing-view is-visible" id="listing-activities" data-listing="activities">
+            <div class="list-heading"><h3>選活動讓 AI 比較</h3><span>最多選 3 場</span></div>
+            <div class="listing-stack" id="activity-list">
+              <article class="activity-card is-selected" data-activity-id="slow-walk" data-open-activity="slow-walk" data-review-id="activity-card-slow-walk" data-review-label="活動卡：小型犬慢走團" data-review-count="0" role="button" tabindex="0" aria-label="查看小型犬慢走團詳情">
+                <div class="activity-date"><div><strong>16:00</strong><span>7 月 18 日・六</span></div><span>距離 0.8 km</span></div>
+                <div class="activity-body">
+                  <div class="activity-title-row"><div><h3 data-copy-id="activity-slow-title" contenteditable="true">小型犬慢走團</h3><p class="activity-meta">大安森林公園 · 剩 2 組</p></div><button class="select-activity" data-select-activity="slow-walk" type="button" aria-label="取消選擇小型犬慢走團"></button></div>
+                  <div class="chip-row"><span class="info-chip pink">慢熟友善</span><span class="info-chip">全程牽繩</span></div>
+                  <div class="participant-line"><div class="mini-avatars"><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"></span><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg" alt="Pudding"></span></div><span>6 隻狗狗參加</span></div>
+                </div>
+              </article>
 
-          <article class="preview-card" id="preview-place">
-            <div class="preview-top"><div><h3>Companion Cafe</h3><p>咖啡廳 · 步行 4 分鐘</p></div><span class="status-badge">今日確認</span></div>
-            <div class="chip-row" style="margin-top:12px"><span class="info-chip">室內牽繩</span><span class="info-chip">15 kg 以下</span></div>
-            <button class="primary-button" data-open-screen="place" type="button">查看地點規則</button>
-          </article>
+              <article class="activity-card is-selected" data-activity-id="indoor-meet" data-open-activity="indoor-meet" data-review-id="activity-card-indoor" data-review-label="活動卡：室內慢熟犬見面會" data-review-count="0" role="button" tabindex="0" aria-label="查看室內慢熟犬見面會詳情">
+                <div class="activity-date"><div><strong>14:30</strong><span>7 月 19 日・日</span></div><span>距離 1.4 km</span></div>
+                <div class="activity-body">
+                  <div class="activity-title-row"><div><h3 data-copy-id="activity-indoor-title" contenteditable="true">室內慢熟犬見面會</h3><p class="activity-meta">Companion Cafe · 剩 3 組</p></div><button class="select-activity" data-select-activity="indoor-meet" type="button" aria-label="取消選擇室內慢熟犬見面會"></button></div>
+                  <div class="chip-row"><span class="info-chip blue">雨天備案</span><span class="info-chip">8 組上限</span></div>
+                  <div class="participant-line"><div class="mini-avatars"><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg" alt="Pudding"></span></div><span>5 隻狗狗參加</span></div>
+                </div>
+              </article>
 
-          <article class="preview-card" id="preview-care">
-            <span class="demo-data">示意資料</span>
-            <div class="preview-top"><div><h3>大安夜間動物醫院</h3><p>車程 8 分鐘 · 接受夜間急診，前往前請先電話確認</p></div></div>
-            <button class="primary-button care" data-open-screen="care" type="button">查看電話與資訊</button>
-          </article>
-        </section>
-
-        <section class="app-screen" id="screen-activity" aria-labelledby="activity-title">
-          <button class="back-button" data-open-screen="map" type="button">‹ 回地圖</button>
-          <div class="hero-event">
-            <span class="kicker">每週固定團 · 本週場次</span>
-            <h2 id="activity-title">小型犬慢走團</h2>
-            <p>週六 16:00 · 大安森林公園</p>
-          </div>
-
-          <section class="detail-section">
-            <div class="facts">
-              <div class="fact"><span>集合</span><strong>信義路入口</strong></div>
-              <div class="fact"><span>人數</span><strong>6 / 8 組</strong></div>
-              <div class="fact"><span>方式</span><strong>全程牽繩慢走</strong></div>
-              <div class="fact"><span>主揪</span><strong>Yuna · 已辦 8 次</strong></div>
+              <article class="activity-card" data-activity-id="grass-run" data-open-activity="grass-run" data-review-id="activity-card-grass" data-review-label="活動卡：草地跑跑交流團" data-review-count="0" role="button" tabindex="0" aria-label="查看草地跑跑交流團詳情">
+                <div class="activity-date"><div><strong>10:00</strong><span>7 月 19 日・日</span></div><span>距離 1.9 km</span></div>
+                <div class="activity-body">
+                  <div class="activity-title-row"><div><h3 data-copy-id="activity-grass-title" contenteditable="true">草地跑跑交流團</h3><p class="activity-meta">河濱狗公園 · 尚有 6 組</p></div><button class="select-activity" data-select-activity="grass-run" type="button" aria-label="選擇草地跑跑交流團"></button></div>
+                  <div class="chip-row"><span class="info-chip green">可自由活動</span><span class="info-chip">中大型犬多</span></div>
+                  <div class="participant-line"><div class="mini-avatars"><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"></span></div><span>10 隻狗狗參加</span></div>
+                </div>
+              </article>
             </div>
           </section>
 
-          <section class="detail-section">
-            <h3>這些狗狗會參加</h3>
-            <div class="dog-row">
-              <div class="dog-avatar"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"><span>Mochi</span></div>
-              <div class="dog-avatar"><img src="../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg" alt="Pudding"><span>Pudding</span></div>
-              <div class="dog-avatar more"><div>T</div><span>Tofu</span></div>
-              <div class="dog-avatar more"><div>+3</div><span>其他狗狗</span></div>
+          <section class="listing-view" id="listing-places" data-listing="places">
+            <div class="list-heading"><h3>附近可帶狗地點</h3><span>先看主要規則</span></div>
+            <div class="place-category-row" data-review-id="place-categories" data-review-label="餐廳、公園與狗活動區分類" data-review-count="0" aria-label="地點分類">
+              <button class="filter-chip is-active" data-place-category="all" type="button">全部</button>
+              <button class="filter-chip" data-place-category="restaurant" type="button">餐廳</button>
+              <button class="filter-chip" data-place-category="cafe" type="button">咖啡廳</button>
+              <button class="filter-chip" data-place-category="walk-park" type="button">可遛狗公園</button>
+              <button class="filter-chip" data-place-category="dog-park" type="button">狗運動公園</button>
+              <button class="filter-chip" data-place-category="dog-zone" type="button">狗活動區</button>
+            </div>
+            <div class="listing-stack">
+              <article class="place-card" data-place-category="cafe" data-review-id="place-card-companion" data-review-label="地點卡：Companion Cafe 規則摘要" data-review-count="0">
+                <img src="../app/Snoots!/Assets.xcassets/CompanionCafe.imageset/companion-cafe.jpg" alt="Companion Cafe">
+                <div class="place-card-body"><h3 contenteditable="true" data-copy-id="place-companion-title">Companion Cafe</h3><p>咖啡廳 · 步行 4 分鐘 · 今日確認</p><div class="chip-row"><span class="info-chip">15 kg 以下</span><span class="info-chip green">可落地</span><span class="info-chip pink">全程牽繩</span></div><button class="card-link" data-open-place type="button">查看完整規則 →</button></div>
+              </article>
+              <article class="place-card" data-place-category="restaurant" data-review-id="place-card-terrace" data-review-label="地點卡：Terrace Table 規則摘要" data-review-count="0">
+                <img src="../app/Snoots!/Assets.xcassets/TerraceTable.imageset/terrace-table.jpg" alt="Terrace Table">
+                <div class="place-card-body"><h3 contenteditable="true" data-copy-id="place-terrace-title">Terrace Table</h3><p>餐廳 · 步行 9 分鐘 · 昨日確認</p><div class="chip-row"><span class="info-chip">不限體型</span><span class="info-chip blue">室內需推車</span><span class="info-chip pink">戶外需牽繩</span></div><button class="card-link" data-open-place type="button">查看完整規則 →</button></div>
+              </article>
+              <article class="place-card" data-place-category="walk-park" data-review-id="place-card-daan-park" data-review-label="地點卡：大安森林公園規則摘要" data-review-count="0">
+                <div class="place-card-media park" aria-hidden="true">園</div>
+                <div class="place-card-body"><h3>大安森林公園</h3><p>可遛狗公園 · 步行 6 分鐘 · 今日確認</p><div class="chip-row"><span class="info-chip">不限體型</span><span class="info-chip green">可落地</span><span class="info-chip pink">全程牽繩</span></div><button class="card-link" type="button" onclick="showToast('展示模式：公園詳細規則頁待補')">查看完整規則 →</button></div>
+              </article>
+              <article class="place-card" data-place-category="dog-park" data-review-id="place-card-sport-park" data-review-label="地點卡：迎風狗運動公園規則摘要" data-review-count="0">
+                <div class="place-card-media sport" aria-hidden="true">跑</div>
+                <div class="place-card-body"><h3>迎風狗運動公園</h3><p>狗運動公園 · 車程 12 分鐘 · 昨日確認</p><div class="chip-row"><span class="info-chip">分體型區</span><span class="info-chip green">可自由活動</span><span class="info-chip">雙門設計</span></div><button class="card-link" type="button" onclick="showToast('展示模式：運動公園詳細規則頁待補')">查看完整規則 →</button></div>
+              </article>
+              <article class="place-card" data-place-category="dog-zone" data-review-id="place-card-community-zone" data-review-label="地點卡：社區狗狗活動區規則摘要" data-review-count="0">
+                <div class="place-card-media zone" aria-hidden="true">區</div>
+                <div class="place-card-body"><h3>社區狗狗活動區</h3><p>狗活動區 · 步行 14 分鐘 · 3 天前確認</p><div class="chip-row"><span class="info-chip">中小型犬</span><span class="info-chip green">可自由活動</span><span class="info-chip pink">進出需牽繩</span></div><button class="card-link" type="button" onclick="showToast('展示模式：活動區詳細規則頁待補')">查看完整規則 →</button></div>
+              </article>
             </div>
           </section>
 
-          <section class="detail-section ai-card" aria-live="polite">
-            <div class="ai-label"><span>SNOOTS AI 適合度</span><span>依 Nori 的資料</span></div>
-            <div class="ai-loading" id="ai-loading"><span class="spinner" aria-hidden="true"></span><span>正在比對狗狗、活動與場地…</span></div>
-            <div id="ai-result" hidden>
-              <h3>很適合 Nori</h3>
-              <p data-pretext>這場以小型犬為主，目前只有 6 隻狗，而且全程牽繩。Nori 個性慢熟，建議提早 10 分鐘抵達，先在外圍熟悉環境再加入。</p>
-              <div class="chip-row"><span class="info-chip blue">體型相近</span><span class="info-chip blue">人數少</span><span class="info-chip blue">慢速介紹</span></div>
-              <small>這是參考建議，不是安全保證。現場仍請由主人觀察狗狗狀態。</small>
+          <section class="listing-view" id="listing-care" data-listing="care">
+            <div class="list-heading"><h3>附近狗狗醫院</h3><span>前往前請先電話確認</span></div>
+            <article class="care-card" data-review-id="care-card" data-review-label="狗狗醫院資訊卡" data-review-count="0"><h3>大安夜間動物醫院</h3><p>車程 8 分鐘 · 接受夜間急診 · 最後確認：今天 18:40</p><button class="tiny-button" type="button" onclick="showToast('展示模式：這裡會開啟電話撥號')">先打電話確認</button></article>
+          </section>
+        </section>
+
+        <section class="app-screen" id="screen-activity" aria-labelledby="activity-detail-title">
+          <button class="back-button" id="activity-detail-back" data-open-screen="discover" type="button">‹ 回活動清單</button>
+          <div class="activity-detail-hero" data-review-id="activity-detail-hero" data-review-label="活動詳情主視覺與日期" data-review-count="0">
+            <span id="activity-detail-date">7 月 18 日（六）16:00</span>
+            <div><h2 id="activity-detail-title">小型犬慢走團</h2><p id="activity-detail-location">大安森林公園 · 距離 0.8 km</p></div>
+          </div>
+          <section class="detail-summary" data-review-id="activity-detail-info" data-review-label="活動介紹、名額與集合資訊" data-review-count="0">
+            <p id="activity-detail-description">讓慢熟的小型犬保持舒服距離，先一起散步，再視現場狀況短暫打招呼。</p>
+            <div class="detail-facts">
+              <div class="detail-fact"><span>報名狀況</span><strong id="activity-detail-capacity">6／8 組，剩 2 組</strong></div>
+              <div class="detail-fact"><span>集合方式</span><strong id="activity-detail-meeting">捷運站 2 號出口集合</strong></div>
+              <div class="detail-fact"><span>活動規則</span><strong id="activity-detail-rules">全程牽繩・不強迫接觸</strong></div>
+              <div class="detail-fact"><span>主揪人</span><strong id="activity-detail-host">Elena 與 Mochi</strong></div>
             </div>
           </section>
-
-          <button class="primary-button" id="join-event" type="button">參加這場活動</button>
+          <div class="detail-participants" id="activity-detail-participants" role="group" data-review-id="activity-detail-participants" data-review-label="活動參加犬預覽與狗狗頭像入口" data-review-count="0"><div><strong>先看看會遇到的狗狗</strong><span>點頭像查看詳細資訊，再決定是否滑卡</span></div><div class="mini-avatars"><button class="mini-avatar avatar-button" type="button" data-open-dog-detail="Mochi" aria-label="查看 Mochi 詳細資訊"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"></button><button class="mini-avatar avatar-button" type="button" data-open-dog-detail="Pudding" aria-label="查看 Pudding 詳細資訊"><img src="../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg" alt="Pudding"></button></div></div>
+          <div class="detail-actions" data-review-id="activity-detail-response" data-review-label="活動詳情我有興趣與我要參加" data-review-count="0">
+            <button class="secondary-button" id="activity-detail-interest" type="button">我有興趣</button>
+            <button class="primary-button" id="activity-detail-join" type="button">我要參加</button>
+          </div>
+          <div class="detail-action-status" id="activity-detail-status" hidden>先表達興趣，等確認活動細節後再決定是否參加。</div>
+          <div class="verify-note">報名前可先用 AI 與其他活動比較；實際參加仍請主人依狗狗當天狀態判斷。</div>
+          <div class="detail-cta" data-review-id="activity-detail-cta" data-review-label="活動詳情加入 AI 比較按鈕" data-review-count="0"><button class="primary-button" id="activity-detail-select" type="button">加入 AI 比較</button></div>
         </section>
 
-        <section class="app-screen" id="screen-dogs" aria-labelledby="dogs-title">
-          <header class="screen-header"><div><h2 id="dogs-title">狗友</h2><p>先認識狗，再一起找適合的活動</p></div><span class="status-badge">2 km</span></header>
-          <img class="match-photo" src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi">
-          <div class="match-name"><h2>Mochi, 2 歲</h2><p>和 Elena · 距離 1.2 km</p></div>
-          <div class="chip-row" style="margin-top:18px"><span class="info-chip pink">溫和打招呼</span><span class="info-chip pink">牽繩介紹</span><span class="info-chip pink">體型相近</span></div>
-          <div class="match-actions">
-            <button class="round-action" type="button" aria-label="略過 Mochi">×</button>
-            <button class="round-action like" id="like-mochi" type="button" aria-label="想認識 Mochi">♥</button>
-            <button class="round-action" type="button" aria-label="收藏 Mochi">＋</button>
+        <section class="app-screen" id="screen-compare" aria-labelledby="compare-title">
+          <button class="back-button" data-open-screen="discover" type="button">‹ 回活動清單</button>
+          <header class="screen-header" data-review-id="compare-header" data-review-label="AI 活動比較頁標題" data-review-count="0"><div><h2 id="compare-title" data-copy-id="compare-title" contenteditable="true">Nori 適合哪一場？</h2><p>根據狗狗個性、參加犬與場地規則比較</p></div></header>
+          <div class="compare-intro" data-review-id="ai-input-summary" data-review-label="AI 判讀使用的 Nori 資料摘要" data-review-count="0"><strong>這次用 Nori 的資料判斷</strong><p>5 kg、慢熟、害怕突然靠近的大型犬、不喜歡吵雜，適合牽繩慢走。</p></div>
+          <div class="compare-toolbar" id="compare-toolbar" data-review-id="compare-controls" data-review-label="AI 比較目前結果、上一輪結果與調整入口" data-review-count="0"><div class="compare-toolbar-head"><strong>AI 比較結果</strong><span class="info-chip blue" id="compare-view-chip">待比較</span></div><div class="compare-status" id="compare-status" aria-live="polite">尚未產生比較結果；先選 2–3 場活動，再按「AI 比較」。</div><div class="compare-actions"><button class="secondary-button" id="adjust-comparison" type="button">調整活動</button><button class="secondary-button" id="toggle-previous-comparison" type="button" hidden>上一輪比較</button></div></div>
+          <div class="ai-loader" id="ai-loader" hidden aria-live="polite"><div><div class="spinner" aria-hidden="true"></div><strong>正在比較你選的活動…</strong><p style="margin:6px 0 0;color:var(--secondary);font-size:9px">同時檢查參加犬、活動方式與場地條件</p></div></div>
+          <div class="ai-empty" id="ai-empty"><strong>先從活動清單按「AI 比較」</strong><span>這裡只呈現已主動啟動的比較結果，不會因為進入畫面就自動分析。</span></div>
+          <div id="ai-results" hidden>
+            <div class="result-stack" id="result-stack"></div>
+            <p class="ai-disclaimer">AI 適合度是報名前的參考，不是安全保證。現場仍請由主人觀察狗狗狀態。</p>
           </div>
-          <article class="recommendation" id="match-recommendation">
-            <h3>你和 Mochi 配對成功</h3>
-            <p>你們都適合週六的小型犬慢走團。第一次見面可以先參加公開活動，不必直接一對一約見。</p>
-            <button class="primary-button" data-open-screen="activity" type="button">一起看看這場活動</button>
-          </article>
         </section>
 
-        <section class="app-screen" id="screen-care" aria-labelledby="care-title">
-          <button class="back-button" data-open-screen="map" type="button">‹ 回地圖</button>
-          <header class="screen-header"><div><h2 id="care-title">急診照護</h2><p>附近可聯絡的動物醫療地點</p></div></header>
-          <div class="clinic-card">
-            <span class="demo-data">示意資料 · 請勿作真實醫療使用</span>
-            <h3>大安夜間動物醫院</h3>
-            <p>車程約 8 分鐘 · 接受夜間急診。營業與急診狀況可能變動，前往前請先電話確認。</p>
-            <div class="rule-list">
-              <div class="rule">電話：02-0000-0000（示意）</div>
-              <div class="rule">地址：台北市大安區示意路 104 號</div>
-              <div class="rule">最後確認：今天 18:40</div>
-            </div>
-            <button class="primary-button care" type="button" onclick="showToast('展示模式：這裡會開啟電話撥號')">先打電話確認</button>
-          </div>
-          <p class="review-hint">急診照護的基本資訊不進付費牆；本版不提供症狀判斷、醫療建議或緊急派遣。</p>
+        <section class="app-screen" id="screen-swipe" aria-labelledby="swipe-title">
+          <button class="back-button" data-open-screen="activity" type="button">‹ 回活動詳情</button>
+          <header class="screen-header" data-review-id="swipe-header" data-review-label="活動參加犬滑卡入口" data-review-count="0"><div><h2 id="swipe-title" data-copy-id="swipe-title" contenteditable="true">先認識會遇到的狗狗</h2><p>右滑喜歡，左滑略過；互相喜歡才會配對</p></div></header>
+          <div class="swipe-context" id="swipe-context">來自：小型犬慢走團</div>
+          <div class="swipe-deck" id="swipe-deck" data-review-id="swipe-card" data-review-label="左右滑狗狗卡片與資訊量" data-review-count="0"></div>
+          <div class="swipe-status" id="swipe-status" hidden></div>
+          <div class="swipe-empty" id="swipe-empty"><div><h3>這場先看到這裡</h3><p>你留下的喜歡只有對方也喜歡時才會成立。第一次見面仍建議在公開活動進行。</p><button class="primary-button" data-open-screen="friends" type="button">查看狗友頁</button><button class="secondary-button" data-open-screen="compare" type="button">回活動比較</button></div></div>
+          <div class="swipe-actions" id="swipe-actions" data-review-id="swipe-actions" data-review-label="左滑略過與右滑喜歡操作" data-review-count="0"><button class="swipe-action" id="pass-dog" type="button" aria-label="略過這隻狗">×</button><button class="swipe-action like" id="like-dog" type="button" aria-label="喜歡這隻狗">♥</button></div>
+        </section>
+
+        <section class="app-screen" id="screen-friends" aria-labelledby="friends-title">
+          <button class="back-button" data-open-screen="swipe" type="button">‹ 回參加犬</button>
+          <header class="screen-header" data-review-id="friends-header" data-review-label="狗友頁標題與配對狀態" data-review-count="0"><div><h2 id="friends-title">狗友</h2><p>已配對的狗友與活動後的聊天紀錄</p></div></header>
+          <div class="friends-intro"><h2>先在線上認識，再到公開活動見面</h2><p>配對不會取代活動報名；你可以先確認彼此的相處方式，再決定要不要聊天或參加。</p></div>
+          <section class="friend-card" data-review-id="matched-friends" data-review-label="已配對狗友" data-review-count="0"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"><div><h3>Mochi · Elena</h3><p>小型犬慢走團 · 互相喜歡</p></div><span class="info-chip green">已配對</span></section>
+          <section class="chat-history" data-review-id="chat-history" data-review-label="狗友聊天紀錄" data-review-count="0"><h3>聊天紀錄</h3><div class="chat-row"><img class="chat-avatar" src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"><div><strong>Elena · 今天 18:42</strong><p>嗨！我們會先在 2 號出口集合，讓 Mochi 和 Nori 保持一點距離慢慢走。</p></div></div><div class="chat-row"><img class="chat-avatar" src="../app/Snoots!/Assets.xcassets/Nori.imageset/nori.jpg" alt="Nori"><div><strong>你 · 今天 18:45</strong><p>好，謝謝你先說明。我們也會提早到，先讓 Nori 熟悉環境。</p></div></div></section>
+          <button class="primary-button" data-open-screen="activity" type="button">回活動詳情</button>
         </section>
 
         <section class="app-screen" id="screen-place" aria-labelledby="place-title">
-          <button class="back-button" data-open-screen="map" type="button">‹ 回地圖</button>
-          <img class="place-image" src="../app/Snoots!/Assets.xcassets/CompanionCafe.imageset/companion-cafe.jpg" alt="Companion Cafe">
-          <div class="screen-header" style="margin-top:14px"><div><h2 id="place-title" style="font-size:30px">Companion Cafe</h2><p>咖啡廳 · 步行 4 分鐘 · 今天 18:40 確認</p></div></div>
-          <section class="detail-section"><h3>基本規則（免費）</h3><div class="rule-list"><div class="rule">室內需要牽繩</div><div class="rule">15 kg 以下</div><div class="rule">使用座位請自備座墊</div></div></section>
-          <section class="detail-section locked-card">
-            <div class="locked-content"><h3>對 Nori 的完整分析</h3><p>安靜時段、建議座位、規則變動提醒與個人化到訪建議。</p></div>
-            <button class="lock-overlay" id="open-paywall" type="button" aria-label="查看付費牆示意"><span><strong>進階資訊示意</strong><span>哪些內容值得付費，留待團隊討論</span></span></button>
+          <button class="back-button" data-open-screen="discover" type="button">‹ 回地點清單</button>
+          <img class="place-hero" src="../app/Snoots!/Assets.xcassets/CompanionCafe.imageset/companion-cafe.jpg" alt="Companion Cafe" data-review-id="place-image" data-review-label="地點詳情主圖比例" data-review-count="0">
+          <div class="place-title" data-review-id="place-title-block" data-review-label="地點名稱、距離與驗證時間" data-review-count="0"><h2 id="place-title" contenteditable="true" data-copy-id="place-detail-title">Companion Cafe</h2><p>咖啡廳 · 步行 4 分鐘 · 今天 18:40 確認</p></div>
+          <section class="rule-section" data-review-id="primary-place-rules" data-review-label="店家主要規則的分類與順序" data-review-count="0">
+            <h3>帶狗入場最重要的規則</h3>
+            <div class="primary-rules">
+              <div class="rule-row"><span>接受體型</span><strong>15 kg 以下</strong></div>
+              <div class="rule-row"><span>入場方式</span><strong>可以落地，不強制推車或提籠</strong></div>
+              <div class="rule-row"><span>活動方式</span><strong>室內全程使用牽繩</strong></div>
+            </div>
           </section>
-        </section>
-
-        <section class="app-screen" id="screen-community" aria-labelledby="community-title">
-          <header class="screen-header"><div><h2 id="community-title">社群</h2><p>保留現有內容，本次不再擴充</p></div></header>
-          <article class="card"><h3>Nori 的第一次慢走團</h3><p style="color:var(--secondary);font-size:13px;line-height:1.55">這個頁面只代表既有 Feed 仍可存在。一天內的時間優先投入地圖、活動與 AI 適合度。</p></article>
-        </section>
-
-        <section class="app-screen" id="screen-profile" aria-labelledby="profile-title">
-          <header class="screen-header"><div><h2 id="profile-title">Nori</h2><p>適合度判斷需要的最小狗狗資料</p></div></header>
-          <img class="place-image" src="../app/Snoots!/Assets.xcassets/Nori.imageset/nori.jpg" alt="Nori">
-          <div class="rule-list" style="margin-top:14px"><div class="rule">5 kg · 小型犬</div><div class="rule">慢熟，害怕突然靠近的大型犬</div><div class="rule">不喜歡太吵雜，適合牽繩慢走</div></div>
+          <section class="rule-section" data-review-id="secondary-place-rules" data-review-label="寵物鮮食與尿布墊等次要設施" data-review-count="0">
+            <h3>店家提供的寵物設施</h3>
+            <div class="amenity-grid"><div class="amenity"><strong>寵物鮮食</strong><span>有提供，品項依現場為準</span></div><div class="amenity"><strong>尿布墊</strong><span>櫃台可免費索取</span></div></div>
+          </section>
+          <div class="verify-note">規則可能變動，前往前建議再次向店家確認。最後驗證：今天 18:40。</div>
         </section>
 
         <nav class="bottom-nav" aria-label="主要導覽">
-          <button class="nav-button is-active" data-nav="map" type="button">地圖</button>
-          <button class="nav-button" data-nav="dogs" type="button">狗友</button>
-          <button class="nav-button" data-nav="community" type="button">社群</button>
-          <button class="nav-button" data-nav="profile" type="button">我的</button>
+          <button class="nav-button is-active" data-nav="discover" type="button"><span class="nav-icon"></span>探索</button>
+          <button class="nav-button" data-nav="friends" type="button"><span class="nav-icon"></span>狗友</button>
+          <button class="nav-button" type="button" onclick="showToast('社群動態保留現況，本版不展開')"><span class="nav-icon"></span>社群</button>
+          <button class="nav-button" type="button" onclick="showToast('這裡會回到 Nori 的狗狗檔案')"><span class="nav-icon"></span>我的</button>
         </nav>
 
+        <div class="selection-dock" id="selection-dock" data-review-id="ai-compare-cta" data-review-label="活動勾選數量與 AI 比較按鈕" data-review-count="0"><div class="selection-summary"><strong id="selection-title">已選 2 場</strong><span id="selection-help">可以請 AI 開始比較</span></div><button class="compare-button" id="compare-selected" type="button">AI 比較</button></div>
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-        <div class="modal-backdrop" id="paywall-modal" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
-          <div class="modal">
-            <h2 id="paywall-title">付費牆位置待討論</h2>
-            <p>基本場地規則與急診照護資訊保持免費。進階個人化分析、規則變動提醒與推薦時段，可作為未來付費方向。</p>
-            <button class="primary-button" type="button" onclick="showToast('已記錄：這裡只做付費牆示意'); closePaywall()">了解概念</button>
-            <button class="secondary-button" type="button" onclick="closePaywall()">返回地點</button>
-          </div>
-        </div>
+        <div class="modal-backdrop" id="dog-detail-modal" role="dialog" aria-modal="true" aria-labelledby="dog-detail-title"><div class="modal dog-detail-modal"><button class="back-button" id="close-dog-detail" type="button">‹ 回活動詳情</button><img class="modal-dog-image" id="dog-detail-image" alt=""><h2 id="dog-detail-title">Mochi</h2><p id="dog-detail-owner">和 Elena · 2 歲</p><div class="chip-row" id="dog-detail-traits"></div><p id="dog-detail-description">溫和打招呼，適合先保持距離，再慢慢熟悉彼此。</p><button class="primary-button" id="dog-detail-swipe" type="button">進入參加犬滑卡</button></div></div>
+        <div class="modal-backdrop" id="match-modal" role="dialog" aria-modal="true" aria-labelledby="match-title"><div class="modal"><h2 id="match-title">配對成功：你和 Mochi</h2><p>你們都對彼此有興趣。第一次見面先安排在「小型犬慢走團」，可以先在狗友頁保留活動後的聊天紀錄。</p><button class="primary-button" type="button" onclick="closeMatch(); showScreen('friends')">查看狗友頁</button><button class="secondary-button" type="button" onclick="closeMatch(); openActivityDetail(currentSwipeActivity)">回活動詳情</button></div></div>
       </div>
     </section>
+
+    <aside class="feedback-panel" id="feedback-panel" aria-labelledby="feedback-title">
+      <div class="feedback-header"><div><h2 id="feedback-title">畫面意見</h2><p>切到「點選留言」，再直接點手機裡要討論的區塊。</p></div><span class="feedback-count" id="feedback-count">0</span></div>
+      <button class="tiny-button" id="close-feedback" type="button" style="display:none;margin-top:10px">關閉面板</button>
+
+      <div class="selected-target is-empty" id="selected-target"><span>目前選取</span><strong>尚未選擇畫面區塊</strong></div>
+      <div class="feedback-type" role="group" aria-label="意見類型"><button class="type-button is-active" data-feedback-type="修改" type="button">想修改</button><button class="type-button" data-feedback-type="保留" type="button">想保留</button><button class="type-button" data-feedback-type="問題" type="button">有疑問</button></div>
+      <label class="feedback-label" for="feedback-note">你的意見</label>
+      <textarea class="feedback-textarea" id="feedback-note" placeholder="例如：地圖再小一點，第一張活動卡希望先看到日期與剩餘名額。"></textarea>
+      <button class="save-feedback" id="save-feedback" type="button" disabled>儲存這則意見</button>
+
+      <div class="feedback-list-heading"><h3>已記錄</h3><button class="tiny-button" id="add-overall-feedback" type="button">＋ 整體意見</button></div>
+      <div class="feedback-list" id="feedback-list"><div class="feedback-empty">還沒有意見。你可以針對單一區塊留言，也可以新增整體意見。</div></div>
+
+      <section class="export-area">
+        <h3>分享這輪回饋</h3>
+        <p>先讓組員看懂、達成共識；確定要施工後，再把詳細版交給 Codex。</p>
+        <div class="export-grid">
+          <button class="export-button primary" id="copy-team-feedback" type="button"><strong>複製給組員</strong><span>自然語言摘要，不含區塊 ID 與施工資料</span></button>
+          <button class="export-button codex" id="copy-codex-feedback" type="button"><strong>複製給 Codex</strong><span>保留區塊 ID、畫面文案與目前操作狀態</span></button>
+        </div>
+        <details class="export-file-tools">
+          <summary>下載／連結 Codex 回饋檔</summary>
+          <div class="export-file-grid"><button class="export-button" id="save-feedback-file" type="button">儲存／更新回饋檔</button><button class="export-button" id="download-feedback" type="button">下載 Markdown</button></div>
+        </details>
+      </section>
+    </aside>
   </main>
 
   <script>
+    const STORAGE_KEY = 'snoots-mvp-review-v3';
+    const COPY_KEY = 'snoots-mvp-copy-v3';
     const screens = [...document.querySelectorAll('.app-screen')];
+    const sceneButtons = [...document.querySelectorAll('[data-scene]')];
     const navButtons = [...document.querySelectorAll('[data-nav]')];
-    const scenarioButtons = [...document.querySelectorAll('[data-scenario]')];
-    const previewCards = [...document.querySelectorAll('.preview-card')];
+    const feedbackPanel = document.getElementById('feedback-panel');
+    const reviewState = { mode: 'interact', target: null, type: '修改', feedback: loadFeedback(), fileHandle: null };
+    const selectedActivities = new Set(['slow-walk', 'indoor-meet']);
+    const activityResponseState = {};
     let aiTimer;
+    let toastTimer;
+    let swipeIndex = 0;
+    let dragStartX = null;
+    let dragDeltaX = 0;
+    let currentActivityDetail = 'slow-walk';
+    let currentSwipeActivity = 'slow-walk';
+    let currentDogDetail = 'Mochi';
+    let currentComparison = null;
+    let previousComparison = null;
+    let pendingComparison = null;
+    let comparisonView = 'current';
 
-    function showScreen(name) {
+    const activities = {
+      'slow-walk': { title: '小型犬慢走團', label: '最推薦', badge: '', description: '活動規模小、全程牽繩，對慢熟的 Nori 最容易掌握距離。', reasons: ['目前以小型犬為主，體型壓力較低', '6／8 組，人數不會過度擁擠', '可提早 10 分鐘到外圍熟悉環境'] },
+      'indoor-meet': { title: '室內慢熟犬見面會', label: '可以參加', badge: 'caution', description: '活動主題適合慢熟犬，但室內空間較集中，需要留意 Nori 的壓力。', reasons: ['有慢速介紹流程', '雨天不受影響', '建議選靠出口座位並保留退場空間'] },
+      'grass-run': { title: '草地跑跑交流團', label: '這次不建議', badge: 'caution', description: '自由活動且中大型犬較多，和 Nori 目前的偏好差距較大。', reasons: ['現場速度與刺激較高', '可能有大型犬快速靠近', '可以先從牽繩慢走團累積經驗'] }
+    };
+
+    const activityDetails = {
+      'slow-walk': { date: '7 月 18 日（六）16:00–17:30', location: '大安森林公園 · 距離 0.8 km', description: '讓慢熟的小型犬保持舒服距離，先一起散步，再視現場狀況短暫打招呼。', capacity: '6／8 組，剩 2 組', meeting: '捷運站 2 號出口集合', rules: '全程牽繩・不強迫接觸', host: 'Elena 與 Mochi' },
+      'indoor-meet': { date: '7 月 19 日（日）14:30–16:00', location: 'Companion Cafe · 距離 1.4 km', description: '給慢熟犬的室內小聚，採分區入場與慢速介紹，也保留可提早離開的彈性。', capacity: '5／8 組，剩 3 組', meeting: '店門口依時段分批入場', rules: '室內牽繩・保留安全距離', host: 'Yuna 與 Pudding' },
+      'grass-run': { date: '7 月 19 日（日）10:00–11:30', location: '河濱狗公園 · 距離 1.9 km', description: '喜歡奔跑與群體互動的狗狗交流團，現場以中大型犬和自由活動為主。', capacity: '10／16 組，剩 6 組', meeting: '狗公園雙門入口集合', rules: '場內可離繩・主人全程看顧', host: 'Kevin 與 Lucky' }
+    };
+
+    const swipeDogs = [
+      { name: 'Mochi', age: '2 歲', owner: '和 Elena', image: '../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg', traits: ['溫和打招呼', '牽繩介紹', '體型相近'], mutual: true },
+      { name: 'Pudding', age: '3 歲', owner: '和 Yuna', image: '../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg', traits: ['慢熟', '喜歡散步', '不追逐'], mutual: false }
+    ];
+
+    const dogDetails = {
+      Mochi: '溫和打招呼，適合先保持距離，再慢慢熟悉彼此。主人 Elena 會先讓 Mochi 觀察環境。',
+      Pudding: '慢熟但喜歡散步，不追逐其他狗狗。主人 Yuna 會配合牽繩與分段認識。'
+    };
+
+    function loadFeedback() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+      catch { return []; }
+    }
+
+    function persistFeedback() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(reviewState.feedback));
+      renderFeedback();
+      writeLinkedFeedbackFile();
+    }
+
+    function setMode(mode) {
+      reviewState.mode = mode;
+      document.body.dataset.reviewMode = mode;
+      document.querySelectorAll('[data-mode]').forEach(button => button.classList.toggle('is-active', button.dataset.mode === mode));
+      document.getElementById('mode-explainer').textContent = mode === 'comment'
+        ? '點手機裡任何虛線區塊，右側就會知道你在評論哪裡。'
+        : '現在可以勾選活動、切換地點、查看 AI 結果與左右滑狗狗。';
+      if (mode === 'comment' && window.innerWidth <= 1180) feedbackPanel.classList.add('is-open');
+    }
+
+    function showScreen(name, options = {}) {
       clearTimeout(aiTimer);
       screens.forEach(screen => screen.classList.toggle('is-visible', screen.id === `screen-${name}`));
-      const navName = ['map', 'dogs', 'community', 'profile'].includes(name) ? name : (name === 'activity' || name === 'care' || name === 'place' ? 'map' : name);
-      navButtons.forEach(button => button.classList.toggle('is-active', button.dataset.nav === navName));
-      scenarioButtons.forEach(button => button.classList.toggle('is-active', button.dataset.scenario === name || (name === 'activity' && button.dataset.scenario === 'map')));
+      sceneButtons.forEach(button => button.classList.toggle('is-active', button.dataset.scene === name));
+      navButtons.forEach(button => button.classList.toggle('is-active', button.dataset.nav === (['place', 'compare', 'activity'].includes(name) ? 'discover' : name)));
       const visible = document.querySelector('.app-screen.is-visible');
       if (visible) visible.scrollTop = 0;
-      if (name === 'activity') runSuitability();
+      document.getElementById('selection-dock').hidden = name !== 'discover' || document.querySelector('[data-content-tab].is-active')?.dataset.contentTab !== 'activities';
+      if (name === 'compare' && options.runAI === true) runAIComparison();
+      if (name === 'compare' && options.runAI !== true) {
+        document.getElementById('ai-loader').hidden = true;
+        renderComparisonView();
+      }
+      if (name === 'swipe') resetSwipeDeck();
     }
 
-    function runSuitability() {
-      const loading = document.getElementById('ai-loading');
-      const result = document.getElementById('ai-result');
-      loading.hidden = false;
-      result.hidden = true;
-      aiTimer = setTimeout(() => { loading.hidden = true; result.hidden = false; relayoutText(); }, 900);
-    }
-
-    function selectLayer(layer) {
-      document.querySelectorAll('[data-layer]').forEach(button => {
-        const active = button.dataset.layer === layer;
+    function selectContentTab(name) {
+      document.querySelectorAll('[data-content-tab]').forEach(button => {
+        const active = button.dataset.contentTab === name;
         button.classList.toggle('is-active', active);
         button.setAttribute('aria-selected', String(active));
       });
-      document.querySelectorAll('.map-pin').forEach(pin => {
-        pin.hidden = layer !== 'all' && !pin.classList.contains(layer);
-      });
-      const preview = layer === 'care' ? 'care' : layer === 'place' ? 'place' : 'event';
-      showPreview(preview);
+      document.querySelectorAll('[data-listing]').forEach(listing => listing.classList.toggle('is-visible', listing.dataset.listing === name));
+      document.querySelectorAll('[data-map-kind]').forEach(pin => { pin.hidden = pin.dataset.mapKind !== name; });
+      document.getElementById('selection-dock').hidden = name !== 'activities';
     }
 
-    function showPreview(name) {
-      previewCards.forEach(card => card.classList.toggle('is-visible', card.id === `preview-${name}`));
+    function selectPlaceCategory(category) {
+      document.querySelectorAll('[data-place-category]').forEach(element => {
+        if (element.matches('button')) element.classList.toggle('is-active', element.dataset.placeCategory === category);
+        else element.hidden = category !== 'all' && element.dataset.placeCategory !== category;
+      });
     }
+
+    function openActivityDetail(id, options = {}) {
+      const activity = activities[id];
+      const detail = activityDetails[id];
+      if (!activity || !detail) return;
+      currentActivityDetail = id;
+      const back = document.getElementById('activity-detail-back');
+      const returnTo = options.returnTo || 'discover';
+      back.dataset.openScreen = returnTo;
+      back.textContent = returnTo === 'compare' ? '‹ 回 AI 比較結果' : '‹ 回活動清單';
+      document.getElementById('activity-detail-title').textContent = activity.title;
+      document.getElementById('activity-detail-date').textContent = detail.date;
+      document.getElementById('activity-detail-location').textContent = detail.location;
+      document.getElementById('activity-detail-description').textContent = detail.description;
+      document.getElementById('activity-detail-capacity').textContent = detail.capacity;
+      document.getElementById('activity-detail-meeting').textContent = detail.meeting;
+      document.getElementById('activity-detail-rules').textContent = detail.rules;
+      document.getElementById('activity-detail-host').textContent = detail.host;
+      updateActivityResponse();
+      updateActivityDetailButton();
+      showScreen('activity');
+    }
+
+    function updateActivityResponse() {
+      const state = activityResponseState[currentActivityDetail];
+      const status = document.getElementById('activity-detail-status');
+      const interest = document.getElementById('activity-detail-interest');
+      const join = document.getElementById('activity-detail-join');
+      const participants = document.getElementById('activity-detail-participants');
+      status.hidden = !state;
+      participants.removeAttribute('disabled');
+      participants.setAttribute('aria-label', '點選參加犬頭像查看詳細資訊');
+      if (!state) {
+        interest.textContent = '我有興趣';
+        join.textContent = '我要參加';
+        return;
+      }
+      if (state === 'joined') {
+        interest.textContent = '已表達興趣';
+        join.textContent = '已報名這場';
+        status.textContent = '你已報名這場活動；活動前仍可在狗友頁先認識參加犬。';
+      } else {
+        interest.textContent = '已表達興趣';
+        join.textContent = '我要參加';
+        status.textContent = '已記下你的興趣。確認參加前，可以先看看這場會遇到的狗狗。';
+      }
+    }
+
+    function updateActivityDetailButton() {
+      const button = document.getElementById('activity-detail-select');
+      const selected = selectedActivities.has(currentActivityDetail);
+      button.textContent = selected ? '已加入 AI 比較・點擊取消' : '加入 AI 比較';
+      button.classList.toggle('secondary-button', selected);
+      button.classList.toggle('primary-button', !selected);
+    }
+
+    function toggleActivity(id) {
+      if (selectedActivities.has(id)) selectedActivities.delete(id);
+      else if (selectedActivities.size < 3) selectedActivities.add(id);
+      else { showToast('最多選 3 場，請先取消一場'); return; }
+      document.querySelectorAll('[data-activity-id]').forEach(card => {
+        const selected = selectedActivities.has(card.dataset.activityId);
+        card.classList.toggle('is-selected', selected);
+        const button = card.querySelector('[data-select-activity]');
+        if (button) button.setAttribute('aria-label', `${selected ? '取消選擇' : '選擇'}${activities[card.dataset.activityId].title}`);
+      });
+      updateSelectionDock();
+      updateActivityDetailButton();
+      updateCompareControls();
+    }
+
+    function updateSelectionDock() {
+      const count = selectedActivities.size;
+      document.getElementById('selection-title').textContent = `已選 ${count} 場`;
+      document.getElementById('selection-help').textContent = count >= 2 ? '可以請 AI 開始比較' : '再選一場才能比較';
+      const button = document.getElementById('compare-selected');
+      button.disabled = count < 2;
+      button.textContent = count >= 2 ? `AI 比較 ${count} 場` : 'AI 比較';
+    }
+
+    const comparisonOrder = ['slow-walk', 'indoor-meet', 'grass-run'];
+
+    function getSelectedActivityIds() {
+      return comparisonOrder.filter(id => selectedActivities.has(id));
+    }
+
+    function formatActivityNames(ids) {
+      return ids.map(id => activities[id]?.title).filter(Boolean).join('、');
+    }
+
+    function sameActivityIds(left, right) {
+      return left.length === right.length && left.every((id, index) => id === right[index]);
+    }
+
+    function updateCompareControls() {
+      const status = document.getElementById('compare-status');
+      const viewChip = document.getElementById('compare-view-chip');
+      const previousButton = document.getElementById('toggle-previous-comparison');
+      if (!status || !viewChip || !previousButton) return;
+      previousButton.hidden = !previousComparison;
+      previousButton.textContent = comparisonView === 'previous' ? '回目前結果' : '上一輪比較';
+      previousButton.parentElement.classList.toggle('has-history', Boolean(previousComparison));
+      if (!currentComparison) {
+        viewChip.textContent = '待比較';
+        viewChip.className = 'info-chip blue';
+        status.textContent = '尚未產生比較結果；先選 2–3 場活動，再按「AI 比較」。';
+        return;
+      }
+      if (comparisonView === 'previous' && previousComparison) {
+        viewChip.textContent = '上一輪';
+        viewChip.className = 'info-chip pink';
+        status.textContent = `上一輪比較：${formatActivityNames(previousComparison.ids)}`;
+        return;
+      }
+      const selectedIds = getSelectedActivityIds();
+      const isCurrent = sameActivityIds(selectedIds, currentComparison.ids);
+      viewChip.textContent = isCurrent ? '目前結果' : '待更新';
+      viewChip.className = isCurrent ? 'info-chip green' : 'info-chip';
+      status.textContent = isCurrent
+        ? `目前結果：${formatActivityNames(currentComparison.ids)}`
+        : `已改選活動：${formatActivityNames(selectedIds) || '尚未選擇'}；按「AI 比較」更新結果`;
+    }
+
+    function renderComparisonView() {
+      const snapshot = comparisonView === 'previous' ? previousComparison : currentComparison;
+      const hasResults = Boolean(snapshot);
+      document.getElementById('ai-empty').hidden = hasResults;
+      document.getElementById('ai-results').hidden = !hasResults;
+      if (hasResults) renderAIResults(snapshot.ids);
+      updateCompareControls();
+    }
+
+    function runAIComparison() {
+      const ids = getSelectedActivityIds();
+      if (ids.length < 2) return;
+      const loader = document.getElementById('ai-loader');
+      const empty = document.getElementById('ai-empty');
+      const results = document.getElementById('ai-results');
+      pendingComparison = { ids, createdAt: Date.now() };
+      comparisonView = 'current';
+      empty.hidden = true;
+      loader.hidden = false;
+      results.hidden = !currentComparison;
+      if (currentComparison) {
+        document.getElementById('compare-view-chip').textContent = '更新中';
+        document.getElementById('compare-view-chip').className = 'info-chip blue';
+        document.getElementById('compare-status').textContent = '正在更新比較；上一輪結果暫時保留。';
+      }
+      aiTimer = setTimeout(() => {
+        if (currentComparison) previousComparison = currentComparison;
+        currentComparison = pendingComparison;
+        pendingComparison = null;
+        loader.hidden = true;
+        renderComparisonView();
+        relayoutText();
+      }, 850);
+    }
+
+    function renderAIResults(ids = currentComparison?.ids || getSelectedActivityIds()) {
+      document.getElementById('result-stack').innerHTML = ids.map((id, index) => {
+        const activity = activities[id];
+        return `<article class="result-card ${index === 0 ? 'is-top' : ''}" data-review-id="ai-result-${id}" data-review-label="AI 比較結果：${activity.title}" data-review-count="0">
+          <div class="result-top"><div><h3>${activity.title}</h3><p>${activity.description}</p></div><span class="result-badge ${activity.badge}">${activity.label}</span></div>
+          <ul class="reason-list">${activity.reasons.map(reason => `<li>${reason}</li>`).join('')}</ul>
+          <button class="card-link" data-open-activity="${id}" type="button">查看活動詳情 →</button>
+          <button class="participant-action" data-open-swipe="${id}" type="button"><div><strong>看看這場會遇到的狗狗</strong><br><span>Mochi、Pudding 和其他參加犬</span></div><div class="mini-avatars"><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Mochi.imageset/mochi.jpg" alt="Mochi"></span><span class="mini-avatar"><img src="../app/Snoots!/Assets.xcassets/Pudding.imageset/pudding.jpg" alt="Pudding"></span></div></button>
+        </article>`;
+      }).join('');
+      document.querySelectorAll('[data-open-swipe]').forEach(button => button.addEventListener('click', () => openDogDetail('Mochi', button.dataset.openSwipe)));
+      document.querySelectorAll('#result-stack [data-open-activity]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); openActivityDetail(button.dataset.openActivity, { returnTo: 'compare' }); }));
+      updateReviewCounts();
+    }
+
+    function openDogDetail(name, activityId = currentActivityDetail) {
+      const dog = swipeDogs.find(item => item.name === name) || swipeDogs[0];
+      currentDogDetail = dog.name;
+      currentSwipeActivity = activityId || currentActivityDetail;
+      currentActivityDetail = currentSwipeActivity;
+      document.getElementById('dog-detail-image').src = dog.image;
+      document.getElementById('dog-detail-image').alt = dog.name;
+      document.getElementById('dog-detail-title').textContent = dog.name;
+      document.getElementById('dog-detail-owner').textContent = `${dog.owner} · ${dog.age}`;
+      document.getElementById('dog-detail-traits').innerHTML = dog.traits.map(trait => `<span class="info-chip pink">${trait}</span>`).join('');
+      document.getElementById('dog-detail-description').textContent = dogDetails[dog.name];
+      document.getElementById('dog-detail-modal').classList.add('is-visible');
+    }
+
+    function closeDogDetail() { document.getElementById('dog-detail-modal').classList.remove('is-visible'); }
+
+    function openSwipe(activityId) {
+      currentSwipeActivity = activityId || currentActivityDetail;
+      currentActivityDetail = currentSwipeActivity;
+      document.getElementById('swipe-context').textContent = `來自：${activities[activityId]?.title || '小型犬慢走團'}`;
+      showScreen('swipe', { allowLockedSwipe: true });
+    }
+
+    function resetSwipeDeck() {
+      swipeIndex = 0;
+      renderSwipeDeck();
+    }
+
+    function renderSwipeDeck() {
+      const deck = document.getElementById('swipe-deck');
+      const empty = document.getElementById('swipe-empty');
+      const actions = document.getElementById('swipe-actions');
+      const status = document.getElementById('swipe-status');
+      deck.innerHTML = '';
+      status.hidden = true;
+      status.classList.remove('is-success');
+      status.textContent = '';
+      if (swipeIndex >= swipeDogs.length) {
+        deck.style.display = 'none';
+        empty.classList.add('is-visible');
+        actions.style.display = 'none';
+        return;
+      }
+      deck.style.display = 'block';
+      empty.classList.remove('is-visible');
+      actions.style.display = 'flex';
+      [...swipeDogs].reverse().forEach((dog, reverseIndex) => {
+        const actualIndex = swipeDogs.length - 1 - reverseIndex;
+        if (actualIndex < swipeIndex) return;
+        const card = document.createElement('article');
+        card.className = `swipe-card ${actualIndex > swipeIndex ? 'is-behind' : ''}`;
+        card.dataset.dogIndex = actualIndex;
+        card.innerHTML = `<span class="swipe-stamp like">喜歡</span><span class="swipe-stamp pass">略過</span><img class="swipe-photo" src="${dog.image}" alt="${dog.name}"><div class="swipe-card-body"><h3>${dog.name}, ${dog.age}</h3><p>${dog.owner} · 同一場活動見面</p><div class="chip-row">${dog.traits.map(trait => `<span class="info-chip pink">${trait}</span>`).join('')}</div></div>`;
+        deck.appendChild(card);
+      });
+      bindSwipeCard();
+    }
+
+    function bindSwipeCard() {
+      const card = document.querySelector(`.swipe-card[data-dog-index="${swipeIndex}"]`);
+      if (!card) return;
+      card.addEventListener('pointerdown', event => {
+        if (reviewState.mode !== 'interact') return;
+        dragStartX = event.clientX;
+        dragDeltaX = 0;
+        card.setPointerCapture(event.pointerId);
+      });
+      card.addEventListener('pointermove', event => {
+        if (dragStartX === null) return;
+        dragDeltaX = event.clientX - dragStartX;
+        card.style.transition = 'none';
+        card.style.transform = `translateX(${dragDeltaX}px) rotate(${dragDeltaX / 18}deg)`;
+        card.querySelector('.swipe-stamp.like').style.opacity = String(Math.max(0, Math.min(1, dragDeltaX / 80)));
+        card.querySelector('.swipe-stamp.pass').style.opacity = String(Math.max(0, Math.min(1, -dragDeltaX / 80)));
+      });
+      card.addEventListener('pointerup', () => {
+        if (dragStartX === null) return;
+        const action = dragDeltaX > 80 ? 'like' : dragDeltaX < -80 ? 'pass' : null;
+        dragStartX = null;
+        if (action) swipeDog(action);
+        else { card.style.transition = ''; card.style.transform = ''; card.querySelectorAll('.swipe-stamp').forEach(stamp => stamp.style.opacity = '0'); }
+      });
+    }
+
+    function swipeDog(action) {
+      const dog = swipeDogs[swipeIndex];
+      const card = document.querySelector(`.swipe-card[data-dog-index="${swipeIndex}"]`);
+      if (!card) return;
+      card.style.transition = '';
+      card.classList.add(action === 'like' ? 'is-gone-right' : 'is-gone-left');
+      setTimeout(() => {
+        swipeIndex += 1;
+        renderSwipeDeck();
+        if (action === 'like' && dog.mutual) {
+          const status = document.getElementById('swipe-status');
+          status.hidden = false;
+          status.classList.add('is-success');
+          status.textContent = `配對成功：${dog.name} 也喜歡 Nori。現在可以到狗友頁保留聊天紀錄。`;
+          document.getElementById('match-modal').classList.add('is-visible');
+        } else if (action === 'like') {
+          const status = document.getElementById('swipe-status');
+          status.hidden = false;
+          status.textContent = `已向 ${dog.name} 表達興趣，等待對方回覆。對方喜歡你時才會配對成功。`;
+        } else showToast(`已略過 ${dog.name}`);
+      }, 230);
+    }
+
+    function closeMatch() { document.getElementById('match-modal').classList.remove('is-visible'); }
 
     function showToast(message) {
+      clearTimeout(toastTimer);
       const toast = document.getElementById('toast');
       toast.textContent = message;
       toast.classList.add('is-visible');
-      setTimeout(() => toast.classList.remove('is-visible'), 2200);
+      toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 2100);
     }
 
-    function closePaywall() { document.getElementById('paywall-modal').classList.remove('is-visible'); }
+    function selectReviewTarget(element) {
+      document.querySelectorAll('.is-review-target').forEach(item => item.classList.remove('is-review-target'));
+      element.classList.add('is-review-target');
+      reviewState.target = { id: element.dataset.reviewId, label: element.dataset.reviewLabel, screen: document.querySelector('.app-screen.is-visible')?.id.replace('screen-', '') || 'workspace' };
+      const box = document.getElementById('selected-target');
+      box.classList.remove('is-empty');
+      box.innerHTML = `<span>目前選取</span><strong>${reviewState.target.label}</strong>`;
+      document.getElementById('save-feedback').disabled = !document.getElementById('feedback-note').value.trim();
+      if (window.innerWidth <= 1180) feedbackPanel.classList.add('is-open');
+      document.getElementById('feedback-note').focus();
+    }
 
-    document.querySelectorAll('[data-open-screen]').forEach(button => button.addEventListener('click', () => showScreen(button.dataset.openScreen)));
+    function saveFeedback() {
+      const note = document.getElementById('feedback-note').value.trim();
+      if (!note || !reviewState.target) return;
+      reviewState.feedback.push({ id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, targetId: reviewState.target.id, label: reviewState.target.label, screen: reviewState.target.screen, type: reviewState.type, note, createdAt: new Date().toISOString() });
+      document.getElementById('feedback-note').value = '';
+      document.getElementById('save-feedback').disabled = true;
+      persistFeedback();
+      showToast('意見已記錄');
+    }
+
+    function addOverallFeedback() {
+      reviewState.target = { id: 'overall', label: '整體流程與視覺', screen: 'all' };
+      const box = document.getElementById('selected-target');
+      box.classList.remove('is-empty');
+      box.innerHTML = '<span>目前選取</span><strong>整體流程與視覺</strong>';
+      document.getElementById('feedback-note').focus();
+      if (window.innerWidth <= 1180) feedbackPanel.classList.add('is-open');
+    }
+
+    function renderFeedback() {
+      const list = document.getElementById('feedback-list');
+      document.getElementById('feedback-count').textContent = String(reviewState.feedback.length);
+      if (!reviewState.feedback.length) list.innerHTML = '<div class="feedback-empty">還沒有意見。你可以針對單一區塊留言，也可以新增整體意見。</div>';
+      else list.innerHTML = [...reviewState.feedback].reverse().map(item => `<article class="feedback-item"><div class="feedback-item-top"><span class="feedback-item-type">${escapeHTML(item.type)}</span><span style="color:var(--secondary);font-size:8px">${new Date(item.createdAt).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div><strong>${escapeHTML(item.label)}</strong><p>${escapeHTML(item.note)}</p><div class="feedback-actions"><button data-jump-feedback="${item.targetId}" type="button">跳到區塊</button><button data-delete-feedback="${item.id}" type="button">刪除</button></div></article>`).join('');
+      document.querySelectorAll('[data-delete-feedback]').forEach(button => button.addEventListener('click', () => { reviewState.feedback = reviewState.feedback.filter(item => item.id !== button.dataset.deleteFeedback); persistFeedback(); }));
+      document.querySelectorAll('[data-jump-feedback]').forEach(button => button.addEventListener('click', () => jumpToReviewTarget(button.dataset.jumpFeedback)));
+      updateReviewCounts();
+    }
+
+    function updateReviewCounts() {
+      document.querySelectorAll('[data-review-id]').forEach(element => {
+        const count = reviewState.feedback.filter(item => item.targetId === element.dataset.reviewId).length;
+        element.dataset.reviewCount = String(count);
+      });
+    }
+
+    function jumpToReviewTarget(id) {
+      const feedback = reviewState.feedback.find(item => item.targetId === id);
+      if (!feedback || id === 'overall') return;
+      const target = document.querySelector(`[data-review-id="${CSS.escape(id)}"]`);
+      if (!target) {
+        if (id.startsWith('ai-result-')) { showScreen('compare', { runAI: false }); renderAIResults(); }
+        return setTimeout(() => jumpToReviewTarget(id), 50);
+      }
+      const screen = target.closest('.app-screen');
+      if (screen) showScreen(screen.id.replace('screen-', ''), { runAI: false });
+      setMode('comment');
+      selectReviewTarget(target);
+      setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
+    }
+
+    function escapeHTML(value) {
+      return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+    }
+
+    function collectCopyChanges() {
+      return [...document.querySelectorAll('[data-copy-id]')].map(element => ({ id: element.dataset.copyId, text: element.textContent.trim() }));
+    }
+
+    function buildTeamMarkdown() {
+      const screenLabels = { discover: '探索清單', activity: '活動詳情', compare: 'AI 比較', swipe: '參加犬滑卡', friends: '狗友頁', place: '地點規則', all: '整體流程' };
+      const sections = [
+        { type: '修改', title: '建議調整' },
+        { type: '保留', title: '希望保留' },
+        { type: '問題', title: '還需要討論' }
+      ];
+      const lines = ['# Snoots! MVP 畫面回饋', '', `整理時間：${new Date().toLocaleString('zh-TW')}`, ''];
+
+      if (!reviewState.feedback.length) {
+        lines.push('目前沒有記錄畫面意見。', '');
+      } else {
+        lines.push(`這一輪共記錄 ${reviewState.feedback.length} 則意見，整理如下：`, '');
+        sections.forEach(section => {
+          const items = reviewState.feedback.filter(item => item.type === section.type);
+          if (!items.length) return;
+          lines.push(`## ${section.title}`, '');
+          items.forEach((item, index) => {
+            const location = item.targetId === 'overall' ? '' : `（${screenLabels[item.screen] || '目前畫面'}）`;
+            lines.push(`${index + 1}. **${item.label}**${location}`, `   ${item.note}`, '');
+          });
+        });
+      }
+
+      lines.push('## 請大家確認', '', '- 流程可以開始做 UI。', '- 還需要討論：＿＿＿＿。', '');
+      return lines.join('\n');
+    }
+
+    function buildCodexMarkdown() {
+      const grouped = reviewState.feedback.reduce((result, item) => { (result[item.screen] ||= []).push(item); return result; }, {});
+      const screenLabels = { discover: '探索清單', activity: '活動詳情', compare: 'AI 比較', swipe: '參加犬滑卡', friends: '狗友頁', place: '地點規則', all: '整體' };
+      const lines = ['# Snoots! MVP 畫面回饋', '', `產生時間：${new Date().toLocaleString('zh-TW')}`, '', '## 給下一個 Codex', '', '- 以本檔案作為畫面修改的主要依據。', '- 先讀 `docs/snoots-mvp-wireframe.html` 與本回饋，不要重新發明產品方向。', '- 完成後保留原型內的意見工具，讓下一輪可以繼續審稿。', ''];
+      if (!reviewState.feedback.length) lines.push('## 區塊意見', '', '目前沒有已儲存的區塊意見。', '');
+      else Object.entries(grouped).forEach(([screen, items]) => {
+        lines.push(`## ${screenLabels[screen] || screen}`, '');
+        items.forEach(item => lines.push(`### ${item.label}`, '', `- 類型：${item.type}`, `- 意見：${item.note}`, `- 區塊 ID：\`${item.targetId}\``, ''));
+      });
+      lines.push('## 原型內目前文案', '');
+      collectCopyChanges().forEach(item => lines.push(`- ${item.id}：${item.text}`));
+      lines.push('', '## 目前活動選擇', '', ...[...selectedActivities].map(id => `- ${activities[id].title}`), '');
+      return lines.join('\n');
+    }
+
+    async function linkFeedbackFile() {
+      if (!window.showSaveFilePicker) { downloadFeedback(); showToast('此瀏覽器不支援直接連結，已改為下載回饋檔'); return; }
+      try {
+        reviewState.fileHandle = await window.showSaveFilePicker({ suggestedName: 'snoots-ui-feedback.md', types: [{ description: 'Markdown 文件', accept: { 'text/markdown': ['.md'] } }] });
+        document.getElementById('file-status').classList.add('is-linked');
+        document.getElementById('file-status').textContent = `已連結：${reviewState.fileHandle.name}`;
+        await writeLinkedFeedbackFile();
+        showToast('回饋檔已連結，之後儲存意見會自動更新');
+      } catch (error) { if (error.name !== 'AbortError') showToast('無法連結檔案，仍可使用下載功能'); }
+    }
+
+    async function writeLinkedFeedbackFile() {
+      if (!reviewState.fileHandle) return false;
+      try {
+        const writable = await reviewState.fileHandle.createWritable();
+        await writable.write(buildCodexMarkdown());
+        await writable.close();
+        return true;
+      } catch { document.getElementById('file-status').classList.remove('is-linked'); document.getElementById('file-status').textContent = '檔案連結失效，請重新連結'; return false; }
+    }
+
+    async function saveOrDownloadFeedback() {
+      const saved = await writeLinkedFeedbackFile();
+      if (saved) showToast('回饋檔已更新');
+      else await linkFeedbackFile();
+    }
+
+    function downloadFeedback() {
+      const blob = new Blob([buildCodexMarkdown()], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'snoots-ui-feedback.md';
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast('已下載 snoots-ui-feedback.md');
+    }
+
+    async function copyTeamFeedback() {
+      try { await navigator.clipboard.writeText(buildTeamMarkdown()); showToast('已複製組員版，可貼到群組或 GitHub'); }
+      catch { showToast('瀏覽器無法複製，請確認剪貼簿權限'); }
+    }
+
+    async function copyCodexFeedback() {
+      try { await navigator.clipboard.writeText(buildCodexMarkdown()); showToast('已複製 Codex 版，可貼到新的實作對話'); }
+      catch { showToast('瀏覽器無法複製，請改用下載功能'); }
+    }
+
+    function restoreCopy() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(COPY_KEY)) || {};
+        document.querySelectorAll('[data-copy-id]').forEach(element => { if (saved[element.dataset.copyId]) element.textContent = saved[element.dataset.copyId]; });
+      } catch {}
+    }
+
+    function setupCopyPersistence() {
+      document.querySelectorAll('[data-copy-id]').forEach(element => {
+        new MutationObserver(() => {
+          const saved = JSON.parse(localStorage.getItem(COPY_KEY) || '{}');
+          saved[element.dataset.copyId] = element.textContent.trim();
+          localStorage.setItem(COPY_KEY, JSON.stringify(saved));
+          const prepared = pretextHandles.get(element);
+          if (prepared) {
+            pretextHandles.set(element, {
+              api: prepared.api,
+              handle: prepared.api.prepare(element.textContent, getComputedStyle(element).font)
+            });
+          }
+          relayoutText();
+          writeLinkedFeedbackFile();
+        }).observe(element, { childList: true, characterData: true, subtree: true });
+      });
+    }
+
+    document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
+    sceneButtons.forEach(button => button.addEventListener('click', () => showScreen(button.dataset.scene)));
     navButtons.forEach(button => button.addEventListener('click', () => showScreen(button.dataset.nav)));
-    scenarioButtons.forEach(button => button.addEventListener('click', () => showScreen(button.dataset.scenario)));
-    document.querySelectorAll('[data-layer]').forEach(button => button.addEventListener('click', () => selectLayer(button.dataset.layer)));
-    document.querySelectorAll('[data-pin]').forEach(button => button.addEventListener('click', () => {
-      const pin = button.dataset.pin;
-      showPreview(pin === 'care' ? 'care' : pin === 'place' ? 'place' : 'event');
-    }));
-    document.getElementById('open-activity').addEventListener('click', () => showScreen('activity'));
-    document.getElementById('join-event').addEventListener('click', event => {
-      event.currentTarget.textContent = '已參加 · 週六見';
-      event.currentTarget.classList.add('is-joined');
-      showToast('報名成功，活動前會再次提醒注意事項');
+    document.querySelectorAll('[data-open-screen]').forEach(button => button.addEventListener('click', () => showScreen(button.dataset.openScreen)));
+    document.querySelectorAll('[data-content-tab]').forEach(button => button.addEventListener('click', () => selectContentTab(button.dataset.contentTab)));
+    document.querySelectorAll('[data-place-category]').forEach(element => { if (element.matches('button')) element.addEventListener('click', () => selectPlaceCategory(element.dataset.placeCategory)); });
+    document.querySelectorAll('[data-open-activity]').forEach(card => {
+      card.addEventListener('click', event => { if (!event.target.closest('[contenteditable="true"]')) openActivityDetail(card.dataset.openActivity); });
+      card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openActivityDetail(card.dataset.openActivity); } });
     });
-    document.getElementById('like-mochi').addEventListener('click', () => {
-      document.getElementById('match-recommendation').classList.add('is-visible');
-      showToast('你和 Mochi 配對成功');
+    document.querySelectorAll('[data-select-activity]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); toggleActivity(button.dataset.selectActivity); }));
+    document.querySelectorAll('[data-open-place]').forEach(button => button.addEventListener('click', () => showScreen('place')));
+    document.getElementById('compare-selected').addEventListener('click', () => showScreen('compare', { runAI: true }));
+    document.getElementById('adjust-comparison').addEventListener('click', () => { comparisonView = 'current'; selectContentTab('activities'); showScreen('discover'); });
+    document.getElementById('toggle-previous-comparison').addEventListener('click', () => { if (!previousComparison) return; comparisonView = comparisonView === 'previous' ? 'current' : 'previous'; renderComparisonView(); });
+    document.getElementById('activity-detail-select').addEventListener('click', () => toggleActivity(currentActivityDetail));
+    document.querySelectorAll('[data-open-dog-detail]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); openDogDetail(button.dataset.openDogDetail, currentActivityDetail); }));
+    document.getElementById('activity-detail-interest').addEventListener('click', () => {
+      activityResponseState[currentActivityDetail] = 'interested';
+      updateActivityResponse();
+      showToast('已記下興趣；接下來可以看看參加犬');
     });
-    document.getElementById('open-paywall').addEventListener('click', () => document.getElementById('paywall-modal').classList.add('is-visible'));
-    document.getElementById('paywall-modal').addEventListener('click', event => { if (event.target.id === 'paywall-modal') closePaywall(); });
-    document.addEventListener('keydown', event => { if (event.key === 'Escape') closePaywall(); });
+    document.getElementById('activity-detail-join').addEventListener('click', () => {
+      activityResponseState[currentActivityDetail] = 'joined';
+      updateActivityResponse();
+      showToast('已加入活動，仍可先到狗友頁聊天');
+    });
+    document.getElementById('toggle-map').addEventListener('click', event => { const map = document.getElementById('compact-map'); map.classList.toggle('is-expanded'); event.currentTarget.textContent = map.classList.contains('is-expanded') ? '收合地圖' : '展開地圖'; });
+    document.getElementById('pass-dog').addEventListener('click', () => swipeDog('pass'));
+    document.getElementById('like-dog').addEventListener('click', () => swipeDog('like'));
+    document.getElementById('match-modal').addEventListener('click', event => { if (event.target.id === 'match-modal') closeMatch(); });
+    document.getElementById('close-dog-detail').addEventListener('click', closeDogDetail);
+    document.getElementById('dog-detail-swipe').addEventListener('click', () => { closeDogDetail(); openSwipe(currentSwipeActivity); });
+    document.getElementById('dog-detail-modal').addEventListener('click', event => { if (event.target.id === 'dog-detail-modal') closeDogDetail(); });
+
+    document.addEventListener('click', event => {
+      if (reviewState.mode !== 'comment') return;
+      const target = event.target.closest('[data-review-id]');
+      if (!target || target.closest('.feedback-panel') || target.closest('.workspace-nav')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      selectReviewTarget(target);
+    }, true);
+
+    document.querySelectorAll('[data-feedback-type]').forEach(button => button.addEventListener('click', () => { reviewState.type = button.dataset.feedbackType; document.querySelectorAll('[data-feedback-type]').forEach(item => item.classList.toggle('is-active', item === button)); }));
+    document.getElementById('feedback-note').addEventListener('input', event => { document.getElementById('save-feedback').disabled = !reviewState.target || !event.target.value.trim(); });
+    document.getElementById('save-feedback').addEventListener('click', saveFeedback);
+    document.getElementById('add-overall-feedback').addEventListener('click', addOverallFeedback);
+    document.getElementById('link-feedback-file').addEventListener('click', linkFeedbackFile);
+    document.getElementById('save-feedback-file').addEventListener('click', saveOrDownloadFeedback);
+    document.getElementById('download-feedback').addEventListener('click', downloadFeedback);
+    document.getElementById('copy-team-feedback').addEventListener('click', copyTeamFeedback);
+    document.getElementById('copy-codex-feedback').addEventListener('click', copyCodexFeedback);
+    document.getElementById('open-feedback').addEventListener('click', () => feedbackPanel.classList.add('is-open'));
+    document.getElementById('close-feedback').addEventListener('click', () => feedbackPanel.classList.remove('is-open'));
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeMatch(); closeDogDetail(); feedbackPanel.classList.remove('is-open'); } });
+
+    function syncFeedbackPanelControls() {
+      const mobile = window.innerWidth <= 1180;
+      document.getElementById('close-feedback').style.display = mobile ? 'inline-flex' : 'none';
+    }
 
     let pretextHandles = new Map();
     async function setupPretext() {
       try {
         const pretext = await import('https://esm.sh/@chenglou/pretext');
         await document.fonts.ready;
-        document.querySelectorAll('[data-pretext]').forEach(element => {
-          pretextHandles.set(element, { api: pretext, handle: pretext.prepare(element.textContent, getComputedStyle(element).font) });
-          if (element.contentEditable === 'true') {
-            new MutationObserver(() => {
-              pretextHandles.set(element, { api: pretext, handle: pretext.prepare(element.textContent, getComputedStyle(element).font) });
-              relayoutText();
-            }).observe(element, { childList: true, characterData: true, subtree: true });
-          }
-        });
+        document.querySelectorAll('[data-pretext]').forEach(element => pretextHandles.set(element, { api: pretext, handle: pretext.prepare(element.textContent, getComputedStyle(element).font) }));
         relayoutText();
-      } catch (error) {
-        document.documentElement.dataset.pretext = 'unavailable';
-      }
+      } catch { document.documentElement.dataset.pretext = 'unavailable'; }
     }
 
     function relayoutText() {
       pretextHandles.forEach(({ api, handle }, element) => {
         const style = getComputedStyle(element);
-        const result = api.layout(handle, element.clientWidth, parseFloat(style.lineHeight));
+        const lineHeight = parseFloat(style.lineHeight);
+        if (!element.clientWidth || Number.isNaN(lineHeight)) return;
+        const result = api.layout(handle, element.clientWidth, lineHeight);
         element.style.minHeight = `${result.height}px`;
       });
     }
 
-    new ResizeObserver(relayoutText).observe(document.body);
+    restoreCopy();
+    setupCopyPersistence();
+    renderFeedback();
+    updateSelectionDock();
+    updateActivityDetailButton();
+    renderAIResults();
+    renderSwipeDeck();
+    syncFeedbackPanelControls();
     setupPretext();
+    new ResizeObserver(() => { relayoutText(); syncFeedbackPanelControls(); }).observe(document.body);
   </script>
 </body>
 </html>
