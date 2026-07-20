@@ -2004,7 +2004,10 @@ private struct NearbyMapPin: View {
                     .truncationMode(.tail)
                     .padding(.horizontal, 10)
                     .frame(maxWidth: 156, minHeight: 34)
-                    .background(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(
+                        isSelected ? SnootsPalette.primary : (isUserCreated ? SnootsPalette.lime : SnootsPalette.surface),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
                     .overlay {
                         if !isSelected && !isUserCreated {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -2020,7 +2023,7 @@ private struct NearbyMapPin: View {
                     .lineLimit(1)
                     .padding(.horizontal, 10)
                     .frame(maxWidth: 156, minHeight: 34)
-                    .background(isSelected ? SnootsPalette.lime : SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(isSelected ? SnootsPalette.primary : SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay {
                         if !isSelected {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -2145,36 +2148,47 @@ private struct NearbyPlaceCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 Text(displayedPlaceName)
                     .font(.snootsCardTitle())
                     .foregroundStyle(SnootsPalette.ink)
-
-                Spacer(minLength: 8)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 if place.nearbyCategory != .meetups {
                     Image(systemName: "heart")
                         .font(.snootsUI(19, weight: .semibold))
                         .foregroundStyle(SnootsPalette.ink)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 36, height: 36)
+                        .background(SnootsPalette.surface, in: Circle())
+                        .overlay(Circle().stroke(SnootsPalette.divider, lineWidth: 1))
                         .accessibilityHidden(true)
                 }
             }
 
-            Text(place.localizedOpeningHoursData(language))
-                .font(.snootsMetadata())
-                .foregroundStyle(SnootsPalette.secondaryText)
+            HStack(spacing: 8) {
+                Text(place.localizedOpeningHoursData(language))
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                    .lineLimit(1)
 
-            Text(place.localizedDistanceFromCurrentLocation(language))
-                .font(.snootsUI(14, weight: .medium))
-                .foregroundStyle(SnootsPalette.ink)
+                Circle()
+                    .fill(SnootsPalette.secondaryText.opacity(0.7))
+                    .frame(width: 3, height: 3)
+                    .accessibilityHidden(true)
+
+                Text(place.localizedDistanceFromCurrentLocation(language))
+                    .foregroundStyle(SnootsPalette.ink)
+                    .lineLimit(1)
+            }
+            .font(.snootsMetadata())
+            .accessibilityElement(children: .combine)
 
             DeclarationChips(labels: displayedFilterLabels, tint: SnootsPalette.primaryTint)
                 .accessibilityLabel(language.text("Place filters", "地點次標籤"))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(16)
         .background(isSelected ? SnootsPalette.primaryTint : SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
         .onTapGesture(perform: onSelect)
