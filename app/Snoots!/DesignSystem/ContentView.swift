@@ -2155,16 +2155,6 @@ private struct NearbyPlaceCard: View {
                     .foregroundStyle(SnootsPalette.ink)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
-
-                if place.nearbyCategory != .meetups {
-                    Image(systemName: "heart")
-                        .font(.snootsUI(19, weight: .semibold))
-                        .foregroundStyle(SnootsPalette.ink)
-                        .frame(width: 36, height: 36)
-                        .background(SnootsPalette.surface, in: Circle())
-                        .overlay(Circle().stroke(SnootsPalette.divider, lineWidth: 1))
-                        .accessibilityHidden(true)
-                }
             }
 
             HStack(spacing: 8) {
