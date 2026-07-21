@@ -1302,11 +1302,13 @@ struct MapsView: View {
             candidates = store.allPlaces
         }
 
-        return candidates.filter { place in
-            (selectedCategory.map { place.nearbyCategory == $0 } ?? true)
-                && selectedRegion.matches(place)
-                && localMeetupMatches(place)
-        }
+        return candidates
+            .filter { place in
+                (selectedCategory.map { place.nearbyCategory == $0 } ?? true)
+                    && selectedRegion.matches(place)
+                    && localMeetupMatches(place)
+            }
+            .sorted(by: nearbyDistanceOrder)
     }
 
     private var availableFilterOptions: [MapFilterOption] {
@@ -1324,15 +1326,6 @@ struct MapsView: View {
             category: selectedCategory?.databaseCategory,
             filterIDs: selectedFilterIDs.sorted()
         )
-    }
-
-    private var markers: [NearbyMapMarker] {
-        guard visiblePlaces.count > 3 else {
-            return visiblePlaces.map { NearbyMapMarker(place: $0, language: language) }
-        }
-        let leadingPins = visiblePlaces.prefix(2).map { NearbyMapMarker(place: $0, language: language) }
-        let clustered = Array(visiblePlaces.dropFirst(2))
-        return leadingPins + [NearbyMapMarker(cluster: clustered, language: language)]
     }
 
     private var resultsSummary: String {
@@ -1376,7 +1369,7 @@ struct MapsView: View {
                 let panelHeight = resultsPanelDetent.height(in: proxy.size.height)
                 VStack(spacing: 0) {
                     NearbyMap(
-                        markers: markers,
+                        places: visiblePlaces,
                         selectedPlaceID: $selectedPlaceID,
                         region: $selectedRegion,
                         language: language
@@ -1386,6 +1379,7 @@ struct MapsView: View {
 
                     NearbyResultsPanel(
                         places: visiblePlaces,
+                        filterOptions: store.mapPlaces.filterOptions,
                         summary: resultsSummary,
                         selectedPlaceID: $selectedPlaceID,
                         detent: $resultsPanelDetent,
@@ -1449,6 +1443,15 @@ struct MapsView: View {
             default: true
             }
         }
+    }
+
+    private func nearbyDistanceOrder(_ lhs: Place, _ rhs: Place) -> Bool {
+        let lhsDistance = lhs.distanceMeters ?? Double(lhs.walkMinutes) * 80
+        let rhsDistance = rhs.distanceMeters ?? Double(rhs.walkMinutes) * 80
+        if lhsDistance == rhsDistance {
+            return lhs.id < rhs.id
+        }
+        return lhsDistance < rhsDistance
     }
 }
 
@@ -1699,6 +1702,9 @@ private struct NearbyMapMarker: Identifiable {
     let longitude: Double
     let placeIDs: [String]
     let isUserCreated: Bool
+    let latitudeDelta: Double
+    let longitudeDelta: Double
+    let distanceMeters: Double
 
     init(place: Place, language: SnootsLanguage) {
         id = place.id
@@ -1707,6 +1713,9 @@ private struct NearbyMapMarker: Identifiable {
         longitude = place.longitude
         placeIDs = [place.id]
         isUserCreated = place.verificationLevel == .hostCreated
+        latitudeDelta = 0
+        longitudeDelta = 0
+        distanceMeters = Self.annotationDistance(for: place)
     }
 
     init(cluster: [Place], language: SnootsLanguage) {
@@ -1716,26 +1725,63 @@ private struct NearbyMapMarker: Identifiable {
         longitude = cluster.map(\.longitude).reduce(0, +) / Double(cluster.count)
         placeIDs = cluster.map(\.id)
         isUserCreated = cluster.contains { $0.verificationLevel == .hostCreated }
+        latitudeDelta = (cluster.map(\.latitude).max() ?? latitude) - (cluster.map(\.latitude).min() ?? latitude)
+        longitudeDelta = (cluster.map(\.longitude).max() ?? longitude) - (cluster.map(\.longitude).min() ?? longitude)
+        distanceMeters = cluster.map(Self.annotationDistance).min() ?? .greatestFiniteMagnitude
     }
 
     var isCluster: Bool { placeIDs.count > 1 }
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
+
+    var focusRegion: MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(
+                latitudeDelta: max(latitudeDelta * 1.7, 0.006),
+                longitudeDelta: max(longitudeDelta * 1.7, 0.006)
+            )
+        )
+    }
+
+    private static func annotationDistance(for place: Place) -> Double {
+        if let distanceMeters = place.distanceMeters,
+           distanceMeters.isFinite,
+           distanceMeters >= 0 {
+            return distanceMeters
+        }
+        return Double(place.walkMinutes) * 80
+    }
 }
 
 private struct NearbyMap: View {
-    let markers: [NearbyMapMarker]
+    let places: [Place]
     @Binding var selectedPlaceID: String?
     @Binding var region: NearbyRegion
     let language: SnootsLanguage
     @State private var position: MapCameraPosition = NearbyRegion.currentLocation.cameraPosition
+    @State private var visibleRegion = NearbyRegion.currentLocation.mapRegion
+
+    private var markers: [NearbyMapMarker] {
+        dynamicMarkers(for: places, in: visibleRegion)
+    }
+
+    private var placesFocusSignature: [String] {
+        places
+            .sorted(by: placeSortOrder)
+            .map(\.id)
+    }
 
     var body: some View {
-        Map(position: $position) {
+        Map(position: $position, interactionModes: [.pan, .zoom]) {
             UserAnnotation()
             ForEach(markers) { marker in
-                Annotation(marker.name, coordinate: marker.coordinate, anchor: .bottom) {
+                Annotation("", coordinate: marker.coordinate, anchor: .bottom) {
                     Button {
-                        selectedPlaceID = marker.placeIDs.first
+                        if marker.isCluster {
+                            zoomToCluster(marker)
+                        } else {
+                            selectedPlaceID = marker.placeIDs.first
+                        }
                     } label: {
                         VStack(spacing: 4) {
                             if marker.isUserCreated && !marker.isCluster {
@@ -1748,6 +1794,7 @@ private struct NearbyMap: View {
                                     .overlay(Capsule().stroke(SnootsPalette.ink, lineWidth: 1))
                             }
                             NearbyMapPin(
+                                name: marker.name,
                                 count: marker.placeIDs.count,
                                 isSelected: marker.placeIDs.contains(selectedPlaceID ?? ""),
                                 isUserCreated: marker.isUserCreated
@@ -1755,38 +1802,194 @@ private struct NearbyMap: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .zIndex(max(0, 1_000_000 - marker.distanceMeters))
                     .accessibilityLabel(marker.isCluster ? language.text("\(marker.placeIDs.count) places clustered", "\(marker.placeIDs.count) 個地點群組") : marker.name)
                 }
             }
         }
         .mapStyle(.standard(elevation: .realistic))
-        .overlay(alignment: .topTrailing) {
-            Button {
-                region = .currentLocation
-            } label: {
-                Image(systemName: "location.fill")
-                    .font(.snootsUI(16, weight: .bold))
-                    .foregroundStyle(SnootsPalette.ink)
-                    .frame(width: 44, height: 44)
-                    .background(SnootsPalette.surface, in: Circle())
-                    .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-            }
-                .buttonStyle(.plain)
-                .padding(14)
-                .accessibilityLabel(language.text("Use current location", "使用目前位置"))
-        }
-        .onAppear { position = region.cameraPosition }
-        .onChange(of: region) { _, newRegion in
-            withAnimation(.snappy) {
-                position = newRegion.cameraPosition
-            }
-        }
-        .accessibilityElement(children: .contain)
         .accessibilityLabel(language.text("Nearby results map", "附近結果地圖"))
+        .onMapCameraChange(frequency: .continuous) { context in
+            visibleRegion = context.region
+        }
+        .overlay(alignment: .topTrailing) {
+            VStack(spacing: 10) {
+                Button {
+                    region = .currentLocation
+                    withAnimation(.snappy) {
+                        position = NearbyRegion.currentLocation.cameraPosition
+                    }
+                } label: {
+                    Image(systemName: "location.fill")
+                        .font(.snootsUI(16, weight: .bold))
+                        .foregroundStyle(SnootsPalette.ink)
+                        .frame(width: 44, height: 44)
+                        .background(SnootsPalette.surface, in: Circle())
+                        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(language.text("Use current location", "使用目前位置"))
+
+                VStack(spacing: 0) {
+                    mapZoomButton(systemName: "plus", label: language.text("Zoom in", "放大地圖")) {
+                        zoomMap(by: 0.55)
+                    }
+
+                    Divider()
+                        .frame(width: 28)
+
+                    mapZoomButton(systemName: "minus", label: language.text("Zoom out", "縮小地圖")) {
+                        zoomMap(by: 1.8)
+                    }
+                }
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(SnootsPalette.divider, lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+            }
+            .padding(14)
+        }
+        .onAppear {
+            if places.isEmpty {
+                visibleRegion = region.mapRegion
+                position = region.cameraPosition
+            } else {
+                focusNearestResult(animated: false)
+            }
+        }
+        .onChange(of: region) { _, newRegion in
+            if places.isEmpty {
+                visibleRegion = newRegion.mapRegion
+                withAnimation(.snappy) {
+                    position = newRegion.cameraPosition
+                }
+            } else {
+                focusNearestResult(animated: true)
+            }
+        }
+        .onChange(of: placesFocusSignature) { _, _ in
+            focusNearestResult(animated: true)
+        }
+    }
+
+    private func mapZoomButton(
+        systemName: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.snootsUI(16, weight: .bold))
+                .foregroundStyle(SnootsPalette.ink)
+                .frame(width: 44, height: 40)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func zoomMap(by factor: Double) {
+        let latitudeDelta = min(max(visibleRegion.span.latitudeDelta * factor, 0.002), 120)
+        let longitudeDelta = min(max(visibleRegion.span.longitudeDelta * factor, 0.002), 180)
+        let zoomedRegion = MKCoordinateRegion(
+            center: visibleRegion.center,
+            span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
+        )
+        visibleRegion = zoomedRegion
+        withAnimation(.snappy) {
+            position = .region(zoomedRegion)
+        }
+    }
+
+    private func zoomToCluster(_ marker: NearbyMapMarker) {
+        visibleRegion = marker.focusRegion
+        withAnimation(.snappy) {
+            position = .region(marker.focusRegion)
+        }
+    }
+
+    private func focusNearestResult(animated: Bool) {
+        guard let nearestPlace = places.sorted(by: placeSortOrder).first else { return }
+        let focusedRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: nearestPlace.latitude,
+                longitude: nearestPlace.longitude
+            ),
+            span: MKCoordinateSpan(latitudeDelta: 0.022, longitudeDelta: 0.022)
+        )
+        visibleRegion = focusedRegion
+        if animated {
+            withAnimation(.snappy) {
+                position = .region(focusedRegion)
+            }
+        } else {
+            position = .region(focusedRegion)
+        }
+    }
+
+    private func dynamicMarkers(
+        for places: [Place],
+        in mapRegion: MKCoordinateRegion
+    ) -> [NearbyMapMarker] {
+        guard !places.isEmpty else { return [] }
+
+        if max(mapRegion.span.latitudeDelta, mapRegion.span.longitudeDelta) <= 0.008 {
+            return places
+                .sorted(by: placeSortOrder)
+                .map { NearbyMapMarker(place: $0, language: language) }
+                .sorted(by: markerDisplayOrder)
+        }
+
+        let sortedPlaces = places.sorted(by: placeSortOrder)
+        guard let nearestPlace = sortedPlaces.first else { return [] }
+        let latitudeThreshold = max(mapRegion.span.latitudeDelta * 0.16, 0.00025)
+        let longitudeThreshold = max(mapRegion.span.longitudeDelta * 0.24, 0.00025)
+        var groups: [[Place]] = []
+
+        for place in sortedPlaces.dropFirst() {
+            if let groupIndex = groups.firstIndex(where: { group in
+                let latitude = group.map(\.latitude).reduce(0, +) / Double(group.count)
+                let longitude = group.map(\.longitude).reduce(0, +) / Double(group.count)
+                return abs(place.latitude - latitude) <= latitudeThreshold
+                    && abs(place.longitude - longitude) <= longitudeThreshold
+            }) {
+                groups[groupIndex].append(place)
+            } else {
+                groups.append([place])
+            }
+        }
+
+        var clusteredMarkers = groups
+            .map { group in
+                if group.count == 1, let place = group.first {
+                    return NearbyMapMarker(place: place, language: language)
+                }
+                return NearbyMapMarker(cluster: group, language: language)
+            }
+        clusteredMarkers.append(NearbyMapMarker(place: nearestPlace, language: language))
+        return clusteredMarkers.sorted(by: markerDisplayOrder)
+    }
+
+    private func placeSortOrder(_ lhs: Place, _ rhs: Place) -> Bool {
+        let lhsDistance = lhs.distanceMeters ?? Double(lhs.walkMinutes) * 80
+        let rhsDistance = rhs.distanceMeters ?? Double(rhs.walkMinutes) * 80
+        if lhsDistance == rhsDistance {
+            return lhs.id < rhs.id
+        }
+        return lhsDistance < rhsDistance
+    }
+
+    private func markerDisplayOrder(_ lhs: NearbyMapMarker, _ rhs: NearbyMapMarker) -> Bool {
+        if lhs.distanceMeters == rhs.distanceMeters {
+            return lhs.id > rhs.id
+        }
+        return lhs.distanceMeters > rhs.distanceMeters
     }
 }
 
 private struct NearbyMapPin: View {
+    let name: String
     let count: Int
     let isSelected: Bool
     let isUserCreated: Bool
@@ -1794,18 +1997,43 @@ private struct NearbyMapPin: View {
     var body: some View {
         Group {
             if count == 1 {
-                Image(systemName: isUserCreated ? "person.2.fill" : "mappin.circle.fill")
-                    .font(.snootsUI(23, weight: .bold))
+                Text(name)
+                    .font(.snootsUI(12, weight: isSelected ? .bold : .semibold))
+                    .foregroundStyle(SnootsPalette.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: 156, minHeight: 34)
+                    .background(
+                        isSelected ? SnootsPalette.primary : (isUserCreated ? SnootsPalette.lime : SnootsPalette.surface),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                    .overlay {
+                        if !isSelected && !isUserCreated {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(SnootsPalette.divider, lineWidth: 1)
+                        }
+                    }
+                    .shadow(color: .black.opacity(isSelected ? 0.18 : 0.12), radius: isSelected ? 8 : 5, y: isSelected ? 5 : 3)
+                    .scaleEffect(isSelected ? 1.06 : 1)
             } else {
-                Text("\(count)")
-                    .font(.snootsUI(15, weight: .bold))
+                Text(name)
+                    .font(.snootsUI(12, weight: .bold))
+                    .foregroundStyle(SnootsPalette.ink)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: 156, minHeight: 34)
+                    .background(isSelected ? SnootsPalette.primary : SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        if !isSelected {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(SnootsPalette.primary.opacity(0.6), lineWidth: 1)
+                        }
+                    }
+                    .shadow(color: .black.opacity(isSelected ? 0.18 : 0.12), radius: isSelected ? 8 : 5, y: isSelected ? 5 : 3)
+                    .scaleEffect(isSelected ? 1.06 : 1)
             }
         }
-            .foregroundStyle(SnootsPalette.ink)
-            .frame(width: isSelected ? 54 : 46, height: isSelected ? 54 : 46)
-            .background(isSelected || isUserCreated ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
-            .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
-            .shadow(color: .black.opacity(isSelected ? 0.18 : 0.10), radius: isSelected ? 10 : 6, y: isSelected ? 6 : 3)
             .offset(y: isSelected ? -6 : 0)
             .animation(.snappy, value: isSelected)
     }
@@ -1813,6 +2041,7 @@ private struct NearbyMapPin: View {
 
 private struct NearbyResultsPanel: View {
     let places: [Place]
+    let filterOptions: [MapFilterOption]
     let summary: String
     @Binding var selectedPlaceID: String?
     @Binding var detent: NearbyResultsDetent
@@ -1861,7 +2090,12 @@ private struct NearbyResultsPanel: View {
                     ScrollView {
                         LazyVStack(spacing: 10) {
                             ForEach(places) { place in
-                                NearbyPlaceCard(place: place, isSelected: selectedPlaceID == place.id, language: language) {
+                                NearbyPlaceCard(
+                                    place: place,
+                                    filterOptions: filterOptions,
+                                    isSelected: selectedPlaceID == place.id,
+                                    language: language
+                                ) {
                                     selectedPlaceID = place.id
                                 }
                                 .id(place.id)
@@ -1888,50 +2122,66 @@ private struct NearbyResultsPanel: View {
 
 private struct NearbyPlaceCard: View {
     let place: Place
+    let filterOptions: [MapFilterOption]
     let isSelected: Bool
     let language: SnootsLanguage
     let onSelect: () -> Void
 
+    private var databaseFilterLabels: [String] {
+        filterOptions
+            .filter { place.filterIDs.contains($0.id) }
+            .sorted { $0.displayOrder < $1.displayOrder }
+            .map { $0.title(language) }
+    }
+
+    private var unavailableText: String {
+        language.text("Unable to fetch data", "無法抓取資料")
+    }
+
+    private var displayedPlaceName: String {
+        let name = place.localizedName(language).trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? unavailableText : name
+    }
+
+    private var displayedFilterLabels: [String] {
+        databaseFilterLabels.isEmpty ? [unavailableText] : databaseFilterLabels
+    }
+
     var body: some View {
-        Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(place.localizedName(language))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Text(displayedPlaceName)
                     .font(.snootsCardTitle())
                     .foregroundStyle(SnootsPalette.ink)
-                Text(place.localizedCategory(language))
-                    .font(.snootsMetadata())
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            HStack(spacing: 8) {
+                Text(place.localizedOpeningHoursData(language))
                     .foregroundStyle(SnootsPalette.secondaryText)
-                HStack(spacing: 5) {
-                    Text(place.localizedWalk(language))
-                    Text("·")
-                    if place.hasLiveStatus {
-                        Text(place.isOpenNow ? language.text("Open", "營業中") : language.text("Closed", "休息中"))
-                            .foregroundStyle(place.isOpenNow ? SnootsPalette.deepLilac : SnootsPalette.secondaryText)
-                    } else {
-                        Text(language.text("Hours unavailable", "暫無營業資訊"))
-                            .foregroundStyle(SnootsPalette.secondaryText)
-                    }
-                }
-                .font(.snootsMetadata())
-                Text(place.dogAccess.label(language))
-                    .font(.snootsChip())
+                    .lineLimit(1)
+
+                Circle()
+                    .fill(SnootsPalette.secondaryText.opacity(0.7))
+                    .frame(width: 3, height: 3)
+                    .accessibilityHidden(true)
+
+                Text(place.localizedDistanceFromCurrentLocation(language))
                     .foregroundStyle(SnootsPalette.ink)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(SnootsPalette.butter, in: Capsule())
-                Label("\(place.verificationLevel.label(language)) · \(place.localizedLastConfirmed(language))", systemImage: "checkmark.seal.fill")
-                    .font(.snootsMetadata())
-                    .foregroundStyle(SnootsPalette.secondaryText)
+                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(isSelected ? SnootsPalette.primaryTint : SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
-                    .stroke(isSelected ? SnootsPalette.ink : .clear, lineWidth: 2)
-            }
+            .font(.snootsMetadata())
+            .accessibilityElement(children: .combine)
+
+            DeclarationChips(labels: displayedFilterLabels, tint: SnootsPalette.primaryTint)
+                .accessibilityLabel(language.text("Place filters", "地點次標籤"))
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(isSelected ? SnootsPalette.primaryTint : SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+        .onTapGesture(perform: onSelect)
         .accessibilityHint(language.text("Highlights this place on the map", "在地圖上標示此地點"))
     }
 }

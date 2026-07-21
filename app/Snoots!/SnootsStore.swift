@@ -423,6 +423,10 @@ struct Place: Identifiable {
     let acceptsLargeDogs: Bool
     let isOpenNow: Bool
     var hasLiveStatus: Bool = true
+    var appleMapsURL: URL? = nil
+    var filterIDs: Set<String> = []
+    var remoteOpeningHours: [String: String] = [:]
+    var distanceMeters: Double? = nil
     let latitude: Double
     let longitude: Double
     let address: String
@@ -537,6 +541,45 @@ struct Place: Identifiable {
         return isOpenNow ? language.text("Open until 21:00", "營業至 21:00") : language.text("Opens at 10:00", "10:00 開始營業")
     }
 
+    var resolvedAppleMapsURL: URL? {
+        if let appleMapsURL { return appleMapsURL }
+        var components = URLComponents(string: "https://maps.apple.com/")
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: name),
+            URLQueryItem(name: "address", value: address)
+        ]
+        return components?.url
+    }
+
+    func localizedOpeningHoursData(_ language: SnootsLanguage, date: Date = .now) -> String {
+        let normalizedHours = remoteOpeningHours.reduce(into: [String: String]()) { result, entry in
+            result[entry.key.lowercased()] = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEEE"
+        let weekday = formatter.string(from: date).lowercased()
+        let keys = ["today", weekday, String(weekday.prefix(3)), "display"]
+        if let value = keys.compactMap({ normalizedHours[$0] }).first(where: { !$0.isEmpty }) {
+            return value
+        }
+        return language.text("Unable to fetch data", "無法抓取資料")
+    }
+
+    func localizedDistanceFromCurrentLocation(_ language: SnootsLanguage) -> String {
+        guard let distanceMeters, distanceMeters.isFinite, distanceMeters >= 0 else {
+            return language.text("Unable to fetch data", "無法抓取資料")
+        }
+        if distanceMeters < 1_000 {
+            let meters = Int(distanceMeters.rounded())
+                .formatted(.number.locale(language.locale))
+            return language.text("Distance \(meters) m", "距離 \(meters) 公尺")
+        }
+        let kilometers = (distanceMeters / 1_000)
+            .formatted(.number.precision(.fractionLength(1)).locale(language.locale))
+        return language.text("Distance \(kilometers) km", "距離 \(kilometers) 公里")
+    }
+
     func realWorldNotes(_ language: SnootsLanguage) -> [String] {
         acceptsLargeDogs
             ? [language.text("Tight indoor aisles", "室內走道較窄"), language.text("Busy after 2pm", "下午 2 點後較繁忙")]
@@ -628,6 +671,10 @@ extension MapPlace {
             acceptsLargeDogs: filterIDs.contains("dining.large_dog") || category != .restaurant,
             isOpenNow: false,
             hasLiveStatus: false,
+            appleMapsURL: appleMapsURL,
+            filterIDs: filterIDs,
+            remoteOpeningHours: openingHours,
+            distanceMeters: distanceMeters,
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
             address: location ?? area ?? "",
