@@ -61,7 +61,7 @@ struct Snoots_App: App {
             }
             .allowsHitTesting(!isShowingLaunchScreen)
             .accessibilityHidden(isShowingLaunchScreen)
-            // Keep the form mounted when returning from the background so its draft survives.
+            // Keep the app mounted during the launch overlay; individual forms discard unsaved drafts on background.
             .overlay {
                 if isShowingLaunchScreen {
                     LaunchScreenView()

@@ -2,6 +2,12 @@ import Foundation
 import MapKit
 import Observation
 
+enum MatchVerificationScenario: String, CaseIterable, Identifiable {
+    case cards, loading, empty, failure
+
+    var id: String { rawValue }
+}
+
 @MainActor
 @Observable
 final class SnootsStore {
@@ -42,6 +48,11 @@ final class SnootsStore {
     var isMatched = false
     var hasMatchChat = false
     var matchChatMessages: [MatchChatMessage] = []
+    var matchVerificationScenario: MatchVerificationScenario = .cards
+    var matchVerificationBypassesSetup = false
+    var matchVerificationCandidateIndex: Int?
+    var matchVerificationSelfInterested = false
+    var matchVerificationOtherInterested = false
     var meetupGroupMessages: [MeetupGroupMessage] = [
         MeetupGroupMessage(senderName: "豆花", text: "大家好！別忘了先上傳狗狗打招呼照片，讓見面更安心。", isOutgoing: true),
         MeetupGroupMessage(senderName: "超超", text: "收到，我已經完成守則確認，期待一起散步！", isOutgoing: false)
@@ -172,6 +183,24 @@ final class SnootsStore {
         socialPosts[index].comments += 1
     }
 
+    func publishLocalPost(text: String, photoData: Data?) {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty || photoData != nil else { return }
+        let now = Calendar.current.dateComponents([.month, .day], from: .now)
+        socialPosts.insert(SocialPost(
+            owner: pet.name, petName: pet.name, location: profile.neighborhood,
+            timeAgo: "剛剛", body: body, declarations: [], likes: 0, comments: 0,
+            kind: photoData == nil ? .discussion : .photo, photoName: nil,
+            title: body.isEmpty ? "\(pet.name)的照片" : String(body.prefix(22)),
+            month: now.month ?? 1, day: now.day ?? 1, galleryPhotoNames: [], replies: [],
+            localPhotoData: photoData, isLocallyCreated: true
+        ), at: 0)
+    }
+
+    func deleteLocalPost(_ id: UUID) {
+        socialPosts.removeAll { $0.id == id && $0.isLocallyCreated }
+    }
+
     let playdate = PlaydateCandidate(
         name: "超超",
         age: "2 y",
@@ -190,9 +219,81 @@ final class SnootsStore {
         energyLevel: "中等（慢速散步型）",
         meetingEnvironments: ["開放式公園"],
         healthSummary: "狂犬病疫苗已施打・每月定期驅蟲",
+        publicHealthLabels: ["狂犬病疫苗", "定期驅蟲"],
         isRabiesVaccinated: true,
         hasMonthlyParasitePrevention: true
     )
+
+    let laiFuPlaydate = PlaydateCandidate(
+        name: "來福",
+        age: "3 y",
+        owner: "小安",
+        distance: "2.4 km away",
+        imageName: "LaiFu1",
+        photoNames: ["LaiFu1"],
+        compatibility: ["Leash-first", "Similar size"],
+        accountability: "Owner-reported health details",
+        intro: "來福喜歡到公園聞聞草地，也樂意和新朋友慢慢打招呼。",
+        breed: "約克夏",
+        size: "小型犬",
+        sex: "公",
+        isNeutered: true,
+        strangerDogReaction: "會主動靠近，能配合慢慢認識",
+        energyLevel: "中等（喜歡短程散步）",
+        meetingEnvironments: ["開放式公園", "安靜步道"],
+        healthSummary: "狂犬病疫苗已施打・每月定期驅蟲",
+        publicHealthLabels: ["狂犬病疫苗", "定期驅蟲"],
+        isRabiesVaccinated: true,
+        hasMonthlyParasitePrevention: true
+    )
+
+    var demoPlaydateCandidates: [PlaydateCandidate] { [playdate, laiFuPlaydate] }
+    var activeMatchCandidate: PlaydateCandidate {
+        guard let index = matchVerificationCandidateIndex,
+              demoPlaydateCandidates.indices.contains(index) else { return playdate }
+        return demoPlaydateCandidates[index]
+    }
+    var isMatchVerificationActive: Bool { matchVerificationCandidateIndex != nil }
+
+    #if DEBUG
+    func beginMatchVerification(candidateIndex: Int) {
+        guard demoPlaydateCandidates.indices.contains(candidateIndex) else { return }
+        matchVerificationCandidateIndex = candidateIndex
+        matchVerificationSelfInterested = false
+        matchVerificationOtherInterested = false
+        matchVerificationBypassesSetup = true
+        matchVerificationScenario = .cards
+        isMatched = false
+        hasMatchChat = false
+        isMatchBlocked = false
+        isMatchCancelled = false
+        matchChatMessages.removeAll()
+    }
+
+    func recordMatchVerificationInterest(fromSelf: Bool) {
+        guard isMatchVerificationActive else { return }
+        if fromSelf {
+            matchVerificationSelfInterested = true
+        } else {
+            matchVerificationOtherInterested = true
+        }
+        if matchVerificationSelfInterested && matchVerificationOtherInterested {
+            isMatched = true
+            createMatchChat()
+        }
+    }
+
+    func resetMatchVerification() {
+        matchVerificationCandidateIndex = nil
+        matchVerificationSelfInterested = false
+        matchVerificationOtherInterested = false
+        matchVerificationBypassesSetup = false
+        matchVerificationScenario = .cards
+        isMatched = false
+        hasMatchChat = false
+        matchChatMessages.removeAll()
+    }
+    #endif
 
     let criticalSymptoms = ["Repeated vomiting", "Very quiet", "Possible toxin"]
     let careSteps = [
@@ -300,6 +401,7 @@ final class SnootsStore {
     }
 
     func createMatchChat() {
+        guard isMatched else { return }
         hasMatchChat = true
     }
 
@@ -309,7 +411,9 @@ final class SnootsStore {
         matchChatMessages.append(MatchChatMessage(text: trimmedText, isOutgoing: true))
         matchChatMessages.append(
             MatchChatMessage(
-                text: "謝謝你分享！超超也很期待用舒服的步調認識豆花。",
+                text: isMatchVerificationActive
+                    ? "\(activeMatchCandidate.name)：已收到你的訊息（模擬回覆，不會送給真實使用者）。"
+                    : "謝謝你分享！超超也很期待用舒服的步調認識豆花。",
                 isOutgoing: false
             )
         )
@@ -879,6 +983,8 @@ struct SocialPost: Identifiable {
     let day: Int
     let galleryPhotoNames: [String]
     var replies: [SocialPostComment]
+    var localPhotoData: Data? = nil
+    var isLocallyCreated = false
 
     func localizedTimeAgo(_ language: SnootsLanguage) -> String {
         switch timeAgo {
@@ -937,6 +1043,7 @@ struct PlaydateCandidate {
     let energyLevel: String
     let meetingEnvironments: [String]
     let healthSummary: String
+    let publicHealthLabels: [String]
     let isRabiesVaccinated: Bool
     let hasMonthlyParasitePrevention: Bool
 }

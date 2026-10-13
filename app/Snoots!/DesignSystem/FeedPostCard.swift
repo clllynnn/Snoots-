@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct FeedPostCard: View {
     let post: SocialPost
@@ -6,9 +7,11 @@ struct FeedPostCard: View {
     let isLiked: Bool
     let onToggleLike: () -> Void
     let onSendComment: (String) -> Void
+    var onDelete: (() -> Void)? = nil
 
     @State private var commentDraft = ""
     @State private var showsAllComments = false
+    @State private var showsDeleteConfirmation = false
     @FocusState private var isWritingComment: Bool
 
     private var shareText: String {
@@ -19,7 +22,9 @@ struct FeedPostCard: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 header
-                photoCollage
+                if post.localPhotoData != nil || !post.galleryPhotoNames.isEmpty {
+                    photoCollage
+                }
                 author
                 Text(post.localizedBody(language))
                     .font(.snootsUI(14))
@@ -40,6 +45,12 @@ struct FeedPostCard: View {
         }
         .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
         .snootsCardShadow()
+        .confirmationDialog("刪除這篇本機測試貼文？", isPresented: $showsDeleteConfirmation, titleVisibility: .visible) {
+            Button("刪除貼文", role: .destructive) { onDelete?() }
+            Button("保留", role: .cancel) {}
+        } message: {
+            Text("這篇貼文及其本機留言會從畫面移除，無法復原。")
+        }
     }
 
     private var header: some View {
@@ -61,10 +72,36 @@ struct FeedPostCard: View {
                 .foregroundStyle(SnootsPalette.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
+            if onDelete != nil {
+                Menu {
+                    Button("刪除貼文", role: .destructive) { showsDeleteConfirmation = true }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("貼文選單")
+            }
         }
     }
 
     private var photoCollage: some View {
+        Group {
+            if let data = post.localPhotoData, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 216)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .accessibilityLabel("\(post.title)的照片")
+            } else {
+                staticPhotoCollage
+            }
+        }
+    }
+
+    private var staticPhotoCollage: some View {
         GeometryReader { geometry in
             let gap: CGFloat = 4
             let mainWidth = (geometry.size.width - gap) * 0.67
@@ -104,6 +141,11 @@ struct FeedPostCard: View {
             Text(post.owner)
                 .font(.snootsUI(13, weight: .semibold))
                 .foregroundStyle(SnootsPalette.ink)
+            if post.isLocallyCreated {
+                Text("本機模擬")
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.navigationActive)
+            }
             Text("・\(post.location)")
                 .font(.snootsUI(12))
                 .foregroundStyle(SnootsPalette.secondaryText)

@@ -5,36 +5,79 @@ struct MeetupHubView: View {
     @Environment(MeetupRepository.self) private var repository
     @Environment(SnootsAccountSession.self) private var account
     @State private var tab = 0
+    @State private var section = 0
     @State private var creating = false
     @State private var invite = ""
     @State private var invitationID: UUID?
     @State private var inviteError: String?
 
     private var filtered: [MeetupRecord] {
-        repository.meetups.filter { tab == 0 ? $0.isHost(account.userID) : !$0.isHost(account.userID) && $0.myStatus != nil }
+        repository.meetups.filter { event in
+            switch section {
+            case 0: event.isHost(account.userID)
+            case 1: !event.isHost(account.userID) && event.myStatus == "approved"
+            default: !event.isHost(account.userID) && event.myStatus == "pending"
+            }
+        }
     }
     var body: some View {
         List {
             MeetupServiceStatus()
             Section {
-                Picker("我的狗聚", selection: $tab) {
-                    Text("已發起").tag(0); Text("已報名").tag(1)
+                Picker("狗聚頁面", selection: $tab) {
+                    Text("瀏覽狗聚").tag(0)
+                    Text("我的狗聚").tag(1)
                 }.pickerStyle(.segmented)
-                NavigationLink { MeetupBrowseView() } label: { Label("瀏覽狗聚", systemImage: "magnifyingglass") }
-                Button { creating = true } label: { Label("發起狗聚", systemImage: "plus.circle") }
             }
-            Section("邀請加入") {
-                TextField("貼上邀請連結或輸入邀請碼", text: $invite)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                Button("查看邀請的狗聚") { resolveInvite() }.disabled(invite.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                if let inviteError { Text(inviteError).foregroundStyle(.red) }
-            }
-            Section(tab == 0 ? "已發起" : "已報名") {
-                if filtered.isEmpty && !repository.isLoading {
-                    ContentUnavailableView(tab == 0 ? "尚未發起狗聚" : "尚未報名狗聚", systemImage: "calendar", description: Text("可以瀏覽其他狗聚，或發起自己的活動。"))
+            if tab == 0 {
+                Section {
+                    Button { creating = true } label: { Label("發起狗聚", systemImage: "plus.circle") }
                 }
-                ForEach(filtered) { event in
-                    NavigationLink { MeetupDetailScreen(eventID: event.id) } label: { MeetupSummaryRow(event: event) }
+                Section("可報名活動") {
+                    let available = repository.meetups.filter { $0.status == "active" && !$0.isHost(account.userID) && $0.myStatus == nil }
+                    if available.isEmpty && !repository.isLoading {
+                        ContentUnavailableView("目前沒有可報名的狗聚", systemImage: "calendar", description: Text("稍後再來看看，或自己發起一場活動。"))
+                    }
+                    ForEach(available) { event in
+                        NavigationLink { MeetupDetailScreen(eventID: event.id) } label: { MeetupSummaryRow(event: event) }
+                    }
+                }
+            } else {
+                Section {
+                    Picker("我的狗聚分類", selection: $section) {
+                        Text("已發起").tag(0)
+                        Text("已報名").tag(1)
+                        Text("待審核").tag(2)
+                    }.pickerStyle(.segmented)
+                }
+                Section("邀請加入") {
+                    TextField("貼上邀請連結或輸入邀請碼", text: $invite)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Button("查看邀請的狗聚") { resolveInvite() }.disabled(invite.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if let inviteError { Text(inviteError).foregroundStyle(.red) }
+                }
+                Section(["已發起", "已報名", "待審核"][section]) {
+                    if filtered.isEmpty && !repository.isLoading {
+                        ContentUnavailableView("目前沒有此類狗聚", systemImage: "calendar", description: Text("活動和申請狀態會顯示在對應分類。"))
+                    }
+                    ForEach(filtered) { event in
+                        NavigationLink { MeetupDetailScreen(eventID: event.id) } label: { MeetupSummaryRow(event: event) }
+                    }
+                }
+                if section == 2 {
+                    Section("申請結果紀錄") {
+                        let results = repository.meetups.filter {
+                            !$0.isHost(account.userID) && $0.myStatus != nil &&
+                            $0.myStatus != "approved" && $0.myStatus != "pending"
+                        }
+                        if results.isEmpty {
+                            Text("目前沒有已結束的申請紀錄。")
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(results) { event in
+                            NavigationLink { MeetupDetailScreen(eventID: event.id) } label: { MeetupSummaryRow(event: event) }
+                        }
+                    }
                 }
             }
         }
@@ -51,7 +94,7 @@ struct MeetupHubView: View {
             }
             #endif
         }
-        .navigationTitle("我的狗聚")
+        .navigationTitle("狗聚")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await repository.refresh(account: account)
@@ -112,7 +155,8 @@ struct MeetupSummaryRow: View {
             HStack {
                 Text(MeetupRules.statusTitle(event.status == "active" ? event.myStatus ?? "active" : event.status))
                     .font(.caption.weight(.semibold)).padding(6).background(.quaternary, in: Capsule())
-                Text("\(event.members.filter { $0.status == "approved" }.count)／\(event.capacity) 位").font(.caption).foregroundStyle(.secondary)
+                Text("可報名 \(max(0, event.members.filter { $0.status == "approved" }.count - 1))／\(max(0, event.capacity - 1)) 位（不含發起人）")
+                    .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if event.unread > 0 { Text("\(event.unread)").font(.caption.bold()).foregroundStyle(.white).padding(7).background(.black, in: Circle()) }
                 if event.muted { Image(systemName: "bell.slash").accessibilityLabel("已靜音") }
@@ -264,7 +308,7 @@ struct MeetupEditorScreen: View {
                 Picker("相處步調", selection: $form.pace) {
                     ForEach(["先保持距離平行散步", "遠處觀察後逐步靠近", "雙方放鬆時短暫打招呼"], id: \.self) { Text($0).tag($0) }
                 }
-                Stepper("名額 \(form.capacity) 位（含發起人）", value: $form.capacity, in: 2...30)
+                Stepper("可報名名額 \(form.capacity - 1) 位（不含發起人）", value: $form.capacity, in: 2...30)
             }
             Section("明確場地條件") {
                 Text("未限制體型時，保持以下選項皆未選取。年齡、絕育及陌生狗反應交由發起人審核參考。")
@@ -348,11 +392,11 @@ struct MeetupReviewScreen: View {
             if let event = repository.event(eventID), event.isHost(account.userID), event.hasAccess() {
                 let applicants = event.members.filter { $0.status == "pending" }
                 if applicants.isEmpty { ContentUnavailableView("沒有待審核申請", systemImage: "person.crop.circle.badge.checkmark") }
-                ForEach(applicants) { member in
-                    Section(member.nickname) {
+                ForEach(Array(applicants.enumerated()), id: \.element.id) { index, member in
+                    Section("申請 #\(index + 1)｜僅顯示已同意的狗狗資料") {
                         MeetupReviewPhoto(dog: member.dog)
-                        Text(member.dog.name ?? "未同意分享狗狗名稱")
-                        Text(member.dog.summary.isEmpty ? "未分享額外資料" : member.dog.summary)
+                        Text(member.dog.name ?? "不願透露狗狗名稱")
+                        Text(member.dog.summary.isEmpty ? "未分享額外狗狗資料" : member.dog.summary)
                         if let reaction = member.dog.reaction { Text(reactionLabel(reaction)) }
                         Button("核准") { review(member, approved: true) }
                         Button("拒絕", role: .destructive) { review(member, approved: false) }

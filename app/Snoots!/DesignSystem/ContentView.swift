@@ -34,7 +34,7 @@ struct ContentView: View {
                         switch route {
                         case .match:
                             MatchConfirmationView(
-                                candidate: store.playdate,
+                                candidate: store.activeMatchCandidate,
                                 store: store,
                                 language: language,
                                 onNavigate: { matchPath.append($0) }
@@ -43,7 +43,7 @@ struct ContentView: View {
                             BeforeMatchingView(store: store)
                         case .chat:
                             MatchChatRoom(
-                                candidate: store.playdate,
+                                candidate: store.activeMatchCandidate,
                                 store: store,
                                 language: language,
                                 onNavigate: { matchPath.append($0) },
@@ -51,14 +51,14 @@ struct ContentView: View {
                             )
                         case .chatList:
                             MatchChatListView(
-                                candidate: store.playdate,
+                                candidate: store.activeMatchCandidate,
                                 store: store,
                                 language: language,
                                 onNavigate: { matchPath.append($0) }
                             )
                         case .meetupChatList:
                             MatchChatListView(
-                                candidate: store.playdate,
+                                candidate: store.activeMatchCandidate,
                                 store: store,
                                 language: language,
                                 initiallySelectedTab: .meetups,
@@ -75,22 +75,28 @@ struct ContentView: View {
                         case .meetupParticipants:
                             MeetupParticipantListView(meetup: store.upcomingMeetup, language: language)
                         case .icebreaker:
-                            DailyIcebreakerTaskView(
-                                candidate: store.playdate,
-                                store: store,
-                                language: language,
-                                onNavigate: { matchPath.append($0) }
-                            )
+                            if store.isMatchVerificationActive {
+                                #if DEBUG
+                                DailyTaskVerificationView(candidate: store.activeMatchCandidate)
+                                #endif
+                            } else {
+                                DailyIcebreakerTaskView(
+                                    candidate: store.activeMatchCandidate,
+                                    store: store,
+                                    language: language,
+                                    onNavigate: { matchPath.append($0) }
+                                )
+                            }
                         case .safety:
                             MeetupSafetyView(
-                                candidate: store.playdate,
+                                candidate: store.activeMatchCandidate,
                                 store: store,
                                 language: language,
                                 onNavigate: { matchPath.append($0) }
                             )
                         case .dashboard:
                             OfflineMeetupDashboard(
-                                candidate: store.playdate,
+                                candidate: store.activeMatchCandidate,
                                 store: store,
                                 language: language
                             )
@@ -105,7 +111,7 @@ struct ContentView: View {
                                 onLeaveGroup: { matchPath = [.meetupChatList] }
                             )
                         case .memories:
-                            SharedMemoriesView(candidate: store.playdate, store: store, language: language)
+                            SharedMemoriesView(candidate: store.activeMatchCandidate, store: store, language: language)
                         case .emergency, .place:
                             EmptyView()
                         }
@@ -155,7 +161,11 @@ struct ContentView: View {
                     onOpenMeetupChats: {
                         matchPath = [.meetupChatList]
                         selectedTab = .match
-                    }
+                    },
+                    onOpenMatch: { matchPath = []; selectedTab = .match },
+                    onOpenMatchForm: { matchPath = [.matchSetup]; selectedTab = .match },
+                    onOpenChatRoom: { chatPath = [.chat]; selectedTab = .chats },
+                    onOpenDailyTask: { chatPath = [.icebreaker]; selectedTab = .chats }
                 )
             }
                 .tint(SnootsPalette.navigationActive)
@@ -163,21 +173,27 @@ struct ContentView: View {
                 .tag(AppTab.feed)
 
             NavigationStack(path: $chatPath) {
-                MatchChatListView(candidate: store.playdate, store: store, language: language,
+                MatchChatListView(candidate: store.activeMatchCandidate, store: store, language: language,
                     onNavigate: { chatPath.append($0) })
                     .navigationDestination(for: SnootsRoute.self) { route in
                         switch route {
                         case .chat:
-                            MatchChatRoom(candidate: store.playdate, store: store, language: language,
+                            MatchChatRoom(candidate: store.activeMatchCandidate, store: store, language: language,
                                 onNavigate: { chatPath.append($0) }, onBackToChatList: { chatPath = [] })
                         case .icebreaker:
-                            DailyIcebreakerTaskView(candidate: store.playdate, store: store, language: language,
-                                onNavigate: { chatPath.append($0) })
+                            if store.isMatchVerificationActive {
+                                #if DEBUG
+                                DailyTaskVerificationView(candidate: store.activeMatchCandidate)
+                                #endif
+                            } else {
+                                DailyIcebreakerTaskView(candidate: store.activeMatchCandidate, store: store, language: language,
+                                    onNavigate: { chatPath.append($0) })
+                            }
                         case .safety:
-                            MeetupSafetyView(candidate: store.playdate, store: store, language: language,
+                            MeetupSafetyView(candidate: store.activeMatchCandidate, store: store, language: language,
                                 onNavigate: { chatPath.append($0) })
                         case .dashboard:
-                            OfflineMeetupDashboard(candidate: store.playdate, store: store, language: language)
+                            OfflineMeetupDashboard(candidate: store.activeMatchCandidate, store: store, language: language)
                         case .meetupChatList, .meetupChat:
                             MeetupHubView()
                         default:
@@ -221,7 +237,8 @@ struct ContentView: View {
             }
         }
         .onChange(of: selectedTab) { _, tab in
-            guard tab == .match, matchPath.isEmpty, !store.matchDetailsCompleted else { return }
+            guard tab == .match, matchPath.isEmpty, !store.matchDetailsCompleted,
+                  !store.matchVerificationBypassesSetup else { return }
             matchPath = [.matchSetup]
         }
     }
@@ -254,33 +271,63 @@ enum SnootsRoute: Hashable {
 }
 
 struct FeedView: View {
+    @Environment(SnootsAccountSession.self) private var account
     let store: SnootsStore
     let language: SnootsLanguage
     let onMeetupCreated: (String) -> Void
     let onOpenChats: () -> Void
     let onOpenMeetupChats: () -> Void
+    let onOpenMatch: () -> Void
+    let onOpenMatchForm: () -> Void
+    let onOpenChatRoom: () -> Void
+    let onOpenDailyTask: () -> Void
     @State private var likedPostIDs: Set<UUID> = []
     @State private var isShowingMyMeetups = false
+    @State private var isShowingPostComposer = false
+    #if DEBUG
+    @State private var isShowingVerificationCenter = false
+    #endif
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 22) {
-                if store.socialPosts.isEmpty {
-                    ContentUnavailableView(
-                        "目前沒有貼文",
-                        systemImage: "photo.on.rectangle.angled",
-                        description: Text("新朋友的動態之後會顯示在這裡。")
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 260)
-                }
-
-                ForEach(store.socialPosts) { post in
+                Text("豆花示範區")
+                    .font(.snootsSection())
+                    .accessibilityAddTraits(.isHeader)
+                Text("示範內容，不是封閉測試者的真實貼文。")
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                ForEach(store.socialPosts.filter { $0.owner == "豆花" && !$0.isLocallyCreated }) { post in
                     FeedPostCard(
                         post: post,
                         language: language,
                         isLiked: likedPostIDs.contains(post.id),
                         onToggleLike: { toggle(post.id, in: &likedPostIDs) },
                         onSendComment: { store.addSocialPostComment(to: post.id, text: $0) }
+                    )
+                }
+
+                Text("最新貼文")
+                    .font(.snootsSection())
+                    .accessibilityAddTraits(.isHeader)
+                if !store.socialPosts.contains(where: \.isLocallyCreated) {
+                    ContentUnavailableView(
+                        "目前沒有測試貼文",
+                        systemImage: "photo.on.rectangle.angled",
+                        description: Text(account.usesPreviewAccount
+                                          ? "使用右上角「發文」建立本機測試貼文；正式社群尚未串接。"
+                                          : "正式社群貼文尚未串接，目前不會顯示其他測試者的貼文。")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 260)
+                }
+                ForEach(store.socialPosts.filter(\.isLocallyCreated)) { post in
+                    FeedPostCard(
+                        post: post,
+                        language: language,
+                        isLiked: likedPostIDs.contains(post.id),
+                        onToggleLike: { toggle(post.id, in: &likedPostIDs) },
+                        onSendComment: { store.addSocialPostComment(to: post.id, text: $0) },
+                        onDelete: { store.deleteLocalPost(post.id) }
                     )
                 }
             }
@@ -293,6 +340,18 @@ struct FeedView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .toolbar {
+            #if DEBUG
+            if account.usesPreviewAccount {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { isShowingVerificationCenter = true } label: {
+                        Image(systemName: "testtube.2")
+                    }
+                    .snootsWhiteTopBarActionStyle()
+                    .accessibilityLabel("畫面驗證入口")
+                }
+                .sharedBackgroundVisibility(.hidden)
+            }
+            #endif
             ToolbarItem(placement: .topBarLeading) {
                 Button { isShowingMyMeetups = true } label: {
                     Image(systemName: "calendar")
@@ -311,17 +370,34 @@ struct FeedView: View {
             .sharedBackgroundVisibility(.hidden)
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
-                Button(action: onOpenChats) {
-                    SnootsChatIcon()
+                Button { isShowingPostComposer = true } label: {
+                    Image(systemName: "plus.square")
                 }
                 .snootsWhiteTopBarActionStyle()
-                .accessibilityLabel(language.text("Chats", "聊天室"))
+                .accessibilityLabel("發文")
             }
             .sharedBackgroundVisibility(.hidden)
         }
         .navigationDestination(isPresented: $isShowingMyMeetups) {
             MeetupHubView()
         }
+        .sheet(isPresented: $isShowingPostComposer) {
+            NavigationStack { LocalPostComposer(store: store) }
+        }
+        #if DEBUG
+        .sheet(isPresented: $isShowingVerificationCenter) {
+            DebugVerificationCenter(
+                store: store,
+                openMatch: onOpenMatch,
+                openMatchForm: onOpenMatchForm,
+                openChatList: onOpenChats,
+                openChatRoom: onOpenChatRoom,
+                openDailyTask: onOpenDailyTask,
+                openMeetups: { isShowingMyMeetups = true },
+                openPostComposer: { isShowingPostComposer = true }
+            )
+        }
+        #endif
     }
 
     private func toggle(_ id: UUID, in selection: inout Set<UUID>) {
@@ -361,19 +437,6 @@ extension View {
             .frame(width: 44, height: 44)
             .contentShape(Circle())
             .glassEffect(.regular.tint(.black.opacity(0.45)).interactive(), in: Circle())
-    }
-
-    /// A floating, native-style glass control for actions layered on a photo.
-    /// It keeps the hit target generous while letting the image show through.
-    func snootsMatchChatActionStyle() -> some View {
-        buttonStyle(.plain)
-            .labelStyle(.iconOnly)
-            .font(.system(size: 19, weight: .medium))
-            .foregroundStyle(.white)
-            .frame(width: 46, height: 46)
-            .contentShape(Circle())
-            .glassEffect(.regular.interactive(), in: Circle())
-            .shadow(color: .black.opacity(0.20), radius: 8, y: 3)
     }
 
     /// For header actions outside a navigation bar. Toolbar actions use the
@@ -1581,248 +1644,338 @@ private struct MeetupParticipantAvatarStack: View {
 }
 
 struct PlaydatesView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let store: SnootsStore
     let language: SnootsLanguage
     let onNavigate: (SnootsRoute) -> Void
+    @State private var selectedCandidateIndex = 0
     @State private var selectedPhotoIndex = 0
-    @State private var didSkipCurrentCandidate = false
+    @State private var demoChoices: [Int: DemoChoice] = [:]
+    @State private var showMutualMatchPrompt = false
 
-    private let photoNames = ["ChaoChao1", "MatchGallery1", "MatchGallery2", "MatchGallery3"]
+    private enum DemoChoice { case skipped, interested }
+    private var demoCandidates: [PlaydateCandidate] { store.demoPlaydateCandidates }
+    private var candidate: PlaydateCandidate { demoCandidates[selectedCandidateIndex] }
+    private var photoNames: [String] {
+        candidate.photoNames.isEmpty ? [candidate.imageName] : candidate.photoNames
+    }
 
     var body: some View {
-        GeometryReader { geometry in
-            Group {
-                if !store.matchDetailsCompleted {
+        Group {
+            if store.matchVerificationScenario == .loading {
+                VStack(spacing: 16) {
+                    ProgressView()
+                    Text("模擬：正在載入候選")
+                    Text("返回首頁的畫面驗證入口可切換情境。")
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                .padding(24)
+            } else if store.matchVerificationScenario == .empty {
+                emptyState("目前沒有合適候選", symbol: "pawprint", detail: "模擬空狀態：稍後再回來看看，或調整配對偏好。")
+            } else if store.matchVerificationScenario == .failure {
+                VStack(spacing: 20) {
+                    emptyState("候選載入失敗", symbol: "wifi.exclamationmark", detail: "模擬連線失敗，請檢查網路後重試。")
+                    Button("重試載入") { store.matchVerificationScenario = .cards }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                }
+                .padding(24)
+            } else if !store.matchDetailsCompleted && !store.matchVerificationBypassesSetup {
+                VStack(spacing: 20) {
                     ContentUnavailableView(
                         "先完成配對資料",
                         systemImage: "slider.horizontal.3",
-                        description: Text("填寫活動力、見面偏好、互動界線與健康摘要後，即可開始配對。")
+                        description: Text("填寫活動力、見面偏好與健康公開設定後，即可查看候選卡。")
                     )
-                } else if store.isMatchBlocked {
-                    ContentUnavailableView(
-                        "已封鎖超超",
-                        systemImage: "hand.raised.fill",
-                        description: Text("可在「檔案 > 設定 > 封鎖名單」解除封鎖。")
-                    )
-                } else if store.isMatchCancelled {
-                    ContentUnavailableView(
-                        "配對已取消",
-                        systemImage: "person.2.slash",
-                        description: Text("聊天室已從配對列表中移除，對方不會收到通知。")
-                    )
-                } else if didSkipCurrentCandidate {
-                    VStack(spacing: 18) {
-                        ContentUnavailableView(
-                            "暫時沒有新的狗朋友",
-                            systemImage: "pawprint",
-                            description: Text("之後會再為豆花推薦合適的玩伴。")
-                        )
-
-                        Button("重新查看") {
-                            didSkipCurrentCandidate = false
-                        }
+                    Button("填寫配對資料") { onNavigate(.matchSetup) }
                         .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
-                    }
-                } else if store.isMatched {
-                    VStack(spacing: 12) {
-                        MatchedBanner(candidate: store.playdate, language: language)
-                        Button("查看聊天室") {
-                            store.createMatchChat()
-                            onNavigate(.chatList)
-                        }
-                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
-                    }
-                } else {
-                    MatchPhotoGallery(
-                        photoNames: photoNames,
-                        selectedIndex: $selectedPhotoIndex,
-                        onSwipeLeft: {
-                            didSkipCurrentCandidate = true
-                        },
-                        onSwipeRight: {
-                            store.isMatched = true
-                        }
-                    )
                 }
+                .padding(24)
+            } else if store.isMatchBlocked {
+                emptyState("已封鎖\(store.activeMatchCandidate.name)", symbol: "hand.raised.fill", detail: "可在「檔案 > 設定 > 封鎖名單」解除封鎖。")
+            } else if store.isMatchCancelled {
+                emptyState("配對已取消", symbol: "person.2.slash", detail: "聊天室已從配對列表中移除。")
+            } else if store.isMatched {
+                VStack(spacing: 18) {
+                    MatchedBanner(candidate: store.activeMatchCandidate, language: language)
+                    Button("現在進入聊天室") { onNavigate(.chat) }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                }
+                .padding(24)
+            } else if demoChoices.count == demoCandidates.count {
+                VStack(spacing: 20) {
+                    emptyState(
+                        "已看完示範候選",
+                        symbol: "pawprint",
+                        detail: "已查看全部 \(demoCandidates.count) 位示範候選。正式候選與互選功能尚未串接，操作不會傳送給對方。Debug 模擬對方互選請由首頁畫面驗證入口操作。"
+                    )
+                    Button("重新查看示範卡片") { resetDemoCards() }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                }
+                .padding(24)
+            } else {
+                candidateCard
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .clipped()
-        .background {
-            Image(photoNames[selectedPhotoIndex])
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
-        }
-        .ignoresSafeArea()
-        .overlay(alignment: .top) {
-            if isShowingPhotoGallery {
-                matchHeader
-            }
-        }
-        .overlay(alignment: .bottomLeading) {
-            if isShowingPhotoGallery {
-                matchPhotoInfo
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 48)
-            }
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(SnootsPalette.canvas)
         .toolbar(.hidden, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .tabBar)
+        .onAppear { syncVerificationCandidate() }
+        .onChange(of: store.matchVerificationCandidateIndex) { _, index in
+            if index == nil { demoChoices.removeAll() }
+            syncVerificationCandidate()
+        }
+        .onChange(of: store.isMatched) { _, matched in
+            guard matched else { return }
+            store.createMatchChat()
+            showMutualMatchPrompt = true
+        }
+        .alert("與\(store.activeMatchCandidate.name)配對成功！", isPresented: $showMutualMatchPrompt) {
+            Button("現在進入聊天室") { onNavigate(.chat) }
+            Button("稍後", role: .cancel) {}
+        } message: {
+            Text("雙方都選擇想認識，聊天室已建立。稍後也能在聊天室列表找到新配對。")
+        }
     }
 
-    private var matchHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("超超")
-                    .font(.snootsScreenTitle())
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
-                    .fixedSize()
+    private var candidateCard: some View {
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
+                    MatchPhotoGallery(photoNames: photoNames, selectedIndex: $selectedPhotoIndex)
+                        .frame(height: min(max(geometry.size.height * 0.47, 240), 390))
+                        .overlay(alignment: .topLeading) {
+                            Text("示範候選")
+                                .font(.snootsUI(13, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .frame(minHeight: 44)
+                                .background(.black.opacity(0.68), in: Capsule())
+                                .padding(18)
+                        }
+                        .overlay(alignment: .bottom) {
+                            if photoNames.count > 1 {
+                                HStack(spacing: 5) {
+                                    ForEach(photoNames.indices, id: \.self) { index in
+                                        Capsule()
+                                            .fill(index == selectedPhotoIndex ? .white : .white.opacity(0.48))
+                                            .frame(height: 4)
+                                    }
+                                }
+                                .padding(.horizontal, 20)
+                                .padding(.bottom, 16)
+                                .accessibilityHidden(true)
+                                .allowsHitTesting(false)
+                            }
+                        }
 
-                Spacer(minLength: 0)
+                    candidateNavigation
 
-                Button { onNavigate(.chatList) } label: {
-                    Image(systemName: "message")
+                    matchPhotoInfo
+                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(SnootsPalette.surface)
                 }
-                .snootsMatchChatActionStyle()
-                .accessibilityLabel(language.text("Chats", "聊天室"))
             }
-
-            HStack(spacing: 4) {
-                ForEach(photoNames.indices, id: \.self) { index in
-                    Capsule()
-                        .fill(index == selectedPhotoIndex ? SnootsPalette.lime : .white.opacity(0.38))
-                        .frame(width: index == selectedPhotoIndex ? 21 : 42, height: 3)
+            .id(selectedCandidateIndex)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 8) {
+                    Text(store.isMatchVerificationActive ? "模擬互選：不會傳送給真實使用者" : "示範卡片，操作不會傳送給對方")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(spacing: 10) { matchActionButtons }
+                    } else {
+                        HStack(spacing: 12) { matchActionButtons }
+                    }
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
             }
         }
+    }
+
+    private var candidateNavigation: some View {
+        HStack(spacing: 8) {
+            Button {
+                showCandidate(at: selectedCandidateIndex - 1)
+            } label: {
+                Label("上一位", systemImage: "chevron.left")
+            }
+            .disabled(selectedCandidateIndex == 0)
+
+            Spacer(minLength: 4)
+
+            Text("候選 \(selectedCandidateIndex + 1) / \(demoCandidates.count)")
+                .foregroundStyle(SnootsPalette.secondaryText)
+
+            Spacer(minLength: 4)
+
+            Button {
+                showCandidate(at: selectedCandidateIndex + 1)
+            } label: {
+                Label("下一位", systemImage: "chevron.right")
+            }
+            .disabled(selectedCandidateIndex == demoCandidates.count - 1)
+        }
+        .font(.snootsUI(14, weight: .semibold))
+        .buttonStyle(.borderless)
         .padding(.horizontal, 20)
-        .padding(.top, 42)
+        .frame(minHeight: 56)
+        .background(SnootsPalette.surface)
+    }
+
+    @ViewBuilder private var matchActionButtons: some View {
+        Button("先略過") { recordDemoChoice(.skipped) }
+            .buttonStyle(SecondaryButtonStyle())
+        Button("想認識") { recordDemoChoice(.interested) }
+            .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+    }
+
+    private func showCandidate(at index: Int) {
+        guard demoCandidates.indices.contains(index) else { return }
+        selectedPhotoIndex = 0
+        selectedCandidateIndex = index
+        #if DEBUG
+        if store.isMatchVerificationActive && store.matchVerificationCandidateIndex != index {
+            store.beginMatchVerification(candidateIndex: index)
+        }
+        #endif
+    }
+
+    private func recordDemoChoice(_ choice: DemoChoice) {
+        #if DEBUG
+        if store.isMatchVerificationActive {
+            if choice == .interested {
+                if store.matchVerificationCandidateIndex != selectedCandidateIndex {
+                    store.beginMatchVerification(candidateIndex: selectedCandidateIndex)
+                }
+                store.recordMatchVerificationInterest(fromSelf: true)
+            }
+            demoChoices[selectedCandidateIndex] = choice
+            if let nextIndex = demoCandidates.indices.first(where: { demoChoices[$0] == nil }) {
+                selectedCandidateIndex = nextIndex
+                selectedPhotoIndex = 0
+            }
+            return
+        }
+        #endif
+        demoChoices[selectedCandidateIndex] = choice
+        if let nextIndex = demoCandidates.indices.first(where: { demoChoices[$0] == nil }) {
+            showCandidate(at: nextIndex)
+        }
+    }
+
+    private func resetDemoCards() {
+        demoChoices.removeAll()
+        #if DEBUG
+        if store.isMatchVerificationActive { store.beginMatchVerification(candidateIndex: 0) }
+        #endif
+        showCandidate(at: 0)
+    }
+
+    private func syncVerificationCandidate() {
+        guard let index = store.matchVerificationCandidateIndex,
+              demoCandidates.indices.contains(index) else { return }
+        selectedCandidateIndex = index
+        selectedPhotoIndex = 0
     }
 
     private var matchPhotoInfo: some View {
-        let candidate = store.playdate
-
-        return VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                matchInfoChip(
-                    "pawprint.fill",
-                    "\(candidate.breed)・\(candidate.sex)（未絕育）",
-                    foreground: SnootsPalette.ink,
-                    background: .white
-                )
-                matchInfoChip(
-                    "location.fill",
-                    "1.2 公里",
-                    foreground: .white,
-                    background: .black.opacity(0.46)
-                )
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(candidate.name)
+                    .font(.snootsScreenTitle())
+                    .foregroundStyle(SnootsPalette.ink)
+                Spacer(minLength: 4)
+                Text(candidate.distance.replacingOccurrences(of: " km away", with: " 公里"))
+                    .font(.snootsUI(14, weight: .medium))
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                    .multilineTextAlignment(.trailing)
             }
 
-            matchTextInfoChip(
-                candidate.strangerDogReaction,
-                foreground: .white,
-                background: .black.opacity(0.46)
-            )
+            Text("\(candidate.breed)・\(candidate.sex)（\(candidate.isNeutered ? "已絕育" : "未絕育")）")
+                .font(.snootsBody())
+                .foregroundStyle(SnootsPalette.ink)
 
-            VStack(alignment: .leading, spacing: 8) {
-                matchInfoDetailRow("活動力", value: candidate.energyLevel, symbol: "figure.walk")
-                matchInfoDetailRow("見面環境", value: candidate.meetingEnvironments.first ?? "開放式公園", symbol: "leaf.fill")
+            Divider()
 
-                HStack(spacing: 16) {
-                    matchHealthLabel("狂犬病疫苗")
-                    matchHealthLabel("定期驅蟲")
+            matchInfoDetailRow("遇見陌生狗", value: candidate.strangerDogReaction, symbol: "pawprint")
+            matchInfoDetailRow("活動力", value: candidate.energyLevel.isEmpty ? "活動量待確認" : candidate.energyLevel, symbol: "figure.walk")
+            if !candidate.meetingEnvironments.isEmpty {
+                matchInfoDetailRow("偏好見面環境", value: candidate.meetingEnvironments.joined(separator: "・"), symbol: "leaf")
+            }
+
+            if !candidate.publicHealthLabels.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("公開健康摘要")
+                        .font(.snootsUI(14, weight: .medium))
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    ForEach(candidate.publicHealthLabels, id: \.self) { label in
+                        matchHealthLabel(label)
+                    }
+                    Text("由飼主自行確認，非平台文件查驗")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
                 }
             }
-            .padding(.top, 4)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("超超的配對資訊：博美、母、未絕育，距離 1.2 公里。對陌生狗害怕但會嘗試接近。活動力中等，偏好開放式公園，狂犬病疫苗與定期驅蟲已分享。")
-    }
 
-    private func matchInfoChip(
-        _ symbol: String,
-        _ title: String,
-        foreground: Color,
-        background: Color
-    ) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: symbol)
-            Text(title)
+            if !candidate.intro.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("飼主寄語")
+                        .font(.snootsUI(14, weight: .medium))
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    Text(candidate.intro)
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
-            .font(.snootsUI(14, weight: .semibold))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(background, in: Capsule())
-            .shadow(color: .black.opacity(0.22), radius: 3, y: 1)
-    }
-
-    private func matchTextInfoChip(
-        _ title: String,
-        foreground: Color,
-        background: Color
-    ) -> some View {
-        Text(title)
-            .font(.snootsUI(14, weight: .semibold))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(background, in: Capsule())
-            .shadow(color: .black.opacity(0.22), radius: 3, y: 1)
+        .accessibilityElement(children: .contain)
     }
 
     private func matchInfoDetailRow(
         _ label: String,
         value: String,
-        symbol: String,
-        tint: Color = .white
+        symbol: String
     ) -> some View {
-        HStack(spacing: 5) {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: symbol)
-                .font(.snootsUI(14, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 17)
+                .font(.snootsUI(16, weight: .semibold))
+                .foregroundStyle(SnootsPalette.navigationActive)
+                .frame(width: 22)
             Text(label)
-                .font(.snootsUI(12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.76))
+                .font(.snootsUI(14, weight: .medium))
+                .foregroundStyle(SnootsPalette.secondaryText)
+                .frame(width: 112, alignment: .leading)
             Text(value)
-                .font(.snootsUI(15, weight: .semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
+                .font(.snootsBody())
+                .foregroundStyle(SnootsPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .shadow(color: .black.opacity(0.60), radius: 3, y: 1)
     }
 
     private func matchHealthLabel(_ title: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.snootsUI(15, weight: .semibold))
-                .foregroundStyle(SnootsPalette.lime)
+                .foregroundStyle(SnootsPalette.navigationActive)
             Text(title)
-                .font(.snootsUI(13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SnootsPalette.ink)
         }
-        .shadow(color: .black.opacity(0.60), radius: 3, y: 1)
+        .font(.snootsUI(14, weight: .medium))
     }
 
-    private var isShowingPhotoGallery: Bool {
-        store.matchDetailsCompleted
-            && !store.isMatchBlocked
-            && !store.isMatchCancelled
-            && !didSkipCurrentCandidate
-            && !store.isMatched
+    private func emptyState(_ title: String, symbol: String, detail: String) -> some View {
+        ContentUnavailableView(title, systemImage: symbol, description: Text(detail))
+            .padding(24)
     }
-
 }
 
 private struct MatchPhotoGallery: View {
     let photoNames: [String]
     @Binding var selectedIndex: Int
-    let onSwipeLeft: () -> Void
-    let onSwipeRight: () -> Void
 
     var body: some View {
         GeometryReader { geometry in
@@ -1835,48 +1988,35 @@ private struct MatchPhotoGallery: View {
                     .id(selectedIndex)
                     .transition(.opacity)
 
-                HStack(spacing: 0) {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectPreviousPhoto() }
-
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectNextPhoto() }
-                }
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { location in
+                        changePhoto(by: location.x < geometry.size.width / 2 ? -1 : 1)
+                    }
             }
         }
-        .ignoresSafeArea()
         .animation(.easeInOut(duration: 0.2), value: selectedIndex)
         .simultaneousGesture(
             DragGesture(minimumDistance: 24)
                 .onEnded { value in
                     guard abs(value.translation.width) > abs(value.translation.height),
-                          abs(value.translation.width) > 90 else { return }
-
-                    if value.translation.width > 0 {
-                        onSwipeRight()
-                    } else {
-                        onSwipeLeft()
-                    }
+                          abs(value.translation.width) > 45 else { return }
+                    changePhoto(by: value.translation.width > 0 ? -1 : 1)
                 }
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("配對狗狗照片第 \(selectedIndex + 1) 張，共 \(photoNames.count) 張")
-        .accessibilityHint("點擊右半邊查看下一張，點擊左半邊查看上一張。向右滑表示有興趣，向左滑略過。")
-        .accessibilityAction(named: "下一張") { selectNextPhoto() }
-        .accessibilityAction(named: "上一張") { selectPreviousPhoto() }
+        .accessibilityHint(photoNames.count > 1
+            ? "點擊或左右滑動切換照片。配對選擇請使用卡片下方按鈕。"
+            : "只有一張照片。請使用上一位或下一位切換候選。")
+        .accessibilityAction(named: "下一張") { changePhoto(by: 1) }
+        .accessibilityAction(named: "上一張") { changePhoto(by: -1) }
     }
 
-    private func selectNextPhoto() {
+    private func changePhoto(by offset: Int) {
+        guard !photoNames.isEmpty else { return }
         withAnimation {
-            selectedIndex = (selectedIndex + 1) % photoNames.count
-        }
-    }
-
-    private func selectPreviousPhoto() {
-        withAnimation {
-            selectedIndex = (selectedIndex - 1 + photoNames.count) % photoNames.count
+            selectedIndex = (selectedIndex + offset + photoNames.count) % photoNames.count
         }
     }
 }
@@ -1891,23 +2031,27 @@ private struct MatchDetailSheet: View {
             List {
                 Section("基本資料") {
                     LabeledContent("品種／體型", value: "\(candidate.breed)／\(candidate.size)")
-                    LabeledContent("性別／絕育", value: candidate.isNeutered ? "\(candidate.sex)／已結紮" : "\(candidate.sex)／未結紮")
+                    LabeledContent("性別／絕育", value: candidate.isNeutered ? "\(candidate.sex)／已絕育" : "\(candidate.sex)／未絕育")
                     LabeledContent("陌生狗互動反應", value: candidate.strangerDogReaction)
                 }
-                Section(language.text("Activity level", "活動力")) {
-                    LabeledContent(language.text("Energy", "活動力"), value: language.text(candidate.energyLevel, "中"))
-                }
-                Section(language.text("Preferred meeting settings", "偏好見面環境")) {
+                Section("活動力與見面環境") {
+                    LabeledContent("活動力", value: candidate.energyLevel.isEmpty ? "活動量待確認" : candidate.energyLevel)
                     ForEach(candidate.meetingEnvironments, id: \.self) { environment in
                         Label(environment, systemImage: "mappin.and.ellipse")
                     }
                 }
-                Section(language.text("Vaccines and parasite prevention", "疫苗與驅蟲摘要")) {
-                    Label(language.text(candidate.healthSummary, "狂犬病、核心疫苗與驅蟲紀錄已分享"), systemImage: "checkmark.shield.fill")
-                        .foregroundStyle(SnootsPalette.navigationActive)
+                if !candidate.publicHealthLabels.isEmpty {
+                    Section("公開健康摘要") {
+                        ForEach(candidate.publicHealthLabels, id: \.self) { label in
+                            Label(label, systemImage: "checkmark.circle")
+                        }
+                        Text("由飼主自行確認，非平台文件查驗")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
-            .navigationTitle(language.text("\(candidate.name)’s details", "\(candidate.name) 的詳細資料"))
+            .navigationTitle("\(candidate.name) 的詳細資料")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1928,7 +2072,7 @@ private struct MatchedBanner: View {
                 .font(.system(size: 70))
                 .foregroundStyle(SnootsPalette.pink)
             Text(language.text("It’s a careful match!", "這是一場安心配對！")).font(.snootsScreenTitle())
-            Text(language.text("You and \(candidate.owner) agreed to a quiet, leashed first hello.", "你和 \(candidate.owner) 都同意先來一場安靜、牽繩的初次見面。"))
+            Text(language.text("You both chose to get acquainted. Start with a conversation and decide what feels comfortable together.", "雙方都選擇想認識。可以先聊天，再一起決定舒服的見面方式。"))
                 .font(.snootsBody())
                 .multilineTextAlignment(.center)
                 .foregroundStyle(SnootsPalette.secondaryText)
@@ -3162,6 +3306,7 @@ private struct ProfilePhaseRow: View {
 
 struct BeforeMatchingView: View {
     @Environment(SnootsAccountSession.self) private var account
+    @Environment(\.scenePhase) private var scenePhase
     let store: SnootsStore
     @Environment(\.dismiss) private var dismiss
     @State private var details: DogMatchingProfile
@@ -3347,6 +3492,14 @@ struct BeforeMatchingView: View {
             meetingEnvironmentInfoCard
                 .presentationDetents([.height(280)])
                 .presentationDragIndicator(.visible)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .background, !isSaving else { return }
+            // Only unsaved draft state is discarded; a completed profile stays in the store.
+            details = store.pet.matchingProfile
+            birthDate = details.birthDate ?? .now
+            currentStep = 0
+            activityDraft = ""
         }
     }
 
@@ -4489,60 +4642,67 @@ private struct MatchChatListView: View {
             Text(language.text("New matches", "新配對"))
                 .font(.snootsSection())
 
-            Button {
-                store.createMatchChat()
-                onNavigate(.chat)
-            } label: {
-                HStack(spacing: 13) {
-                    ZStack(alignment: .bottomTrailing) {
-                        Image(candidate.imageName)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 62, height: 62)
-                            .clipShape(Circle())
-                            .overlay { Circle().stroke(SnootsPalette.primaryTint, lineWidth: 3) }
-                        Image(systemName: "heart.fill")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(SnootsPalette.ink)
-                            .frame(width: 23, height: 23)
-                            .background(SnootsPalette.lime, in: Circle())
-                            .overlay { Circle().stroke(SnootsPalette.surface, lineWidth: 2) }
-                    }
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 7) {
-                            Text(candidate.name)
-                                .font(.snootsCardTitle())
-                            Text(language.text("New match", "新配對"))
-                                .font(.snootsMetadata())
+            if store.isMatched && store.hasMatchChat {
+                Button {
+                    onNavigate(.chat)
+                } label: {
+                    HStack(spacing: 13) {
+                        ZStack(alignment: .bottomTrailing) {
+                            Image(candidate.imageName)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 62, height: 62)
+                                .clipShape(Circle())
+                                .overlay { Circle().stroke(SnootsPalette.primaryTint, lineWidth: 3) }
+                            Image(systemName: "heart.fill")
+                                .font(.caption2.weight(.bold))
                                 .foregroundStyle(SnootsPalette.ink)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(SnootsPalette.lime, in: Capsule())
+                                .frame(width: 23, height: 23)
+                                .background(SnootsPalette.lime, in: Circle())
+                                .overlay { Circle().stroke(SnootsPalette.surface, lineWidth: 2) }
                         }
-                        Text(latestMessage)
-                            .font(.snootsUI(14))
-                            .foregroundStyle(SnootsPalette.secondaryText)
-                            .lineLimit(1)
-                    }
 
-                    Spacer(minLength: 8)
-                    VStack(alignment: .trailing, spacing: 9) {
-                        Text(language.text("Now", "剛剛"))
-                            .font(.snootsMetadata())
-                            .foregroundStyle(SnootsPalette.secondaryText)
-                        Circle()
-                            .fill(SnootsPalette.navigationActive)
-                            .frame(width: 9, height: 9)
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(spacing: 7) {
+                                Text(candidate.name)
+                                    .font(.snootsCardTitle())
+                                Text(language.text("New match", "新配對"))
+                                    .font(.snootsMetadata())
+                                    .foregroundStyle(SnootsPalette.ink)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(SnootsPalette.lime, in: Capsule())
+                            }
+                            Text(latestMessage)
+                                .font(.snootsUI(14))
+                                .foregroundStyle(SnootsPalette.secondaryText)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 8)
+                        VStack(alignment: .trailing, spacing: 9) {
+                            Text(language.text("Now", "剛剛"))
+                                .font(.snootsMetadata())
+                                .foregroundStyle(SnootsPalette.secondaryText)
+                            Circle()
+                                .fill(SnootsPalette.navigationActive)
+                                .frame(width: 9, height: 9)
+                        }
                     }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                    .snootsCardShadow()
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-                .snootsCardShadow()
+                .buttonStyle(.plain)
+                .accessibilityHint(language.text("Open chat with \(candidate.name)", "開啟和\(candidate.name)的聊天室"))
+            } else {
+                ContentUnavailableView(
+                    "尚無個人聊天室",
+                    systemImage: "bubble.left.and.bubble.right",
+                    description: Text("雙方都選擇想認識後，新的聊天室才會出現在這裡。")
+                )
             }
-            .buttonStyle(.plain)
-            .accessibilityHint(language.text("Open chat with \(candidate.name)", "開啟和\(candidate.name)的聊天室"))
 
             Label(language.text("Only share information that is appropriate for your matched dog friend to see.", "請只在聊天室內分享適合公開給配對對象的資訊。"), systemImage: "lock.fill")
                 .font(.snootsMetadata())
@@ -4928,6 +5088,14 @@ private struct MatchChatRoom: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if store.isMatchVerificationActive {
+                Label("模擬聊天室：訊息只留在此裝置，不會送給真實使用者。", systemImage: "testtube.2")
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                    .frame(maxWidth: .infinity)
+                    .padding(10)
+                    .background(SnootsPalette.primaryTint)
+            }
             VStack(alignment: .leading, spacing: 10) {
                 IcebreakerGuideCard(
                     candidate: candidate,
@@ -4993,7 +5161,8 @@ private struct MatchChatRoom: View {
                             .frame(width: 40, height: 40)
                             .background(SnootsPalette.primaryTint, in: Circle())
                     }
-                    .accessibilityLabel("傳送照片")
+                    .disabled(true)
+                    .accessibilityLabel("傳送照片尚未開放")
                     TextField(language.text("Write a message", "輸入訊息"), text: $draft, axis: .vertical)
                         .font(.snootsBody())
                         .lineLimit(1...4)
@@ -5015,11 +5184,6 @@ private struct MatchChatRoom: View {
                     .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
                     .accessibilityLabel(language.text("Send message", "傳送訊息"))
 
-                    Image(systemName: "mic.fill")
-                        .font(.headline)
-                        .foregroundStyle(SnootsPalette.secondaryText)
-                        .frame(width: 36, height: 44)
-                        .accessibilityLabel("語音訊息")
                 }
             }
             .padding(14)
@@ -5106,7 +5270,7 @@ private struct MatchChatRoom: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        .confirmationDialog("要取消和超超的配對嗎？", isPresented: $isShowingCancelConfirmation, titleVisibility: .visible) {
+        .confirmationDialog("要取消和\(candidate.name)的配對嗎？", isPresented: $isShowingCancelConfirmation, titleVisibility: .visible) {
             Button("取消配對", role: .destructive) {
                 store.cancelMatch()
                 dismiss()
@@ -5114,7 +5278,7 @@ private struct MatchChatRoom: View {
         } message: {
             Text("雙方會解除好友關係，聊天室將從列表中消失。對方不會收到通知。")
         }
-        .confirmationDialog("要封鎖超超嗎？", isPresented: $isShowingBlockConfirmation, titleVisibility: .visible) {
+        .confirmationDialog("要封鎖\(candidate.name)嗎？", isPresented: $isShowingBlockConfirmation, titleVisibility: .visible) {
             Button("封鎖", role: .destructive) {
                 store.blockMatch()
                 dismiss()
@@ -6054,7 +6218,7 @@ private struct GroupMeetupDashboard: View {
         .navigationTitle("現場儀表板")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $isShowingMemories) {
-            SharedMemoriesView(candidate: store.playdate, store: store, language: language)
+            SharedMemoriesView(candidate: store.activeMatchCandidate, store: store, language: language)
         }
         .confirmationDialog("要暫離這場狗聚嗎？", isPresented: $isShowingExitConfirmation, titleVisibility: .visible) {
             Button("確認暫離", role: .destructive) {

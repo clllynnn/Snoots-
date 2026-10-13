@@ -194,12 +194,45 @@ struct WarmHeartCenter: View {
     @Environment(MeetupRepository.self) private var meetups
     @Environment(SnootsAccountSession.self) private var account
     @State private var category = 0
+    @State private var showsDemoPostNotifications = false
+    @State private var readDemoNotificationIDs: Set<Int> = []
     var body: some View {
         List {
             ExperienceStatus()
             Picker("通知分類", selection: $category) { Text("互動").tag(0); Text("收到").tag(1); Text("已寄出").tag(2); Text("好友邀請").tag(3) }.pickerStyle(.segmented)
             if category == 0 {
-                ContentUnavailableView("目前沒有貼文互動通知", systemImage: "heart", description: Text("這裡保留貼文按讚、留言與貼文跳轉的入口。貼文通知資料服務尚待串接，不影響暖心卡功能。"))
+                #if DEBUG
+                if account.usesPreviewAccount {
+                    Section {
+                        Button(showsDemoPostNotifications ? "清除示範通知" : "載入兩則示範通知") {
+                            showsDemoPostNotifications.toggle()
+                            readDemoNotificationIDs.removeAll()
+                        }
+                        Text("僅驗證通知列表、已讀／未讀版面；不是伺服器事件，不會通知真實使用者。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if showsDemoPostNotifications {
+                        Section("貼文互動｜模擬") {
+                            ForEach(0..<2, id: \.self) { id in
+                                Button {
+                                    readDemoNotificationIDs.insert(id)
+                                } label: {
+                                    HStack {
+                                        Label(id == 0 ? "示範：有人按讚你的貼文" : "示範：有人留言你的貼文", systemImage: id == 0 ? "heart.fill" : "bubble.right.fill")
+                                        Spacer()
+                                        if !readDemoNotificationIDs.contains(id) {
+                                            Text("未讀").font(.caption.bold())
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                #endif
+                if !showsDemoPostNotifications {
+                    ContentUnavailableView("目前沒有貼文互動通知", systemImage: "heart", description: Text("正式貼文通知資料服務尚待串接；示範通知可由 Debug 模擬帳號載入。"))
+                }
             } else if category == 3 {
                 if experience.snapshot.invites.isEmpty { Text("目前沒有好友邀請。未接受的邀請於送出後 30 天自動收回；不影響暖心卡及觀察。") }
                 ForEach(experience.snapshot.invites) { invite in
