@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>在你開啟狗聚簽到時，尋找本場發起人的接待裝置並交換短效簽到憑證，不公開聯絡資料。</string>
+    <key>NSBonjourServices</key>
+    <array><string>_snoots-checkin._tcp</string></array>
+    <key>UIUserInterfaceStyle</key>
+    <string>Light</string>
+    <key>SnootsPrivacyPolicyURL</key>
+    <string>$(SNOOTS_PRIVACY_POLICY_URL)</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleExecutable</key>
@@ -20,6 +28,15 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.clllynnn.Snoots.meetup</string>
+            <key>CFBundleURLSchemes</key>
+            <array><string>snoots</string></array>
+        </dict>
+    </array>
     <key>SnootsSupabasePublishableKey</key>
     <string>$(SNOOTS_SUPABASE_PUBLISHABLE_KEY)</string>
     <key>SnootsSupabaseURL</key>

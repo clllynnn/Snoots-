@@ -5,18 +5,23 @@ import Observation
 @MainActor
 @Observable
 final class SnootsStore {
-    var profile = ParentProfile(name: "Amber", petName: "Nori", trustScore: 92, neighborhood: "Da’an District, Taipei")
+    var profile = ParentProfile(name: "小安", petName: "豆花", trustScore: 92, neighborhood: "Da’an District, Taipei")
     var pet = PetProfile(
-        name: "Nori",
-        imageName: "Nori",
-        age: "2 years",
-        size: "Medium",
-        socialStyle: "Slow to warm up",
-        summary: "A thoughtful walker who prefers a little space before joining in.",
-        traits: ["Slow introductions", "Adult dogs", "Long lead"],
+        name: "豆花",
+        imageName: "Tofu",
+        breed: "博美",
+        age: "3 歲",
+        size: "小型犬",
+        sex: "公",
+        isNeutered: true,
+        socialStyle: "先觀察再靠近",
+        summary: "豆花習慣先觀察，熟悉後會自在地一起散步。",
+        traits: ["慢慢認識", "先牽繩互動"],
         healthStatus: "Vaccinations and behavior card verified"
     )
     var hasCompletedOnboarding = false
+    var matchDetailsCompleted = false
+    var safetyDetailsCompleted = false
     let feedingMonitor = FeedingMonitor(
         isOnline: true,
         lastFedHoursAgo: 3,
@@ -32,59 +37,161 @@ final class SnootsStore {
             batchNumber: "RAB-250914"
         ),
         otherVaccinationsCount: 2,
-        healthNotes: "Spayed 8 Mar 2025 · No chronic conditions\nLast vet visit 10 Jul 2026"
+            healthNotes: "Neutered 8 Mar 2025 · No chronic conditions\nLast vet visit 10 Jul 2026"
     )
     var isMatched = false
     var hasMatchChat = false
     var matchChatMessages: [MatchChatMessage] = []
+    var meetupGroupMessages: [MeetupGroupMessage] = [
+        MeetupGroupMessage(senderName: "豆花", text: "大家好！別忘了先上傳狗狗打招呼照片，讓見面更安心。", isOutgoing: true),
+        MeetupGroupMessage(senderName: "超超", text: "收到，我已經完成守則確認，期待一起散步！", isOutgoing: false)
+    ]
+    var meetupGroupAnnouncement = "這是一場輕鬆的平行散步，適合正在建立自信、學習與其他狗狗相處的毛孩。"
+    var meetupGroupAllowsMemberMessages = true
+    var meetupGroupAllowsPhotoSharing = true
+    var interactionRecords: [InteractionRecord] = []
+    var hasCompletedIcebreaker = false
+    var completedIcebreakerTaskTitle = ""
+    var dailyIcebreakerResult: DailyIcebreakerResult?
+    var hasPreparedMeetupInvitation = false
+    var hasSeenMeetupInvitationPrompt = false
+    var isMatchCancelled = false
+    var isMatchBlocked = false
+    var reportedMatchReasons: [MatchReportReason] = []
+    var hasSentMeetupInvite = false
+    var hasAcknowledgedBoundaries = false
+    var hasCompletedSafetyCheckIn = false
+    var sparkPoints = 0
+    var wantsNextMeetup = false
+    var hasMutualNextMeetup = false
+    var hasSentWarmFeedback = false
+    var lastWarmFeedbackTags: [String] = []
+    var lastWarmFeedbackNote = ""
+    var lastWarmFeedbackHasPhoto = false
+    var lastWarmFeedbackRecipientName = "超超"
+    var lastWarmFeedbackRecipientOwner = "David"
+    var lastWarmFeedbackRecipientImageName = "ChaoChao1"
     var careStepIndex = 0
     var savedPlaceIDs: Set<String> = []
     var createdMeetups: [MeetupDraft] = []
+    var completedUpcomingMeetupTaskIDs: Set<String> = []
+    var hasAcknowledgedUpcomingMeetupGuidance = false
+    var isUpcomingMeetupCheckInOpen = false
+    var hasCompletedGroupMeetupCheckIn = false
+    var hasTemporarilyLeftGroupMeetup = false
+    var hasEndedGroupMeetup = false
     let mapPlaces = MapPlacesRepository()
 
     let meetupActivityTypes = [
-        MeetupActivityType(id: "dining", symbol: "fork.knife", title: "Dog-friendly dining", traditionalChineseTitle: "寵物友善用餐"),
-        MeetupActivityType(id: "park", symbol: "tree", title: "Dog park", traditionalChineseTitle: "寵物公園"),
-        MeetupActivityType(id: "other", symbol: "person.2", title: "Other meetup", traditionalChineseTitle: "其他狗聚")
+        MeetupActivityType(id: "grass-play", symbol: "leaf", title: "Grass playtime", traditionalChineseTitle: "草皮放風"),
+        MeetupActivityType(id: "camping", symbol: "tent", title: "Camping", traditionalChineseTitle: "露營野宿"),
+        MeetupActivityType(id: "costume", symbol: "party.popper", title: "Festive dress-up", traditionalChineseTitle: "節慶變裝"),
+        MeetupActivityType(id: "dining", symbol: "fork.knife", title: "Dog-friendly dining", traditionalChineseTitle: "寵物友善聚餐"),
+        MeetupActivityType(id: "owner-social", symbol: "person.2", title: "Meet other dog parents", traditionalChineseTitle: "飼主交友"),
+        MeetupActivityType(id: "health", symbol: "cross.case", title: "Community health checks", traditionalChineseTitle: "公益健檢")
     ]
     let meetupVenues = [
         MeetupVenue(id: "daan-forest", mapPlaceID: "daan-forest", name: "Da’an Forest Park · East Gate", traditionalChineseName: "大安森林公園 · 東門"),
         MeetupVenue(id: "riverside", mapPlaceID: "xinyi-dog-park", name: "Riverside Park · Lawn", traditionalChineseName: "河濱公園 · 草地區"),
         MeetupVenue(id: "companion", mapPlaceID: "companion", name: "Companion Cafe · Patio", traditionalChineseName: "Companion Cafe · 戶外座位")
     ]
-    let meetupDurations = [
-        MeetupDuration(hours: 1),
-        MeetupDuration(hours: 2),
-        MeetupDuration(hours: 3)
-    ]
     let meetupSafetyOptions = [
         MeetupSafetyOption(id: "Leash on", title: "Leash on", traditionalChineseTitle: "全程牽繩"),
         MeetupSafetyOption(id: "Slow introductions", title: "Slow introductions", traditionalChineseTitle: "慢慢認識"),
         MeetupSafetyOption(id: "Adult dogs", title: "Adult dogs", traditionalChineseTitle: "偏好成犬")
     ]
+    var upcomingMeetup = UpcomingMeetup(
+        title: "Momo Doggo Club",
+        traditionalChineseTitle: "萌萌狗勾幫",
+        organizerName: "Tofu",
+        traditionalChineseOrganizerName: "豆花",
+        startDate: Calendar(identifier: .gregorian).date(
+            from: DateComponents(year: 2026, month: 10, day: 31, hour: 12)
+        ) ?? .now,
+        durationHours: 2,
+        location: "Da’an Forest Park",
+        traditionalChineseLocation: "大安森林公園",
+        hostNote: "A calm parallel walk for dogs learning to socialise.",
+        traditionalChineseHostNote: "這是一場輕鬆的平行散步，適合正在建立自信、學習與其他狗狗相處的毛孩。",
+        participants: [
+            MeetupParticipant(name: "Tofu", traditionalChineseName: "豆花", imageName: "Tofu", breed: "博美", age: "3 歲", size: "小型犬", summary: "先觀察再靠近，熟悉後喜歡一起散步。", healthSummary: "狂犬病疫苗已施打・定期驅蟲", safetyTagIDs: ["slow-intro", "leash"]),
+            MeetupParticipant(name: "ChaoChao", traditionalChineseName: "超超", imageName: "ChaoChao1", breed: "博美", age: "2 歲", size: "小型犬", summary: "比較害羞，喜歡以安靜散步慢慢認識新朋友。", healthSummary: "狂犬病疫苗已施打・定期驅蟲", safetyTagIDs: ["slow-intro", "adult"]),
+            MeetupParticipant(name: "Mochi", traditionalChineseName: "麻糬", imageName: "Mochi", breed: "柴犬", age: "4 歲", size: "中型犬", summary: "喜歡有距離感的初次互動，熟悉後很愛玩。", healthSummary: "疫苗紀錄已分享・定期驅蟲", safetyTagIDs: ["leash"]),
+            MeetupParticipant(name: "Pudding", traditionalChineseName: "布丁", imageName: "Pudding", breed: "比熊犬", age: "3 歲", size: "小型犬", summary: "個性溫和，偏好和成犬一起散步。", healthSummary: "疫苗紀錄已分享・定期驅蟲", safetyTagIDs: ["adult"]),
+            MeetupParticipant(name: "Nori", traditionalChineseName: "諾里", imageName: "Nori", breed: "米克斯", age: "5 歲", size: "中型犬", summary: "步調穩定，喜歡先牽繩一起探索環境。", healthSummary: "疫苗紀錄已分享・定期驅蟲", safetyTagIDs: ["leash"])
+        ],
+        totalParticipantCount: 5,
+        readyParticipantCount: 3,
+        preparationTasks: [
+            MeetupPreparationTask(id: "hello-photo", title: "Upload a hello photo", traditionalChineseTitle: "上傳狗狗打招呼照片", completedParticipantCount: 3, totalParticipantCount: 5, symbol: "photo"),
+            MeetupPreparationTask(id: "rules", title: "Confirm meetup rules", traditionalChineseTitle: "確認聚會守則", completedParticipantCount: 4, totalParticipantCount: 5, symbol: "checkmark.shield"),
+            MeetupPreparationTask(id: "arrival", title: "Share arrival details", traditionalChineseTitle: "確認抵達方式", completedParticipantCount: 2, totalParticipantCount: 5, symbol: "location")
+        ]
+    )
 
-    let feedStories = [
-        FeedStory(name: "Your story", imageName: "Nori", isCurrentUser: true),
-        FeedStory(name: "Yuna", imageName: "Nori"),
-        FeedStory(name: "Milo", imageName: "Mochi"),
-        FeedStory(name: "Luna", imageName: "Mochi"),
-        FeedStory(name: "Kuma", imageName: "Pudding")
+    var socialPosts: [SocialPost] = [
+        SocialPost(
+            owner: "豆花", petName: "豆花", location: "大安森林公園", timeAgo: "今天",
+            body: "草地上認識了新朋友！先留一點距離、慢慢聞一聞，今天的散步多了好多可愛的回憶。",
+            declarations: ["慢慢認識", "牽繩散步"], likes: 48, comments: 2, kind: .photo, photoName: "Tofu",
+            title: "草地上的新朋友", month: 10, day: 8,
+            galleryPhotoNames: ["MeetupHeroDogs", "Tofu", "Nori"],
+            replies: [
+                SocialPostComment(author: "麻糬", text: "這個打招呼的距離剛剛好，好可愛！"),
+                SocialPostComment(author: "超超", text: "下次也想一起慢慢散步 🐾")
+            ]
+        ),
+        SocialPost(
+            owner: "麻糬", petName: "麻糬", location: "北海岸", timeAgo: "2 天前",
+            body: "把步調放慢，陪毛孩吹吹海風。今天沒有趕行程，只有散步、看海，還有一直搖的尾巴。",
+            declarations: ["海邊散步", "記得補水"], likes: 36, comments: 2, kind: .photo, photoName: "Mochi",
+            title: "和毛孩一起追海風", month: 10, day: 6,
+            galleryPhotoNames: ["Mochi", "TerraceTable", "Pudding"],
+            replies: [
+                SocialPostComment(author: "豆花", text: "海風把耳朵都吹起來了！"),
+                SocialPostComment(author: "布丁", text: "這樣的散步好療癒。")
+            ]
+        ),
+        SocialPost(
+            owner: "超超", petName: "超超", location: "在家也很開心", timeAgo: "4 天前",
+            body: "今天的任務是好好休息。洗香香、躺回最愛的小窩，再靠近鏡頭跟大家打個招呼。",
+            declarations: ["居家日常", "放鬆一下"], likes: 62, comments: 2, kind: .photo, photoName: "ChaoChao1",
+            title: "超超的放空小日子", month: 10, day: 4,
+            galleryPhotoNames: ["ChaoChao1", "ChaoChao3", "ChaoChao4"],
+            replies: [
+                SocialPostComment(author: "諾里", text: "根本是一朵棉花糖！"),
+                SocialPostComment(author: "豆花", text: "今天也有認真可愛 🤍")
+            ]
+        )
     ]
 
-    let socialPosts = [
-        SocialPost(owner: "Yuna", petName: "Nori", location: "Da’an Forest Park", timeAgo: "12m", body: "First calm walk at Da’an Forest Park. Nori did beautifully with a long lead and lots of space.", declarations: ["Leash on", "Slow introductions", "Adult dogs"], likes: 48, comments: 8, kind: .photo, photoName: "Nori"),
-        SocialPost(owner: "Milo", petName: "Milo", location: "Riverside Park", timeAgo: "1h", body: "Golden-hour zoomies, followed by the best slow sniff along the river.", declarations: ["Leash on", "Friendly hello", "Sunset walk"], likes: 31, comments: 5, kind: .photo, photoName: "Mochi")
-    ]
+    func addSocialPostComment(to postID: UUID, text: String) {
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty, let index = socialPosts.firstIndex(where: { $0.id == postID }) else { return }
+        socialPosts[index].replies.append(SocialPostComment(author: pet.name, text: message))
+        socialPosts[index].comments += 1
+    }
 
     let playdate = PlaydateCandidate(
-        name: "Mochi",
+        name: "超超",
         age: "2 y",
-        owner: "Elena",
+        owner: "David",
         distance: "1.2 km away",
-        imageName: "Mochi",
+        imageName: "ChaoChao1",
+        photoNames: ["ChaoChao1", "ChaoChao2", "ChaoChao3", "ChaoChao4"],
         compatibility: ["Slow to warm up", "Leash-first", "Similar size"],
         accountability: "Identity verified · Vaccines shared",
-        intro: "Playful after a slow hello. Prefers a 20-minute parallel walk before free play."
+        intro: "超超比較害羞，希望能找到一起安靜散步的小狗夥伴！",
+        breed: "博美",
+        size: "小型犬",
+        sex: "母",
+        isNeutered: false,
+        strangerDogReaction: "害怕，但會嘗試接近",
+        energyLevel: "中等（慢速散步型）",
+        meetingEnvironments: ["開放式公園"],
+        healthSummary: "狂犬病疫苗已施打・每月定期驅蟲",
+        isRabiesVaccinated: true,
+        hasMonthlyParasitePrevention: true
     )
 
     let criticalSymptoms = ["Repeated vomiting", "Very quiet", "Possible toxin"]
@@ -126,34 +233,70 @@ final class SnootsStore {
         }
     }
 
-    func updateProfile(ownerName: String, neighborhood: String, petName: String, summary: String, traits: [String]) {
+    func updateProfile(ownerName: String, neighborhood: String, petName: String, ownerMessage: String) {
         profile.name = ownerName
         profile.neighborhood = neighborhood
         profile.petName = petName
         pet.name = petName
-        pet.summary = summary
-        pet.traits = traits
+        profile.ownerMessage = ownerMessage
     }
 
-    func completeOnboarding(
-        ownerName: String,
-        neighborhood: String,
-        petName: String,
-        petAge: String,
-        petSize: String,
-        socialStyle: String,
-        traits: [String]
-    ) {
-        profile.name = ownerName
-        profile.neighborhood = neighborhood
-        profile.petName = petName
-        pet.name = petName
-        pet.age = petAge
-        pet.size = petSize
-        pet.socialStyle = socialStyle
-        pet.traits = traits
-        pet.summary = "\(petName) is \(socialStyle.lowercased()) and is most comfortable with \(traits.joined(separator: ", ").lowercased())."
+    func applyRegisteredProfile(owner: RegisteredOwner, dog: RegisteredDog, photoData: Data?) {
+        profile.name = owner.nickname
+        profile.email = ""
+        profile.petName = dog.name
+        pet.name = dog.name
+        pet.breed = dog.breed
+        pet.breedMappingPending = dog.breedMappingStatus == "pending"
+        pet.age = "尚未填寫"
+        pet.size = switch dog.size {
+        case "small": "小型犬"
+        case "medium": "中型犬"
+        default: "大型犬"
+        }
+        pet.sex = dog.sex == "male" ? "公" : "母"
+        pet.isNeutered = dog.isNeutered
+        pet.socialStyle = switch dog.socialStyle {
+        case "friendly": "主動友好"
+        case "observe_then_interact": "先觀察，再互動"
+        case "fearful_approach": "害怕，但會嘗試靠近"
+        case "fearful_avoid": "害怕並躲開"
+        default: "吠叫或低吠"
+        }
+        pet.summary = ""
+        pet.traits = []
+        pet.photoData = photoData
         hasCompletedOnboarding = true
+    }
+
+    func saveMatchDetails(_ details: DogMatchingProfile) {
+        pet.matchingProfile = details
+        if let birthDate = details.birthDate {
+            let years = Calendar.current.dateComponents([.year], from: birthDate, to: .now).year ?? 0
+            let months = Calendar.current.dateComponents([.month], from: birthDate, to: .now).month ?? 0
+            pet.age = years > 0 ? "\(years) 歲" : "\(months) 個月"
+        }
+        pet.preferredMeetingEnvironments = details.meetingEnvironments
+        var protectionLabels: [(String, String?)] = [
+            ("狂犬病疫苗", details.protectionAnswers["狂犬病疫苗在有效期間"]),
+            ("體內外驅蟲", details.protectionAnswers["已完成體內外驅蟲"]),
+            ("晶片與寵物登記", details.protectionAnswers["晶片與寵物登記"])
+        ]
+        if let birthDate = details.birthDate,
+           (Calendar.current.dateComponents([.month], from: birthDate, to: .now).month ?? 999) < 5 {
+            protectionLabels.insert(("核心疫苗", details.protectionAnswers["核心疫苗已完成"]), at: 0)
+        }
+        pet.vaccineSummary = protectionLabels.compactMap { label, answer in
+            answer == "有" ? "\(label)：已分享" : nil
+        }.joined(separator: "・")
+        matchDetailsCompleted = true
+    }
+
+    func saveSafetyDetails(vaccineSummary: String, emergencyPhone: String, leashHabit: String) {
+        pet.vaccineSummary = vaccineSummary
+        pet.emergencyPhone = emergencyPhone
+        pet.leashHabit = leashHabit
+        safetyDetailsCompleted = true
     }
 
     func createMatchChat() {
@@ -164,12 +307,235 @@ final class SnootsStore {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         matchChatMessages.append(MatchChatMessage(text: trimmedText, isOutgoing: true))
+        matchChatMessages.append(
+            MatchChatMessage(
+                text: "謝謝你分享！超超也很期待用舒服的步調認識豆花。",
+                isOutgoing: false
+            )
+        )
+    }
+
+    func sendMeetupGroupMessage(_ text: String) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+        meetupGroupMessages.append(MeetupGroupMessage(senderName: "豆花", text: trimmedText, isOutgoing: true))
+    }
+
+    func updateMeetupGroupSettings(
+        announcement: String,
+        allowsMemberMessages: Bool,
+        allowsPhotoSharing: Bool
+    ) {
+        meetupGroupAnnouncement = announcement.trimmingCharacters(in: .whitespacesAndNewlines)
+        meetupGroupAllowsMemberMessages = allowsMemberMessages
+        meetupGroupAllowsPhotoSharing = allowsPhotoSharing
+    }
+
+    var dailyIcebreakerTask: DailyIcebreakerTask {
+        let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: .now) ?? 0
+        return DailyIcebreakerTask.all[dayOfYear % DailyIcebreakerTask.all.count]
+    }
+
+    var hasCompletedTodayIcebreaker: Bool {
+        guard let dailyIcebreakerResult else { return false }
+        return Calendar.current.isDateInToday(dailyIcebreakerResult.completedAt)
+    }
+
+    @discardableResult
+    func completeDailyIcebreaker(answerID: String) -> DailyIcebreakerResult? {
+        guard !hasCompletedTodayIcebreaker,
+              let selectedAnswer = dailyIcebreakerTask.options.first(where: { $0.id == answerID }),
+              let chaoChaoAnswer = dailyIcebreakerTask.options.first(where: { $0.id == dailyIcebreakerTask.chaoChaoAnswerID })
+        else { return nil }
+
+        let result = DailyIcebreakerResult(
+            taskID: dailyIcebreakerTask.id,
+            taskTitle: dailyIcebreakerTask.title,
+            prompt: dailyIcebreakerTask.prompt,
+            tofuAnswer: selectedAnswer,
+            chaoChaoAnswer: chaoChaoAnswer,
+            similarityPercent: selectedAnswer.similarityPercent,
+            familiarityPoints: selectedAnswer.familiarityPoints,
+            completedAt: .now
+        )
+        dailyIcebreakerResult = result
+        hasCompletedIcebreaker = true
+        completedIcebreakerTaskTitle = dailyIcebreakerTask.title
+        sparkPoints = min(100, sparkPoints + result.familiarityPoints)
+        matchChatMessages.append(MatchChatMessage(text: "今日破冰卡：豆花選了「\(selectedAnswer.title)」", isOutgoing: true))
+        matchChatMessages.append(MatchChatMessage(text: "超超選了「\(chaoChaoAnswer.title)」；你們的回答相似度 \(result.similarityPercent)%。", isOutgoing: false))
+        return result
+    }
+
+    func cancelMatch() {
+        isMatchCancelled = true
+        isMatched = false
+        hasMatchChat = false
+        matchChatMessages = []
+    }
+
+    func blockMatch() {
+        isMatchBlocked = true
+        cancelMatch()
+    }
+
+    func unblockMatch() {
+        isMatchBlocked = false
+    }
+
+    func reportMatch(_ reason: MatchReportReason) {
+        reportedMatchReasons.append(reason)
+    }
+
+    func sendMeetupInvite() {
+        guard sparkPoints >= 100 else { return }
+        hasSentMeetupInvite = true
+        matchChatMessages.append(MatchChatMessage(text: "發出了一對一見面邀請：先來一場 20 分鐘的平行散步吧！", isOutgoing: true))
+    }
+
+    func prepareMeetupInvitation() {
+        hasPreparedMeetupInvitation = true
+        hasSeenMeetupInvitationPrompt = true
+    }
+
+    func completeSafetyCheckIn() {
+        hasCompletedSafetyCheckIn = true
+    }
+
+    func requestNextMeetup() {
+        wantsNextMeetup = true
+        hasMutualNextMeetup = true
+        matchChatMessages.append(MatchChatMessage(text: "豆花覺得今天的散步很棒，希望下次能再一起出來走走！", isOutgoing: true))
+    }
+
+    func addInteractionRecord(
+        with candidate: PlaydateCandidate,
+        positiveTags: [String],
+        wantsAnotherMeetup: Bool,
+        note: String,
+        hasSharedPhoto: Bool
+    ) {
+        addInteractionRecord(
+            partnerDogName: candidate.name,
+            partnerBreed: candidate.breed,
+            recipientOwner: candidate.owner,
+            recipientImageName: candidate.imageName,
+            positiveTags: positiveTags,
+            wantsAnotherMeetup: wantsAnotherMeetup,
+            note: note,
+            hasSharedPhoto: hasSharedPhoto
+        )
+    }
+
+    func addInteractionRecord(
+        partnerDogName: String,
+        partnerBreed: String,
+        recipientOwner: String,
+        recipientImageName: String,
+        positiveTags: [String],
+        wantsAnotherMeetup: Bool,
+        note: String,
+        hasSharedPhoto: Bool
+    ) {
+        interactionRecords.append(
+            InteractionRecord(
+                partnerDogName: partnerDogName,
+                partnerBreed: partnerBreed,
+                positiveTags: positiveTags,
+                wantsAnotherMeetup: wantsAnotherMeetup,
+                note: note,
+                hasSharedPhoto: hasSharedPhoto,
+                createdAt: .now
+            )
+        )
+        hasSentWarmFeedback = true
+        lastWarmFeedbackTags = positiveTags
+        lastWarmFeedbackNote = note
+        lastWarmFeedbackHasPhoto = hasSharedPhoto
+        lastWarmFeedbackRecipientName = partnerDogName
+        lastWarmFeedbackRecipientOwner = recipientOwner
+        lastWarmFeedbackRecipientImageName = recipientImageName
+        sparkPoints = min(100, sparkPoints + 15 + (hasSharedPhoto ? 20 : 0))
+        if wantsAnotherMeetup { requestNextMeetup() }
     }
 
     @discardableResult
     func createMeetup(_ meetup: MeetupDraft) -> String {
         createdMeetups.insert(meetup, at: 0)
         return meetupPlaceID(for: meetup)
+    }
+
+    func isUpcomingMeetupTaskCompleted(_ task: MeetupPreparationTask) -> Bool {
+        completedUpcomingMeetupTaskIDs.contains(task.id)
+    }
+
+    func toggleUpcomingMeetupTask(_ task: MeetupPreparationTask) {
+        if completedUpcomingMeetupTaskIDs.contains(task.id) {
+            completedUpcomingMeetupTaskIDs.remove(task.id)
+        } else {
+            completedUpcomingMeetupTaskIDs.insert(task.id)
+        }
+    }
+
+    func completedCount(for task: MeetupPreparationTask) -> Int {
+        min(
+            task.completedParticipantCount + (isUpcomingMeetupTaskCompleted(task) ? 1 : 0),
+            task.totalParticipantCount
+        )
+    }
+
+    var areUpcomingMeetupTasksCompleted: Bool {
+        hasAcknowledgedUpcomingMeetupGuidance
+    }
+
+    func toggleUpcomingMeetupGuidanceAcknowledgement() {
+        hasAcknowledgedUpcomingMeetupGuidance.toggle()
+    }
+
+    func updateUpcomingMeetup(
+        title: String,
+        startDate: Date,
+        location: String,
+        navigationLink: String,
+        purpose: String,
+        safetyPrinciples: [String],
+        preparationNotes: String,
+        coverPhotoData: Data?
+    ) {
+        if upcomingMeetup.traditionalChineseHostNote != purpose
+            || upcomingMeetup.safetyPrinciples != safetyPrinciples
+            || upcomingMeetup.preparationNotes != preparationNotes {
+            hasAcknowledgedUpcomingMeetupGuidance = false
+        }
+        upcomingMeetup.title = title
+        upcomingMeetup.traditionalChineseTitle = title
+        upcomingMeetup.startDate = startDate
+        upcomingMeetup.location = location
+        upcomingMeetup.traditionalChineseLocation = location
+        upcomingMeetup.hostNote = purpose
+        upcomingMeetup.traditionalChineseHostNote = purpose
+        upcomingMeetup.navigationLink = navigationLink
+        upcomingMeetup.safetyPrinciples = safetyPrinciples
+        upcomingMeetup.preparationNotes = preparationNotes
+        upcomingMeetup.coverPhotoData = coverPhotoData
+    }
+
+    func completeGroupMeetupCheckIn() {
+        hasCompletedGroupMeetupCheckIn = true
+        hasTemporarilyLeftGroupMeetup = false
+    }
+
+    func openUpcomingMeetupCheckIn() {
+        isUpcomingMeetupCheckInOpen = true
+    }
+
+    func temporarilyLeaveGroupMeetup() {
+        hasTemporarilyLeftGroupMeetup = true
+    }
+
+    func endGroupMeetup() {
+        hasEndedGroupMeetup = true
+        hasTemporarilyLeftGroupMeetup = false
     }
 
     func deleteMeetup(id: UUID) {
@@ -181,7 +547,9 @@ final class SnootsStore {
     }
 
     private func meetupPlace(for meetup: MeetupDraft) -> Place? {
-        guard let venue = meetupVenues.first(where: { $0.id == meetup.venueID }),
+        guard let venue = meetupVenues.first(where: {
+            $0.name == meetup.location || $0.traditionalChineseName == meetup.location
+        }),
               let basePlace = places.first(where: { $0.id == venue.mapPlaceID }) else {
             return nil
         }
@@ -189,7 +557,7 @@ final class SnootsStore {
         let category: String
         switch meetup.activityTypeID {
         case "dining": category = "Indoor dog meetup"
-        case "park": category = "Leashed group walk"
+        case "grass-play": category = "Grass playtime"
         default: category = "Dog meetup"
         }
 
@@ -225,6 +593,97 @@ struct MatchChatMessage: Identifiable {
     let isOutgoing: Bool
 }
 
+struct DailyIcebreakerOption: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let similarityPercent: Int
+    let familiarityPoints: Int
+}
+
+struct DailyIcebreakerTask: Identifiable {
+    let id: String
+    let title: String
+    let prompt: String
+    let chaoChaoAnswerID: String
+    let options: [DailyIcebreakerOption]
+
+    static let all = [
+        DailyIcebreakerTask(
+            id: "first-hello",
+            title: "第一次見面，怎麼開始最舒服？",
+            prompt: "如果第一次和新狗朋友見面，豆花最喜歡怎麼開始？",
+            chaoChaoAnswerID: "parallel-walk",
+            options: [
+                DailyIcebreakerOption(id: "parallel-walk", title: "先並排散步", similarityPercent: 100, familiarityPoints: 25),
+                DailyIcebreakerOption(id: "observe", title: "先遠遠觀察", similarityPercent: 70, familiarityPoints: 22),
+                DailyIcebreakerOption(id: "free-play", title: "直接一起玩", similarityPercent: 40, familiarityPoints: 20)
+            ]
+        ),
+        DailyIcebreakerTask(
+            id: "rest-style",
+            title: "散步中想休息時…",
+            prompt: "豆花比較喜歡用哪種方式補充能量？",
+            chaoChaoAnswerID: "quiet-corner",
+            options: [
+                DailyIcebreakerOption(id: "quiet-corner", title: "找個安靜角落休息", similarityPercent: 100, familiarityPoints: 25),
+                DailyIcebreakerOption(id: "slow-walk", title: "放慢步調繼續走", similarityPercent: 70, familiarityPoints: 22),
+                DailyIcebreakerOption(id: "keep-playing", title: "繼續玩不休息", similarityPercent: 40, familiarityPoints: 20)
+            ]
+        ),
+        DailyIcebreakerTask(
+            id: "favorite-outing",
+            title: "理想的狗狗約會",
+            prompt: "選一個最適合豆花的週末相處方式。",
+            chaoChaoAnswerID: "calm-park",
+            options: [
+                DailyIcebreakerOption(id: "calm-park", title: "安靜的公園散步", similarityPercent: 100, familiarityPoints: 25),
+                DailyIcebreakerOption(id: "pet-cafe", title: "寵物友善咖啡廳", similarityPercent: 70, familiarityPoints: 22),
+                DailyIcebreakerOption(id: "busy-event", title: "熱鬧的多人活動", similarityPercent: 40, familiarityPoints: 20)
+            ]
+        ),
+        DailyIcebreakerTask(
+            id: "new-friend-signal",
+            title: "想靠近新朋友時…",
+            prompt: "豆花通常會用什麼方式表示想繼續認識？",
+            chaoChaoAnswerID: "stay-nearby",
+            options: [
+                DailyIcebreakerOption(id: "stay-nearby", title: "在附近慢慢跟著走", similarityPercent: 100, familiarityPoints: 25),
+                DailyIcebreakerOption(id: "sniff-briefly", title: "短暫聞聞再退一步", similarityPercent: 70, familiarityPoints: 22),
+                DailyIcebreakerOption(id: "bounce-in", title: "立刻撲過去玩", similarityPercent: 40, familiarityPoints: 20)
+            ]
+        ),
+        DailyIcebreakerTask(
+            id: "favorite-reward",
+            title: "今天的小確幸",
+            prompt: "散步結束後，哪件事最能讓豆花感到滿足？",
+            chaoChaoAnswerID: "quiet-rest",
+            options: [
+                DailyIcebreakerOption(id: "quiet-rest", title: "回家安靜休息", similarityPercent: 100, familiarityPoints: 25),
+                DailyIcebreakerOption(id: "small-treat", title: "來一份小點心", similarityPercent: 70, familiarityPoints: 22),
+                DailyIcebreakerOption(id: "more-adventure", title: "再去一個新地方", similarityPercent: 40, familiarityPoints: 20)
+            ]
+        )
+    ]
+}
+
+struct DailyIcebreakerResult {
+    let taskID: String
+    let taskTitle: String
+    let prompt: String
+    let tofuAnswer: DailyIcebreakerOption
+    let chaoChaoAnswer: DailyIcebreakerOption
+    let similarityPercent: Int
+    let familiarityPoints: Int
+    let completedAt: Date
+}
+
+struct MeetupGroupMessage: Identifiable {
+    let id = UUID()
+    let senderName: String
+    let text: String
+    let isOutgoing: Bool
+}
+
 struct MeetupActivityType: Identifiable {
     let id: String
     let symbol: String
@@ -247,15 +706,6 @@ struct MeetupVenue: Identifiable {
     }
 }
 
-struct MeetupDuration: Identifiable {
-    let hours: Int
-    var id: Int { hours }
-
-    func localizedLabel(_ language: SnootsLanguage) -> String {
-        language.text("\(hours) hour\(hours == 1 ? "" : "s")", "\(hours) 小時")
-    }
-}
-
 struct MeetupSafetyOption: Identifiable {
     let id: String
     let title: String
@@ -270,9 +720,9 @@ struct MeetupDraft: Identifiable {
     let id = UUID()
     let title: String
     let activityTypeID: String
-    let venueID: String
+    let location: String
+    let navigationLink: String
     let startDate: Date
-    let durationHours: Int
     let attendeeLimit: Int
     let requiresApproval: Bool
     let safetyTagIDs: [String]
@@ -280,22 +730,123 @@ struct MeetupDraft: Identifiable {
     let hasCoverPhoto: Bool
 }
 
+struct UpcomingMeetup {
+    var title: String
+    var traditionalChineseTitle: String
+    let organizerName: String
+    let traditionalChineseOrganizerName: String
+    var startDate: Date
+    let durationHours: Int
+    var location: String
+    var traditionalChineseLocation: String
+    var hostNote: String
+    var traditionalChineseHostNote: String
+    let participants: [MeetupParticipant]
+    let totalParticipantCount: Int
+    let readyParticipantCount: Int
+    let preparationTasks: [MeetupPreparationTask]
+    var coverPhotoData: Data? = nil
+    var navigationLink = "https://maps.app.goo.gl/XwG5XF2fABV3pgEb7"
+    var safetyPrinciples = ["不強迫社交", "不擅自餵食", "全程使用牽繩"]
+    var preparationNotes = "請帶好牽繩、飲水與拾便袋，提早 10 分鐘抵達集合地點。若狗狗需要更多空間，請先與發起人聯繫。"
+
+    func localizedTitle(_ language: SnootsLanguage) -> String {
+        language.text(title, traditionalChineseTitle)
+    }
+
+    func localizedLocation(_ language: SnootsLanguage) -> String {
+        language.text(location, traditionalChineseLocation)
+    }
+
+    func localizedOrganizerName(_ language: SnootsLanguage) -> String {
+        language.text(organizerName, traditionalChineseOrganizerName)
+    }
+
+    func localizedHostNote(_ language: SnootsLanguage) -> String {
+        language.text(hostNote, traditionalChineseHostNote)
+    }
+}
+
+struct MeetupParticipant: Identifiable {
+    let name: String
+    let traditionalChineseName: String
+    let imageName: String
+    let breed: String
+    let age: String
+    let size: String
+    let summary: String
+    let healthSummary: String
+    let safetyTagIDs: [String]
+
+    var id: String { name }
+
+    func localizedName(_ language: SnootsLanguage) -> String {
+        language.text(name, traditionalChineseName)
+    }
+}
+
+struct MeetupPreparationTask: Identifiable {
+    let id: String
+    let title: String
+    let traditionalChineseTitle: String
+    let completedParticipantCount: Int
+    let totalParticipantCount: Int
+    let symbol: String
+
+    func localizedTitle(_ language: SnootsLanguage) -> String {
+        language.text(title, traditionalChineseTitle)
+    }
+}
+
 struct ParentProfile {
     var name: String
     var petName: String
     let trustScore: Int
     var neighborhood: String
+    var email = ""
+    var ownerMessage = "比較慢熱，希望先保持舒服的距離，再一起散步認識彼此。"
 }
 
 struct PetProfile {
     var name: String
     let imageName: String
+    var breed: String
+    var breedMappingPending = false
     var age: String
     var size: String
+    var sex: String
+    var isNeutered: Bool
     var socialStyle: String
     var summary: String
     var traits: [String]
     let healthStatus: String
+    var photoData: Data? = nil
+    var touchBoundary = "尚未填寫"
+    var resourceGuarding = "尚未填寫"
+    var energyLevel = "尚未填寫"
+    var preferredMeetingEnvironments: [String] = []
+    var vaccineSummary = "尚未填寫"
+    var emergencyPhone = "尚未填寫"
+    var leashHabit = "尚未填寫"
+    var matchingProfile = DogMatchingProfile()
+}
+
+struct DogMatchingProfile: Codable {
+    var birthDate: Date?
+    // Required for activity recommendations; "無" is exclusive of other selections.
+    var activityNeeds: [String] = []
+    // Empty means no health details were shared, not that no condition exists.
+    var socialHealthConditions: [String] = []
+    var activityPreferences: [String] = []
+    var activityDescription = ""
+    var activityKeywords: [String] = []
+    var hasSocialNotes: Bool?
+    var socialFeatures: [String] = []
+    var meetingEnvironments: [String] = []
+    var firstMeetingPace: String?
+    var interactionScenario: String?
+    var interactionFeatures: [String] = []
+    var protectionAnswers: [String: String] = [:]
 }
 
 struct FeedingMonitor {
@@ -320,9 +871,14 @@ struct SocialPost: Identifiable {
     let body: String
     let declarations: [String]
     let likes: Int
-    let comments: Int
+    var comments: Int
     let kind: Kind
     let photoName: String?
+    let title: String
+    let month: Int
+    let day: Int
+    let galleryPhotoNames: [String]
+    var replies: [SocialPostComment]
 
     func localizedTimeAgo(_ language: SnootsLanguage) -> String {
         switch timeAgo {
@@ -357,11 +913,10 @@ struct SocialPost: Identifiable {
     }
 }
 
-struct FeedStory: Identifiable {
+struct SocialPostComment: Identifiable {
     let id = UUID()
-    let name: String
-    let imageName: String
-    var isCurrentUser = false
+    let author: String
+    let text: String
 }
 
 struct PlaydateCandidate {
@@ -370,9 +925,49 @@ struct PlaydateCandidate {
     let owner: String
     let distance: String
     let imageName: String
+    let photoNames: [String]
     let compatibility: [String]
     let accountability: String
     let intro: String
+    let breed: String
+    let size: String
+    let sex: String
+    let isNeutered: Bool
+    let strangerDogReaction: String
+    let energyLevel: String
+    let meetingEnvironments: [String]
+    let healthSummary: String
+    let isRabiesVaccinated: Bool
+    let hasMonthlyParasitePrevention: Bool
+}
+
+enum MatchReportReason: String, CaseIterable, Identifiable {
+    case unleashedDog
+    case verbalHarassment
+    case undisclosedAggression
+    case fakeAccount
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .unleashedDog: "現場未繫牽繩／控管不當"
+        case .verbalHarassment: "言語騷擾"
+        case .undisclosedAggression: "狗狗有攻擊行為但未事先告知"
+        case .fakeAccount: "假帳號"
+        }
+    }
+}
+
+struct InteractionRecord: Identifiable {
+    let id = UUID()
+    let partnerDogName: String
+    let partnerBreed: String
+    let positiveTags: [String]
+    let wantsAnotherMeetup: Bool
+    let note: String
+    let hasSharedPhoto: Bool
+    let createdAt: Date
 }
 
 struct CareStep: Identifiable {

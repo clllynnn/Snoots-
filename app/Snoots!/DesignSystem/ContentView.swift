@@ -1,9 +1,18 @@
 import MapKit
+import NaturalLanguage
 import PhotosUI
 import SwiftUI
 import UIKit
 
+private enum SnootsFeatureVisibility {
+    static let nearby = false
+    static let createMeetup = true
+    static let feedingInformation = false
+}
+
 struct ContentView: View {
+    @Environment(MeetupRepository.self) private var meetups
+    @State private var showMeetupInvitation = false
     let store: SnootsStore
     let language: SnootsLanguage
     @Binding var displayLanguageRawValue: String
@@ -15,6 +24,7 @@ struct ContentView: View {
     @State private var matchPath: [SnootsRoute] = []
     @State private var mapsPath: [SnootsRoute] = []
     @State private var profilePath: [SnootsRoute] = []
+    @State private var chatPath: [SnootsRoute] = []
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -29,73 +39,191 @@ struct ContentView: View {
                                 language: language,
                                 onNavigate: { matchPath.append($0) }
                             )
+                        case .matchSetup:
+                            BeforeMatchingView(store: store)
                         case .chat:
-                            MatchChatRoom(candidate: store.playdate, store: store, language: language)
+                            MatchChatRoom(
+                                candidate: store.playdate,
+                                store: store,
+                                language: language,
+                                onNavigate: { matchPath.append($0) },
+                                onBackToChatList: { matchPath = [.chatList] }
+                            )
+                        case .chatList:
+                            MatchChatListView(
+                                candidate: store.playdate,
+                                store: store,
+                                language: language,
+                                onNavigate: { matchPath.append($0) }
+                            )
+                        case .meetupChatList:
+                            MatchChatListView(
+                                candidate: store.playdate,
+                                store: store,
+                                language: language,
+                                initiallySelectedTab: .meetups,
+                                onNavigate: { matchPath.append($0) }
+                            )
+                        case .meetupChat:
+                            MeetupGroupChatRoom(
+                                meetup: store.upcomingMeetup,
+                                store: store,
+                                language: language,
+                                onOpenDashboard: { matchPath.append(.groupDashboard) },
+                                onOpenSettings: { matchPath.append(.groupSettings) }
+                            )
+                        case .meetupParticipants:
+                            MeetupParticipantListView(meetup: store.upcomingMeetup, language: language)
+                        case .icebreaker:
+                            DailyIcebreakerTaskView(
+                                candidate: store.playdate,
+                                store: store,
+                                language: language,
+                                onNavigate: { matchPath.append($0) }
+                            )
+                        case .safety:
+                            MeetupSafetyView(
+                                candidate: store.playdate,
+                                store: store,
+                                language: language,
+                                onNavigate: { matchPath.append($0) }
+                            )
+                        case .dashboard:
+                            OfflineMeetupDashboard(
+                                candidate: store.playdate,
+                                store: store,
+                                language: language
+                            )
+                        case .groupDashboard:
+                            GroupMeetupDashboard(meetup: store.upcomingMeetup, store: store, language: language)
+                        case .groupSettings:
+                            MeetupGroupSettingsView(
+                                meetup: store.upcomingMeetup,
+                                store: store,
+                                language: language,
+                                onOpenParticipants: { matchPath.append(.meetupParticipants) },
+                                onLeaveGroup: { matchPath = [.meetupChatList] }
+                            )
+                        case .memories:
+                            SharedMemoriesView(candidate: store.playdate, store: store, language: language)
                         case .emergency, .place:
                             EmptyView()
                         }
                     }
             }
-                .tabItem { Label(language.text("Match", "配對"), systemImage: AppTab.match.symbol) }
+                .tint(SnootsPalette.navigationActive)
+                .tabItem { AppTab.match.icon(isSelected: selectedTab == .match).accessibilityLabel(language.text("Match", "配對")) }
                 .tag(AppTab.match)
 
-            NavigationStack(path: $mapsPath) {
-                MapsView(
-                    store: store,
-                    language: language,
-                    selectedCategory: $selectedNearbyCategory,
-                    selectedRegion: $selectedNearbyRegion,
-                    meetupFocusRequest: meetupFocusRequest,
-                    meetupFocusTargetID: meetupFocusTargetID
-                ) { mapsPath.append($0) }
-                    .navigationDestination(for: SnootsRoute.self) { route in
-                        switch route {
-                        case .emergency:
-                            CareView(store: store, language: language)
-                        case .place(let placeID):
-                            if let place = store.place(id: placeID) {
-                                PlaceDetailView(place: place, store: store, language: language)
+            if SnootsFeatureVisibility.nearby {
+                NavigationStack(path: $mapsPath) {
+                    MapsView(
+                        store: store,
+                        language: language,
+                        selectedCategory: $selectedNearbyCategory,
+                        selectedRegion: $selectedNearbyRegion,
+                        meetupFocusRequest: meetupFocusRequest,
+                        meetupFocusTargetID: meetupFocusTargetID
+                    ) { mapsPath.append($0) }
+                        .navigationDestination(for: SnootsRoute.self) { route in
+                            switch route {
+                            case .emergency:
+                                CareView(store: store, language: language)
+                            case .place(let placeID):
+                                if let place = store.place(id: placeID) {
+                                    PlaceDetailView(place: place, store: store, language: language)
+                                }
+                        case .match, .matchSetup, .chat, .chatList, .meetupChatList, .meetupChat, .meetupParticipants, .icebreaker, .safety, .dashboard, .groupDashboard, .groupSettings, .memories:
+                                EmptyView()
                             }
-                        case .match, .chat:
-                            EmptyView()
                         }
-                    }
+                }
+                    .tint(SnootsPalette.navigationActive)
+                    .tabItem { AppTab.maps.icon(isSelected: selectedTab == .maps).accessibilityLabel(language.text("Nearby", "附近")) }
+                    .tag(AppTab.maps)
             }
-                .tabItem { Label(language.text("Nearby", "附近"), systemImage: AppTab.maps.symbol) }
-                .tag(AppTab.maps)
 
             NavigationStack {
                 FeedView(
                     store: store,
                     language: language,
-                    onMeetupCreated: showMeetups
+                    onMeetupCreated: showMeetups,
+                    onOpenChats: {
+                        chatPath = []
+                        selectedTab = .chats
+                    },
+                    onOpenMeetupChats: {
+                        matchPath = [.meetupChatList]
+                        selectedTab = .match
+                    }
                 )
             }
-                .tabItem { Label(language.text("Feed", "社群"), systemImage: AppTab.feed.symbol) }
+                .tint(SnootsPalette.navigationActive)
+                .tabItem { AppTab.feed.icon(isSelected: selectedTab == .feed).accessibilityLabel(language.text("Home", "首頁")) }
                 .tag(AppTab.feed)
 
+            NavigationStack(path: $chatPath) {
+                MatchChatListView(candidate: store.playdate, store: store, language: language,
+                    onNavigate: { chatPath.append($0) })
+                    .navigationDestination(for: SnootsRoute.self) { route in
+                        switch route {
+                        case .chat:
+                            MatchChatRoom(candidate: store.playdate, store: store, language: language,
+                                onNavigate: { chatPath.append($0) }, onBackToChatList: { chatPath = [] })
+                        case .icebreaker:
+                            DailyIcebreakerTaskView(candidate: store.playdate, store: store, language: language,
+                                onNavigate: { chatPath.append($0) })
+                        case .safety:
+                            MeetupSafetyView(candidate: store.playdate, store: store, language: language,
+                                onNavigate: { chatPath.append($0) })
+                        case .dashboard:
+                            OfflineMeetupDashboard(candidate: store.playdate, store: store, language: language)
+                        case .meetupChatList, .meetupChat:
+                            MeetupHubView()
+                        default:
+                            ContentUnavailableView("請從聊天室列表開啟對話", systemImage: "bubble.left.and.bubble.right")
+                        }
+                    }
+            }
+                .tint(SnootsPalette.navigationActive)
+                .tabItem { AppTab.chats.icon(isSelected: selectedTab == .chats).accessibilityLabel("聊天室") }
+                .tag(AppTab.chats)
+
             NavigationStack(path: $profilePath) {
-                ProfileView(
-                    store: store,
-                    language: language,
-                    displayLanguageRawValue: $displayLanguageRawValue
-                ) { profilePath.append($0) }
+                OwnProfileScreen(store: store)
                     .navigationDestination(for: SnootsRoute.self) { route in
                         switch route {
                         case .place(let placeID):
                             if let place = store.place(id: placeID) {
                                 PlaceDetailView(place: place, store: store, language: language)
                             }
-                        case .match, .chat, .emergency:
+                        case .matchSetup:
+                            BeforeMatchingView(store: store)
+                        case .match, .chat, .chatList, .meetupChatList, .meetupChat, .meetupParticipants, .icebreaker, .safety, .dashboard, .groupDashboard, .groupSettings, .memories, .emergency:
                             EmptyView()
                         }
                     }
             }
-                .tabItem { Label(language.text("Profile", "檔案"), systemImage: AppTab.profile.symbol) }
+                .tint(SnootsPalette.navigationActive)
+                .tabItem { AppTab.profile.icon(isSelected: selectedTab == .profile).accessibilityLabel(language.text("Profile", "檔案")) }
                 .tag(AppTab.profile)
         }
-        .tint(SnootsPalette.navigationActive)
+        .tint(.black)
         .sensoryFeedback(.success, trigger: store.isMatched)
+        .onAppear { showMeetupInvitation = meetups.pendingInvitation != nil }
+        .onChange(of: meetups.pendingInvitation) { _, code in
+            if code != nil { showMeetupInvitation = true }
+        }
+        .sheet(isPresented: $showMeetupInvitation) {
+            NavigationStack {
+                MeetupHubView()
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("關閉") { showMeetupInvitation = false } } }
+            }
+        }
+        .onChange(of: selectedTab) { _, tab in
+            guard tab == .match, matchPath.isEmpty, !store.matchDetailsCompleted else { return }
+            matchPath = [.matchSetup]
+        }
     }
 
     private func showMeetups(_ meetupPlaceID: String) {
@@ -109,7 +237,18 @@ struct ContentView: View {
 
 enum SnootsRoute: Hashable {
     case match
+    case matchSetup
     case chat
+    case chatList
+    case meetupChatList
+    case meetupChat
+    case meetupParticipants
+    case icebreaker
+    case safety
+    case dashboard
+    case groupDashboard
+    case groupSettings
+    case memories
     case emergency
     case place(String)
 }
@@ -118,42 +257,30 @@ struct FeedView: View {
     let store: SnootsStore
     let language: SnootsLanguage
     let onMeetupCreated: (String) -> Void
+    let onOpenChats: () -> Void
+    let onOpenMeetupChats: () -> Void
     @State private var likedPostIDs: Set<UUID> = []
-    @State private var savedPostIDs: Set<UUID> = []
-    @State private var presentedSheet: FeedSheet?
-    @State private var pendingMeetupFocusID: String?
+    @State private var isShowingMyMeetups = false
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 22) {
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading) {
-                        Text(language.text("Feed", "社群"))
-                            .font(.snootsScreenTitle())
-                    }
-                    Spacer()
-                    HStack(spacing: 4) {
-                        FeedHeaderButton(symbol: "heart")
-                        FeedHeaderButton(symbol: "paperplane")
-                    }
+                if store.socialPosts.isEmpty {
+                    ContentUnavailableView(
+                        "目前沒有貼文",
+                        systemImage: "photo.on.rectangle.angled",
+                        description: Text("新朋友的動態之後會顯示在這裡。")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 260)
                 }
-
-                CreateActivityButton(
-                    language: language,
-                    onView: { presentedSheet = .myMeetups },
-                    onCreate: { presentedSheet = .createMeetup }
-                )
-
-                FeedStoryStrip(stories: store.feedStories, language: language)
 
                 ForEach(store.socialPosts) { post in
                     FeedPostCard(
                         post: post,
                         language: language,
                         isLiked: likedPostIDs.contains(post.id),
-                        isSaved: savedPostIDs.contains(post.id),
                         onToggleLike: { toggle(post.id, in: &likedPostIDs) },
-                        onToggleSave: { toggle(post.id, in: &savedPostIDs) }
+                        onSendComment: { store.addSocialPostComment(to: post.id, text: $0) }
                     )
                 }
             }
@@ -162,32 +289,39 @@ struct FeedView: View {
             .padding(.bottom, 28)
         }
         .background(SnootsPalette.canvas)
-        .toolbar(.hidden, for: .navigationBar)
-        .sheet(item: $presentedSheet, onDismiss: focusPendingMeetup) { sheet in
-            switch sheet {
-            case .createMeetup:
-                CreateMeetupSheet(
-                    store: store,
-                    language: language,
-                    onPublished: { pendingMeetupFocusID = $0 }
-                )
-            case .myMeetups:
-                MyMeetupsSheet(
-                    store: store,
-                    language: language,
-                    onShowOnMap: {
-                        pendingMeetupFocusID = $0
-                        presentedSheet = nil
-                    }
-                )
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { isShowingMyMeetups = true } label: {
+                    Image(systemName: "calendar")
+                }
+                .snootsWhiteTopBarActionStyle()
+                .accessibilityLabel(language.text("View meetups", "檢視狗聚"))
             }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink { WarmHeartCenter() } label: {
+                    Image(systemName: "heart")
+                }
+                .snootsWhiteTopBarActionStyle()
+                .accessibilityLabel(language.text("Community notifications", "社群通知"))
+            }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: onOpenChats) {
+                    SnootsChatIcon()
+                }
+                .snootsWhiteTopBarActionStyle()
+                .accessibilityLabel(language.text("Chats", "聊天室"))
+            }
+            .sharedBackgroundVisibility(.hidden)
         }
-    }
-
-    private func focusPendingMeetup() {
-        guard let pendingMeetupFocusID else { return }
-        self.pendingMeetupFocusID = nil
-        onMeetupCreated(pendingMeetupFocusID)
+        .navigationDestination(isPresented: $isShowingMyMeetups) {
+            MeetupHubView()
+        }
     }
 
     private func toggle(_ id: UUID, in selection: inout Set<UUID>) {
@@ -198,104 +332,66 @@ struct FeedView: View {
         }
     }
 
-    private enum FeedSheet: Identifiable {
-        case createMeetup
-        case myMeetups
-
-        var id: String {
-            switch self {
-            case .createMeetup: "createMeetup"
-            case .myMeetups: "myMeetups"
-            }
-        }
-    }
 }
 
-private struct FeedHeaderButton: View {
+private struct NativeTopActionButton: View {
     let symbol: String
+    var accessibilityLabel: String?
+    var action: () -> Void = {}
 
     var body: some View {
-        Button(action: {}) {
+        Button(action: action) {
             Image(systemName: symbol)
-                .font(.title3.weight(.medium))
-                .foregroundStyle(SnootsPalette.ink)
-                .frame(width: 44, height: 44)
-                .background(SnootsPalette.surface, in: Circle())
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 30, height: 30)
         }
-        .accessibilityLabel(symbol == "heart" ? "Activity" : "Messages")
+        .snootsTopBarActionStyle()
+        .accessibilityLabel(accessibilityLabel ?? (symbol == "heart" ? "Activity" : "Messages"))
     }
 }
 
-private struct FeedStoryStrip: View {
-    let stories: [FeedStory]
-    let language: SnootsLanguage
+extension View {
+    /// Native Liquid Glass is scoped to the action so the navigation title and
+    /// status bar keep the screen's normal color scheme.
+    func snootsWhiteTopBarActionStyle() -> some View {
+        buttonStyle(.plain)
+            .labelStyle(.iconOnly)
+            .font(.system(size: 18, weight: .medium))
+            .foregroundStyle(.white)
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+            .glassEffect(.regular.tint(.black.opacity(0.45)).interactive(), in: Circle())
+    }
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 14) {
-                ForEach(stories) { story in
-                    Button(action: {}) {
-                        VStack(spacing: 7) {
-                            ZStack(alignment: .bottomTrailing) {
-                                Image(story.imageName)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 62, height: 62)
-                                    .clipShape(Circle())
-                                    .overlay { Circle().stroke(SnootsPalette.surface, lineWidth: 3) }
-                                    .padding(3)
-                                    .background(
-                                        AngularGradient(
-                                            colors: [SnootsPalette.primary, SnootsPalette.lime, SnootsPalette.primary],
-                                            center: .center
-                                        ),
-                                        in: Circle()
-                                    )
+    /// A floating, native-style glass control for actions layered on a photo.
+    /// It keeps the hit target generous while letting the image show through.
+    func snootsMatchChatActionStyle() -> some View {
+        buttonStyle(.plain)
+            .labelStyle(.iconOnly)
+            .font(.system(size: 19, weight: .medium))
+            .foregroundStyle(.white)
+            .frame(width: 46, height: 46)
+            .contentShape(Circle())
+            .glassEffect(.regular.interactive(), in: Circle())
+            .shadow(color: .black.opacity(0.20), radius: 8, y: 3)
+    }
 
-                                if story.isCurrentUser {
-                                    Image(systemName: "plus")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(SnootsPalette.ink)
-                                        .frame(width: 20, height: 20)
-                                        .background(SnootsPalette.lime, in: Circle())
-                                        .overlay { Circle().stroke(SnootsPalette.surface, lineWidth: 2) }
-                                }
-                            }
-                            Text(story.isCurrentUser ? language.text(story.name, "你的限時") : story.name)
-                                .font(.snootsMetadata())
-                                .foregroundStyle(SnootsPalette.ink)
-                                .lineLimit(1)
-                        }
-                        .frame(width: 68)
-                    }
-                    .accessibilityLabel(story.isCurrentUser ? language.text(story.name, "你的限時") : story.name)
-                }
-            }
-        }
+    /// For header actions outside a navigation bar. Toolbar actions use the
+    /// navigation bar's own system appearance, just like the native back button.
+    func snootsTopBarActionStyle() -> some View {
+        buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.regular)
+            .frame(minWidth: 44, minHeight: 44)
     }
 }
 
 private struct CreateActivityButton: View {
     let language: SnootsLanguage
-    let onView: () -> Void
     let onCreate: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button(action: onView) {
-                Label(language.text("View meetups", "檢視狗聚"), systemImage: "person.2")
-                    .font(.snootsButton(16))
-                    .foregroundStyle(SnootsPalette.ink)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-            }
-            .buttonStyle(.plain)
-            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous)
-                    .stroke(SnootsPalette.lime, lineWidth: 2)
-            }
-            .accessibilityLabel(language.text("View meetups", "檢視狗聚"))
-
+        if SnootsFeatureVisibility.createMeetup {
             Button(action: onCreate) {
                 Label(language.text("Create a meetup", "發起狗聚"), systemImage: "plus")
                     .font(.snootsButton(16))
@@ -307,552 +403,1180 @@ private struct CreateActivityButton: View {
     }
 }
 
-private struct CreateMeetupSheet: View {
-    let store: SnootsStore
-    let language: SnootsLanguage
-    let onPublished: (String) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var title = ""
-    @State private var selectedTypeID = ""
-    @State private var selectedVenueID = ""
-    @State private var startDate = Date.now.addingTimeInterval(60 * 60)
-    @State private var durationHours = 2
-    @State private var attendeeLimit = 6
-    @State private var requiresApproval = true
-    @State private var selectedSafetyTags: Set<String> = ["Leash on", "Slow introductions"]
-    @State private var notes = ""
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var activityPhoto: Image?
-    @FocusState private var isTitleFocused: Bool
-
-    private var selectedType: MeetupActivityType? {
-        store.meetupActivityTypes.first { $0.id == selectedTypeID }
-    }
-
-    private var selectedVenue: MeetupVenue? {
-        store.meetupVenues.first { $0.id == selectedVenueID }
-    }
-
-    private var canPublish: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedType != nil && selectedVenue != nil
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(language.text("Bring compatible dogs together", "為合拍的狗狗發起相聚"))
-                            .font(.snootsSection())
-                        Text(language.text("Set clear expectations so every hello starts calmly.", "清楚設定期待，讓每一次見面都能安心開始。"))
-                            .font(.snootsBody())
-                            .foregroundStyle(SnootsPalette.secondaryText)
-                    }
-
-                    MeetupComposerSection(title: language.text("Activity type", "活動類型")) {
-                        HStack(spacing: 10) {
-                            ForEach(store.meetupActivityTypes) { type in
-                                MeetupTypeTile(
-                                    type: type,
-                                    language: language,
-                                    isSelected: selectedTypeID == type.id
-                                ) {
-                                    selectedTypeID = type.id
-                                }
-                            }
-                        }
-                    }
-
-                    MeetupComposerSection(title: language.text("Details", "活動詳情")) {
-                        VStack(spacing: 0) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "textformat")
-                                    .foregroundStyle(SnootsPalette.navigationActive)
-                                    .frame(width: 24)
-                                TextField(language.text("Give your meetup a name", "為狗聚取個名稱"), text: $title)
-                                    .font(.snootsBody())
-                                    .focused($isTitleFocused)
-                            }
-                            .padding(16)
-
-                            Divider().padding(.leading, 52)
-
-                            DatePicker(
-                                selection: $startDate,
-                                in: Date.now...,
-                                displayedComponents: [.date, .hourAndMinute]
-                            ) {
-                                Label(language.text("Starts", "開始時間"), systemImage: "calendar")
-                                    .font(.snootsBody())
-                                    .foregroundStyle(SnootsPalette.ink)
-                            }
-                            .tint(SnootsPalette.navigationActive)
-                            .padding(16)
-
-                            Divider().padding(.leading, 52)
-
-                            Picker(selection: $durationHours) {
-                                ForEach(store.meetupDurations) { duration in
-                                    Text(duration.localizedLabel(language)).tag(duration.hours)
-                                }
-                            } label: {
-                                Label(language.text("Duration", "活動時長"), systemImage: "clock")
-                                    .font(.snootsBody())
-                            }
-                            .tint(SnootsPalette.navigationActive)
-                            .padding(16)
-                        }
-                    }
-
-                    MeetupComposerSection(title: language.text("Location", "地點")) {
-                        Picker(selection: $selectedVenueID) {
-                            ForEach(store.meetupVenues) { venue in
-                                Text(venue.localizedName(language)).tag(venue.id)
-                            }
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "mappin.and.ellipse")
-                                    .foregroundStyle(SnootsPalette.navigationActive)
-                                    .frame(width: 24)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(language.text("Meet at", "集合地點"))
-                                        .font(.snootsMetadata())
-                                        .foregroundStyle(SnootsPalette.secondaryText)
-                                    Text(selectedVenue?.localizedName(language) ?? language.text("Choose a place", "選擇地點"))
-                                        .font(.snootsBody())
-                                        .foregroundStyle(SnootsPalette.ink)
-                                }
-                                Spacer()
-                            }
-                        }
-                        .tint(SnootsPalette.navigationActive)
-                        .padding(16)
-                    }
-
-                    MeetupComposerSection(title: language.text("Cover photo", "活動照片")) {
-                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                            HStack(spacing: 14) {
-                                Group {
-                                    if let activityPhoto {
-                                        activityPhoto
-                                            .resizable()
-                                            .scaledToFill()
-                                    } else {
-                                        Image(systemName: "photo.badge.plus")
-                                            .font(.title2)
-                                            .foregroundStyle(SnootsPalette.navigationActive)
-                                    }
-                                }
-                                .frame(width: 58, height: 58)
-                                .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(language.text("Add a photo", "新增照片"))
-                                        .font(.snootsCardTitle())
-                                        .foregroundStyle(SnootsPalette.ink)
-                                    Text(language.text("Help nearby dog parents recognise the meetup.", "讓附近的飼主更容易辨識狗聚。"))
-                                        .font(.snootsMetadata())
-                                        .foregroundStyle(SnootsPalette.secondaryText)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(SnootsPalette.inactive)
-                            }
-                            .padding(16)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    MeetupComposerSection(title: language.text("Dog-friendly settings", "安心狗聚設定")) {
-                        VStack(spacing: 0) {
-                            Toggle(isOn: $requiresApproval) {
-                                Label(language.text("Review join requests", "審核參加申請"), systemImage: "checkmark.shield")
-                                    .font(.snootsBody())
-                            }
-                            .tint(SnootsPalette.lime)
-                            .padding(16)
-
-                            Divider().padding(.leading, 52)
-
-                            Stepper(value: $attendeeLimit, in: 2...20) {
-                                Label("\(language.text("Up to", "最多")) \(attendeeLimit) \(language.text("dogs", "隻狗狗"))", systemImage: "dog")
-                                    .font(.snootsBody())
-                            }
-                            .tint(SnootsPalette.navigationActive)
-                            .padding(16)
-                        }
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(language.text("Shared expectations", "共同約定"))
-                                .font(.snootsMetadata())
-                                .foregroundStyle(SnootsPalette.secondaryText)
-
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(store.meetupSafetyOptions) { option in
-                                        Button {
-                                            toggleSafetyTag(option.id)
-                                        } label: {
-                                            Label(
-                                                option.localizedTitle(language),
-                                                systemImage: selectedSafetyTags.contains(option.id) ? "checkmark.circle.fill" : "circle"
-                                            )
-                                            .font(.snootsChip())
-                                            .foregroundStyle(SnootsPalette.ink)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 8)
-                                            .background(
-                                                selectedSafetyTags.contains(option.id) ? SnootsPalette.primaryTint : SnootsPalette.canvas,
-                                                in: Capsule()
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .accessibilityAddTraits(selectedSafetyTags.contains(option.id) ? .isSelected : [])
-                                    }
-                                }
-                            }
-                        }
-                        .padding(16)
-                    }
-
-                    MeetupComposerSection(title: language.text("A note for dog parents", "給飼主的補充說明")) {
-                        TextEditor(text: $notes)
-                            .font(.snootsBody())
-                            .frame(minHeight: 104)
-                            .padding(12)
-                            .scrollContentBackground(.hidden)
-                            .background(SnootsPalette.surface)
-                            .accessibilityLabel(language.text("Meetup notes", "狗聚說明"))
-                    }
-                }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 20)
-            }
-            .background(SnootsPalette.canvas)
-            .navigationTitle(language.text("Create a meetup", "發起狗聚"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(language.text("Cancel", "取消")) {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(language.text("Publish", "發佈")) {
-                        publish()
-                    }
-                    .font(.snootsButton(16))
-                    .disabled(!canPublish)
-                }
-            }
-            .onAppear {
-                if selectedTypeID.isEmpty {
-                    selectedTypeID = store.meetupActivityTypes.first?.id ?? ""
-                }
-                if selectedVenueID.isEmpty {
-                    selectedVenueID = store.meetupVenues.first?.id ?? ""
-                }
-            }
-            .onChange(of: selectedPhoto) { _, newValue in
-                loadPhoto(from: newValue)
-            }
-        }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-    }
-
-    private func toggleSafetyTag(_ id: String) {
-        if selectedSafetyTags.contains(id) {
-            selectedSafetyTags.remove(id)
-        } else {
-            selectedSafetyTags.insert(id)
-        }
-    }
-
-    private func loadPhoto(from item: PhotosPickerItem?) {
-        Task {
-            guard let data = try? await item?.loadTransferable(type: Data.self),
-                  let uiImage = UIImage(data: data) else { return }
-            activityPhoto = Image(uiImage: uiImage)
-        }
-    }
-
-    private func publish() {
-        guard let selectedType, let selectedVenue else { return }
-        let meetupPlaceID = store.createMeetup(
-            MeetupDraft(
-                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                activityTypeID: selectedType.id,
-                venueID: selectedVenue.id,
-                startDate: startDate,
-                durationHours: durationHours,
-                attendeeLimit: attendeeLimit,
-                requiresApproval: requiresApproval,
-                safetyTagIDs: Array(selectedSafetyTags),
-                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
-                hasCoverPhoto: activityPhoto != nil
-            )
-        )
-        onPublished(meetupPlaceID)
-        dismiss()
-    }
+private struct MeetupCardShowcase: Identifiable {
+    let id: String
+    let date: Date
+    let organizer: String
+    let title: String
+    let tags: [String]
+    let attendeeCount: Int
+    let participants: [MeetupParticipant]
+    let opensDetails: Bool
 }
 
-private struct MyMeetupsSheet: View {
+private struct MyMeetupsView: View {
     let store: SnootsStore
     let language: SnootsLanguage
     let onShowOnMap: (String) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var meetupPendingCancellationID: UUID?
+    let onOpenMeetupChats: () -> Void
+    @State private var isShowingCreateMeetup = false
+    @State private var isShowingUpcomingMeetup = false
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if store.createdMeetups.isEmpty {
-                    ContentUnavailableView {
-                        Label(language.text("No meetups yet", "尚未建立狗聚"), systemImage: "person.2")
-                    } description: {
-                        Text(language.text("Meetups you publish will appear here for you to manage.", "你發佈的狗聚會集中顯示在這裡，方便後續管理。"))
+        Group {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    Text(language.text("Coming up", "即將到來"))
+                        .font(.snootsSection())
+
+                    ForEach(showcaseMeetups) { meetup in
+                        showcaseMeetupRow(meetup)
                     }
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 14) {
-                            ForEach(store.createdMeetups) { meetup in
-                                meetupCard(meetup)
-                            }
+
+                    if !store.createdMeetups.isEmpty {
+                        Text(language.text("Published by you", "你發佈的狗聚"))
+                            .font(.snootsSection())
+                            .padding(.top, 8)
+
+                        ForEach(store.createdMeetups) { meetup in
+                            meetupCard(meetup)
                         }
-                        .padding(18)
                     }
-                    .background(SnootsPalette.canvas)
                 }
+                .padding(18)
             }
+            .background(SnootsPalette.canvas)
             .navigationTitle(language.text("My meetups", "我的狗聚"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .tabBar)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(language.text("Done", "完成")) { dismiss() }
-                }
-            }
-            .confirmationDialog(
-                language.text("Cancel this meetup?", "要取消這場狗聚嗎？"),
-                isPresented: cancellationDialogBinding,
-                titleVisibility: .visible
-            ) {
-                Button(language.text("Cancel meetup", "取消狗聚"), role: .destructive) {
-                    if let meetupPendingCancellationID {
-                        store.deleteMeetup(id: meetupPendingCancellationID)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { isShowingCreateMeetup = true } label: {
+                        Label(language.text("Create a meetup", "發起狗聚"), systemImage: "plus")
+                            .labelStyle(.titleAndIcon)
                     }
-                    meetupPendingCancellationID = nil
-                }
-                Button(language.text("Keep meetup", "保留狗聚"), role: .cancel) {
-                    meetupPendingCancellationID = nil
                 }
             }
         }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        .navigationDestination(isPresented: $isShowingUpcomingMeetup) {
+            UpcomingMeetupDetailView(
+                store: store,
+                language: language,
+                onOpenMeetupChats: onOpenMeetupChats
+            )
+        }
+        .navigationDestination(isPresented: $isShowingCreateMeetup) {
+            CreateMeetupView(store: store, language: language)
+        }
     }
 
-    private var cancellationDialogBinding: Binding<Bool> {
-        Binding(
-            get: { meetupPendingCancellationID != nil },
-            set: { if !$0 { meetupPendingCancellationID = nil } }
-        )
+    private func showcaseMeetupRow(_ meetup: MeetupCardShowcase) -> some View {
+        Group {
+            if meetup.opensDetails {
+                Button { isShowingUpcomingMeetup = true } label: {
+                    upcomingMeetupCard(meetup)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(language.text("Open meetup details", "開啟狗聚詳情"))
+            } else {
+                upcomingMeetupCard(meetup)
+            }
+        }
+        .padding(.leading, 56)
+        .overlay(alignment: .leading) {
+            meetupDateRail(meetup.date)
+                .frame(width: 46)
+                .frame(maxHeight: .infinity)
+        }
+        .padding(.top, 4)
+    }
+
+    private func meetupDateRail(_ date: Date) -> some View {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let components = calendar.dateComponents([.month, .day], from: date)
+        let month = String(format: "%02d", components.month ?? 0)
+        let day = String(format: "%02d", components.day ?? 0)
+
+        return VStack(spacing: -2) {
+            Text(language.text(month, "\(month)月"))
+                .font(.snootsUI(16, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Text(day)
+                .font(.snootsHeading(32))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(SnootsPalette.secondaryText)
+        .padding(.vertical, 8)
+        .frame(maxHeight: .infinity, alignment: .center)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(language.text("\(month)/\(day)", "\(month)月\(day)日"))
+    }
+
+    private func upcomingMeetupCard(_ meetup: MeetupCardShowcase) -> some View {
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(language.text("Hosted by \(meetup.organizer)", "發起人 \(meetup.organizer)"))
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+
+                    Text(meetup.title)
+                        .font(.snootsHeading(26))
+                        .foregroundStyle(SnootsPalette.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .allowsTightening(true)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "arrow.right")
+                    .font(.snootsUI(15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(SnootsPalette.navigationActive, in: Circle())
+                    .accessibilityHidden(true)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(meetup.tags, id: \.self) { tag in
+                        meetupTagPill(tag)
+                    }
+                }
+
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(meetup.tags, id: \.self) { tag in
+                        meetupTagPill(tag)
+                    }
+                }
+            }
+
+            Divider()
+                .overlay(SnootsPalette.ink.opacity(0.12))
+
+            HStack(spacing: 10) {
+                MeetupParticipantAvatarStack(
+                    participants: meetup.participants,
+                    language: language,
+                    showsWhiteOutline: false,
+                    avatarSize: 32
+                )
+                    .frame(width: 112, alignment: .leading)
+                Text(language.text("\(meetup.attendeeCount) attending", "等 \(meetup.attendeeCount) 位"))
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SnootsPalette.surface)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(SnootsPalette.navigationActive)
+                .frame(width: 4)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
+    }
+
+    private var showcaseMeetups: [MeetupCardShowcase] {
+        let meetup = store.upcomingMeetup
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let secondDate = calendar.date(byAdding: .day, value: 7, to: meetup.startDate) ?? meetup.startDate
+        let thirdDate = calendar.date(byAdding: .day, value: 14, to: meetup.startDate) ?? meetup.startDate
+        let tags = [
+            language.text("General park", "一般公園"),
+            language.text("Small dogs", "小型犬"),
+            language.text("Medium dogs", "中型犬"),
+            language.text("Leash required", "需牽繩")
+        ]
+        let strollTags = [
+            language.text("Forest lawn", "森林草地"),
+            language.text("Small dogs", "小型犬"),
+            language.text("Slow introductions", "慢慢認識"),
+            language.text("Leash required", "需牽繩")
+        ]
+        let riversideTags = [
+            language.text("Riverside park", "河濱公園"),
+            language.text("Medium dogs", "中型犬"),
+            language.text("Gentle walk", "自在散步"),
+            language.text("Leash required", "需牽繩")
+        ]
+        let strollParticipants = Array(meetup.participants.dropFirst().prefix(4))
+        let riversideParticipants = Array(meetup.participants.dropFirst(2))
+            + Array(meetup.participants.prefix(2))
+
+        return [
+            MeetupCardShowcase(
+                id: "upcoming-main",
+                date: meetup.startDate,
+                organizer: meetup.localizedOrganizerName(language),
+                title: meetup.localizedTitle(language),
+                tags: tags,
+                attendeeCount: 10,
+                participants: meetup.participants,
+                opensDetails: true
+            ),
+            MeetupCardShowcase(
+                id: "upcoming-lavender",
+                date: secondDate,
+                organizer: language.text("Aoi", "小葵"),
+                title: language.text("Autumn Park Stroll", "秋日草地散步"),
+                tags: strollTags,
+                attendeeCount: 8,
+                participants: strollParticipants,
+                opensDetails: false
+            ),
+            MeetupCardShowcase(
+                id: "upcoming-lime",
+                date: thirdDate,
+                organizer: language.text("A-Fu", "阿福"),
+                title: language.text("Weekend Dog Friends", "週末狗友相見歡"),
+                tags: riversideTags,
+                attendeeCount: 12,
+                participants: riversideParticipants,
+                opensDetails: false
+            )
+        ]
+    }
+
+    private func meetupTagPill(_ tag: String) -> some View {
+        Text(tag)
+            .font(.snootsMetadata())
+            .foregroundStyle(SnootsPalette.ink)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .overlay {
+                Capsule()
+                    .strokeBorder(SnootsPalette.ink.opacity(0.28), lineWidth: 0.75)
+            }
     }
 
     private func meetupCard(_ meetup: MeetupDraft) -> some View {
         let activity = store.meetupActivityTypes.first { $0.id == meetup.activityTypeID }
-        let venue = store.meetupVenues.first { $0.id == meetup.venueID }
 
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(meetup.title)
-                        .font(.snootsCardTitle())
+                        .font(.snootsUI(21, weight: .semibold))
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(activity?.localizedTitle(language) ?? language.text("Dog meetup", "狗聚"))
                         .font(.snootsMetadata())
-                        .foregroundStyle(SnootsPalette.secondaryText)
+                        .foregroundStyle(SnootsPalette.ink.opacity(0.68))
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 Text(language.text("Published", "已發佈"))
                     .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(SnootsPalette.lime, in: Capsule())
+            }
+
+            VStack(alignment: .leading, spacing: 11) {
+                Label(
+                    meetup.startDate.formatted(
+                        Date.FormatStyle(date: .abbreviated, time: .shortened).locale(language.locale)
+                    ),
+                    systemImage: "calendar"
+                )
+                if let url = URL(string: meetup.navigationLink),
+                   ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil {
+                    Link(destination: url) {
+                        Label(meetup.location, systemImage: "mappin")
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Label(meetup.location, systemImage: "mappin")
+                }
+                Label(language.text("Up to \(meetup.attendeeLimit) dogs", "最多 \(meetup.attendeeLimit) 隻狗狗"), systemImage: "pawprint.fill")
+
+                if SnootsFeatureVisibility.nearby,
+                   store.place(id: store.meetupPlaceID(for: meetup)) != nil {
+                    Button {
+                        onShowOnMap(store.meetupPlaceID(for: meetup))
+                    } label: {
+                        Label(language.text("Show on map", "在地圖查看"), systemImage: "map.fill")
+                            .font(.snootsButton(15))
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(SnootsPalette.navigationActive)
+                }
+            }
+            .font(.snootsUI(14))
+            .foregroundStyle(SnootsPalette.ink)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SnootsPalette.surface)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(SnootsPalette.navigationActive)
+                .frame(width: 4)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .snootsCardShadow()
+    }
+}
+
+private struct UpcomingMeetupDetailView: View {
+    let store: SnootsStore
+    let language: SnootsLanguage
+    let onOpenMeetupChats: () -> Void
+
+    private var meetup: UpcomingMeetup { store.upcomingMeetup }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                MeetupHeroInformationCard(meetup: meetup, language: language)
+
+                VStack(alignment: .leading, spacing: 18) {
+                    MeetupEventInformationContent(meetup: meetup, language: language)
+
+                    if store.isUpcomingMeetupCheckInOpen {
+                        eventDaySection
+                    }
+
+                    MeetupPurposeAndSafetyCard(meetup: meetup, store: store, language: language)
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 20)
+                .padding(.bottom, 32)
+            }
+        }
+        .background(SnootsPalette.canvas)
+        .ignoresSafeArea(edges: .top)
+        .navigationTitle(meetup.localizedTitle(language))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    MeetupEditView(meetup: meetup, store: store, language: language)
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .tint(.white)
+                .accessibilityLabel(language.text("Edit meetup", "編輯狗聚"))
+            }
+
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: onOpenMeetupChats) {
+                    SnootsChatIcon()
+                }
+                .tint(.white)
+                .accessibilityLabel(language.text("Open meetup chats", "開啟狗聚聊天室"))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var eventDaySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(language.text("On-site check-in", "現場簽到區"))
+                    .font(.snootsSection())
+                Spacer()
+                Text(language.text("Open", "已開放"))
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.ink)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(SnootsPalette.lime, in: Capsule())
             }
 
-            VStack(alignment: .leading, spacing: 7) {
-                Label(meetup.startDate.formatted(date: .abbreviated, time: .shortened), systemImage: "calendar")
-                Label(venue?.localizedName(language) ?? language.text("Meetup venue", "狗聚地點"), systemImage: "mappin.and.ellipse")
-                Label(language.text("Up to \(meetup.attendeeLimit) dogs", "最多 \(meetup.attendeeLimit) 隻狗狗"), systemImage: "pawprint.fill")
-            }
-            .font(.snootsUI(14))
-            .foregroundStyle(SnootsPalette.secondaryText)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 14) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(SnootsPalette.ink)
+                        .frame(width: 48, height: 48)
+                        .background(SnootsPalette.lime, in: Circle())
 
-            HStack(spacing: 10) {
-                Button {
-                    onShowOnMap(store.meetupPlaceID(for: meetup))
-                } label: {
-                    Label(language.text("Show on map", "在地圖查看"), systemImage: "map.fill")
-                        .frame(maxWidth: .infinity)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(language.text("Phone tap check-in", "手機互碰簽到"))
+                            .font(.snootsCardTitle())
+                            .foregroundStyle(SnootsPalette.ink)
+                        Text(language.text("Check in with nearby dog friends by Bluetooth — no roll call needed.", "活動現場透過藍牙與附近參與者快速簽到，免去人工點名。"))
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                            .multilineTextAlignment(.leading)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(SnootsPalette.primary)
 
-                Button(role: .destructive) {
-                    meetupPendingCancellationID = meetup.id
-                } label: {
-                    Image(systemName: "trash")
-                        .frame(width: 22)
+                if store.areUpcomingMeetupTasksCompleted {
+                    NavigationLink {
+                        GroupMeetupDashboard(meetup: meetup, store: store, language: language)
+                    } label: {
+                        Label(language.text("Enter check-in dashboard", "進入現場簽到儀表板"), systemImage: "arrow.right")
+                    }
+                    .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                } else {
+                    Label(language.text("Complete all pre-event tasks to unlock", "完成所有行前任務後解鎖簽到"), systemImage: "lock.fill")
+                        .font(.snootsButton(16))
+                        .foregroundStyle(SnootsPalette.inactive)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous))
+                        .opacity(0.65)
                 }
-                .buttonStyle(.bordered)
-                .accessibilityLabel(language.text("Cancel meetup", "取消狗聚"))
             }
-            .font(.snootsButton(15))
+            .padding(16)
+            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+            .snootsCardShadow()
         }
-        .padding(16)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .snootsCardShadow()
     }
+
 }
 
-private struct MeetupComposerSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
+private struct MeetupHeroInformationCard: View {
+    let meetup: UpcomingMeetup
+    let language: SnootsLanguage
+
+    private var coverImageName: String {
+        "MeetupHeroDogs"
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(title)
-                .font(.snootsSection())
-            content
-                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-                .snootsCardShadow()
+        GeometryReader { geometry in
+            ZStack(alignment: .bottomLeading) {
+                Group {
+                    if let data = meetup.coverPhotoData, let image = UIImage(data: data) {
+                        Image(uiImage: image).resizable()
+                    } else {
+                        Image(coverImageName).resizable()
+                    }
+                }
+                    .scaledToFill()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .scaleEffect(1.14, anchor: .bottom)
+                    .clipped()
+
+                LinearGradient(
+                    colors: [SnootsPalette.ink.opacity(0.42), SnootsPalette.ink.opacity(0.08), SnootsPalette.ink.opacity(0.62)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.text("Hosted by \(meetup.organizerName)", "發起人 \(meetup.localizedOrganizerName(language))"))
+                        .font(.snootsUI(15, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.88))
+
+                    Text(meetup.localizedTitle(language))
+                        .font(.snootsHeading(34).weight(.bold))
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 22)
+                .padding(.bottom, 32)
+            }
         }
+        .frame(height: 430)
     }
 }
 
-private struct MeetupTypeTile: View {
-    let type: MeetupActivityType
+private struct MeetupEventInformationContent: View {
+    let meetup: UpcomingMeetup
     let language: SnootsLanguage
-    let isSelected: Bool
-    let action: () -> Void
+    @Environment(\.openURL) private var openURL
+    @State private var isShowingNavigationOptions = false
+
+    private var appleMapsURL: URL {
+        if meetup.traditionalChineseLocation == "大安森林公園" {
+            return URL(string: "https://maps.apple.com/?daddr=25.0296587%2C121.5362867&dirflg=w")!
+        }
+        var components = URLComponents(string: "https://maps.apple.com/")!
+        components.queryItems = [URLQueryItem(name: "daddr", value: meetup.localizedLocation(language)), URLQueryItem(name: "dirflg", value: "w")]
+        return components.url!
+    }
+
+    private var googleMapsURL: URL {
+        if let url = URL(string: meetup.navigationLink), ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil {
+            return url
+        }
+        var components = URLComponents(string: "https://www.google.com/maps/dir/")!
+        components.queryItems = [URLQueryItem(name: "api", value: "1"), URLQueryItem(name: "destination", value: meetup.localizedLocation(language))]
+        return components.url!
+    }
+
+    private var dateText: String {
+        meetup.startDate.formatted(
+            Date.FormatStyle(date: .numeric, time: .omitted).locale(language.locale)
+        )
+    }
+
+    private var startTimeText: String {
+        meetup.startDate.formatted(
+            Date.FormatStyle(date: .omitted, time: .shortened).locale(language.locale)
+        )
+    }
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 9) {
-                Image(systemName: type.symbol)
-                    .font(.title3.weight(.semibold))
-                Text(type.localizedTitle(language))
-                    .font(.snootsChip())
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: 17) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) {
+                    metadataValue(startTimeText, symbol: "clock")
+                    metadataValue(dateText, symbol: "calendar")
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    metadataValue(startTimeText, symbol: "clock")
+                    metadataValue(dateText, symbol: "calendar")
+                }
             }
-            .foregroundStyle(SnootsPalette.ink)
-            .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
-            .padding(12)
-            .background(isSelected ? SnootsPalette.lime : SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
-                    .stroke(isSelected ? SnootsPalette.lime : SnootsPalette.divider, lineWidth: isSelected ? 2 : 1)
+
+            Button {
+                isShowingNavigationOptions = true
+            } label: {
+                metadataValue("\(meetup.localizedLocation(language))（點我導航）", symbol: "mappin")
             }
+            .buttonStyle(.plain)
+            .accessibilityHint(language.text("Choose Apple Maps or Google Maps for directions", "選擇 Apple 地圖或 Google 地圖導航"))
+
+            NavigationLink {
+                MeetupParticipantListView(meetup: meetup, language: language)
+            } label: {
+                HStack(spacing: 10) {
+                    MeetupParticipantAvatarStack(
+                        participants: meetup.participants,
+                        language: language,
+                        showsWhiteOutline: false,
+                        avatarSize: 34
+                    )
+                    Text(language.text("\(meetup.readyParticipantCount) participants", "\(meetup.readyParticipantCount) 位參加者"))
+                        .font(.snootsUI(16, weight: .medium))
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.snootsUI(14, weight: .semibold))
+                        .foregroundStyle(SnootsPalette.inactive)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(language.text("View participant list", "查看參與名單與防範標籤"))
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .confirmationDialog(
+            language.text("Choose a navigation app", "選擇導航 App"),
+            isPresented: $isShowingNavigationOptions,
+            titleVisibility: .visible
+        ) {
+            Button(language.text("Apple Maps", "Apple 地圖")) {
+                openURL(appleMapsURL)
+            }
+            Button(language.text("Google Maps", "Google 地圖")) {
+                openURL(googleMapsURL)
+            }
+            Button(language.text("Cancel", "取消"), role: .cancel) { }
+        } message: {
+            Text("前往\(meetup.localizedLocation(language))")
+        }
+    }
+
+    private func metadataValue(_ text: String, symbol: String) -> some View {
+        HStack(spacing: 8) {
+            metadataIcon(symbol)
+                .frame(width: 20, height: 20)
+            Text(text)
+                .font(.snootsUI(16, weight: .medium))
+                .foregroundStyle(SnootsPalette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+    }
+
+    @ViewBuilder
+    private func metadataIcon(_ symbol: String) -> some View {
+        switch symbol {
+        case "clock":
+            MeetupClockOutlineIcon(color: SnootsPalette.navigationActive)
+        case "calendar":
+            MeetupCalendarOutlineIcon(color: SnootsPalette.navigationActive)
+        case "mappin":
+            MeetupLocationOutlineIcon(color: SnootsPalette.navigationActive)
+        default:
+            Image(systemName: symbol)
+                .font(.snootsUI(16, weight: .regular))
+                .foregroundStyle(SnootsPalette.navigationActive)
+        }
     }
 }
 
-private struct FeedPostCard: View {
-    let post: SocialPost
+private struct MeetupClockOutlineIcon: View {
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            let width = size.width
+            let height = size.height
+            let circle = CGRect(
+                x: width * 0.10,
+                y: height * 0.10,
+                width: width * 0.80,
+                height: height * 0.80
+            )
+
+            var clock = Path()
+            clock.addEllipse(in: circle)
+            clock.move(to: CGPoint(x: width * 0.5, y: height * 0.5))
+            clock.addLine(to: CGPoint(x: width * 0.5, y: height * 0.25))
+            clock.move(to: CGPoint(x: width * 0.5, y: height * 0.5))
+            clock.addLine(to: CGPoint(x: width * 0.29, y: height * 0.5))
+            context.stroke(
+                clock,
+                with: .color(color),
+                style: StrokeStyle(lineWidth: MeetupMetadataIconStyle.strokeWidth, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct MeetupLocationOutlineIcon: View {
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            let width = size.width
+            let height = size.height
+            var pin = Path()
+            pin.move(to: CGPoint(x: width * 0.5, y: height * 0.94))
+            pin.addCurve(
+                to: CGPoint(x: width * 0.17, y: height * 0.39),
+                control1: CGPoint(x: width * 0.39, y: height * 0.72),
+                control2: CGPoint(x: width * 0.17, y: height * 0.57)
+            )
+            pin.addCurve(
+                to: CGPoint(x: width * 0.5, y: height * 0.08),
+                control1: CGPoint(x: width * 0.17, y: height * 0.18),
+                control2: CGPoint(x: width * 0.31, y: height * 0.08)
+            )
+            pin.addCurve(
+                to: CGPoint(x: width * 0.83, y: height * 0.39),
+                control1: CGPoint(x: width * 0.69, y: height * 0.08),
+                control2: CGPoint(x: width * 0.83, y: height * 0.18)
+            )
+            pin.addCurve(
+                to: CGPoint(x: width * 0.5, y: height * 0.94),
+                control1: CGPoint(x: width * 0.83, y: height * 0.57),
+                control2: CGPoint(x: width * 0.61, y: height * 0.72)
+            )
+
+            let center = CGRect(
+                x: width * 0.39,
+                y: height * 0.25,
+                width: width * 0.22,
+                height: height * 0.22
+            )
+            pin.addEllipse(in: center)
+            context.stroke(
+                pin,
+                with: .color(color),
+                style: StrokeStyle(lineWidth: MeetupMetadataIconStyle.strokeWidth, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct MeetupCalendarOutlineIcon: View {
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            let width = size.width
+            let height = size.height
+            let frame = CGRect(
+                x: width * 0.11,
+                y: height * 0.15,
+                width: width * 0.78,
+                height: height * 0.76
+            )
+
+            var outline = Path()
+            outline.addRoundedRect(in: frame, cornerSize: CGSize(width: 3, height: 3))
+            outline.move(to: CGPoint(x: width * 0.13, y: height * 0.39))
+            outline.addLine(to: CGPoint(x: width * 0.87, y: height * 0.39))
+            outline.move(to: CGPoint(x: width * 0.32, y: height * 0.08))
+            outline.addLine(to: CGPoint(x: width * 0.32, y: height * 0.28))
+            outline.move(to: CGPoint(x: width * 0.68, y: height * 0.08))
+            outline.addLine(to: CGPoint(x: width * 0.68, y: height * 0.28))
+            context.stroke(
+                outline,
+                with: .color(color),
+                style: StrokeStyle(lineWidth: MeetupMetadataIconStyle.strokeWidth, lineCap: .round, lineJoin: .round)
+            )
+
+            var dateMarks = Path()
+            for row in 0..<2 {
+                for column in 0..<3 {
+                    let x = width * (0.30 + CGFloat(column) * 0.20)
+                    let y = height * (0.55 + CGFloat(row) * 0.19)
+                    dateMarks.addEllipse(in: CGRect(x: x, y: y, width: 1.4, height: 1.4))
+                }
+            }
+            context.fill(dateMarks, with: .color(color))
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private enum MeetupMetadataIconStyle {
+    static let strokeWidth: CGFloat = 2.3
+}
+
+private struct MeetupPurposeAndSafetyCard: View {
+    let meetup: UpcomingMeetup
+    let store: SnootsStore
     let language: SnootsLanguage
-    let isLiked: Bool
-    let isSaved: Bool
-    let onToggleLike: () -> Void
-    let onToggleSave: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            FeedPostAuthorRow(post: post, language: language)
-            if let photoName = post.photoName {
-                Image(photoName)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 292)
-                    .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.profileImageRadius, style: .continuous))
-                    .accessibilityLabel("Photo of \(post.petName)")
-            }
-            HStack(spacing: 16) {
-                Button(action: onToggleLike) {
-                    Label("\(post.likes + (isLiked ? 1 : 0))", systemImage: isLiked ? "heart.fill" : "heart")
-                        .foregroundStyle(isLiked ? SnootsPalette.navigationActive : SnootsPalette.ink)
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-                Button(action: {}) {
-                    Label("\(post.comments)", systemImage: "bubble.right")
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-                Button(action: {}) {
-                    Image(systemName: "paperplane")
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-                Spacer()
-                Button(action: onToggleSave) {
-                    Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-                        .foregroundStyle(isSaved ? SnootsPalette.navigationActive : SnootsPalette.ink)
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-            }
-            .font(.snootsUI(15, weight: .semibold))
-            .buttonStyle(.plain)
+            Text(language.text("About the meetup", "聚會主旨"))
+                .font(.snootsSection())
+                .foregroundStyle(SnootsPalette.ink)
 
-            Text(post.localizedBody(language))
+            Text(meetup.localizedHostNote(language))
                 .font(.snootsBody())
+                .foregroundStyle(SnootsPalette.ink)
                 .fixedSize(horizontal: false, vertical: true)
-            DeclarationChips(labels: post.localizedDeclarations(language), tint: SnootsPalette.primaryTint)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(Array(meetup.safetyPrinciples.enumerated()), id: \.offset) { _, principle in
+                        SafetyPrincipleChip(title: principle)
+                    }
+                }
+            }
+
+            Text(meetup.preparationNotes)
+                .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
+            Button {
+                store.toggleUpcomingMeetupGuidanceAcknowledgement()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "checkmark.shield")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(SnootsPalette.navigationActive)
+                        .frame(width: 26)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(language.text("Read the meetup purpose & safety rules", "閱讀本次活動主旨與安全守則"))
+                            .font(.snootsBody())
+                            .foregroundStyle(SnootsPalette.ink)
+                            .multilineTextAlignment(.leading)
+                        Text(language.text("Confirm the notes to prepare before the meetup.", "請於聚會前確認注意事項內容。"))
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                            .multilineTextAlignment(.leading)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: store.hasAcknowledgedUpcomingMeetupGuidance ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(store.hasAcknowledgedUpcomingMeetupGuidance ? SnootsPalette.navigationActive : SnootsPalette.inactive)
+                }
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(store.hasAcknowledgedUpcomingMeetupGuidance ? .isSelected : [])
         }
-        .padding(15)
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .snootsCardShadow()
     }
 }
 
-private struct FeedPostAuthorRow: View {
-    let post: SocialPost
+private struct SafetyPrincipleChip: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.snootsChip())
+            .foregroundStyle(SnootsPalette.ink)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(SnootsPalette.surface.opacity(0.78), in: Capsule())
+    }
+}
+
+private struct MeetupParticipantListView: View {
+    let meetup: UpcomingMeetup
     let language: SnootsLanguage
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(post.photoName ?? "Nori")
-                .resizable()
-                .scaledToFill()
-                .frame(width: 42, height: 42)
-                .clipShape(Circle())
-                .overlay { Circle().stroke(SnootsPalette.primary.opacity(0.7), lineWidth: 2) }
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(post.owner).font(.snootsUI(14, weight: .semibold))
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.caption)
-                        .foregroundStyle(SnootsPalette.navigationActive)
-                        .accessibilityLabel("Verified parent")
+        List {
+            Section {
+                ForEach(meetup.participants) { participant in
+                    NavigationLink {
+                        MeetupParticipantProfileView(participant: participant, language: language)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(participant.imageName)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 48, height: 48)
+                                .clipShape(Circle())
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(participant.localizedName(language))
+                                    .font(.snootsCardTitle())
+                                Text("\(participant.breed) · \(participant.age) · \(participant.size)")
+                                    .font(.snootsMetadata())
+                                    .foregroundStyle(SnootsPalette.secondaryText)
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 6) {
+                                        ForEach(participant.safetyTagIDs, id: \.self) { id in
+                                            Text(localizedSafetyTag(id))
+                                                .font(.snootsChip())
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 5)
+                                                .background(SnootsPalette.primaryTint, in: Capsule())
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.vertical, 3)
+                    }
+                    .foregroundStyle(SnootsPalette.ink)
                 }
-                Text("\(post.location) · \(post.localizedTimeAgo(language))")
-                    .font(.snootsMetadata())
-                    .foregroundStyle(SnootsPalette.secondaryText)
+            } header: {
+                Text(language.text("Participants", "參與名單"))
             }
-            Spacer()
-            Image(systemName: "ellipsis")
-                .foregroundStyle(SnootsPalette.secondaryText)
-                .frame(width: 30, height: 30)
-                .accessibilityLabel("More post options")
         }
+        .scrollContentBackground(.hidden)
+        .background(SnootsPalette.canvas)
+        .navigationTitle(language.text("Participants", "參與名單"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func localizedSafetyTag(_ id: String) -> String {
+        switch id {
+        case "slow-intro": language.text("Slow introductions", "慢慢認識")
+        case "leash": language.text("Leash on", "全程牽繩")
+        case "adult": language.text("Adult dogs", "偏好成犬")
+        default: id
+        }
+    }
+}
+
+private struct MeetupParticipantProfileView: View {
+    let participant: MeetupParticipant
+    let language: SnootsLanguage
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(spacing: 10) {
+                    Image(participant.imageName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 132, height: 132)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(SnootsPalette.primaryTint, lineWidth: 5))
+                    Text(participant.localizedName(language))
+                        .font(.snootsHeading(28))
+                    Text("\(participant.breed) · \(participant.age) · \(participant.size)")
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 12)
+
+                profileSection("自我介紹") {
+                    Text(participant.summary)
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.ink)
+                }
+
+                profileSection("互動與社交界線") {
+                    HStack(spacing: 8) {
+                        ForEach(participant.safetyTagIDs, id: \.self) { tagID in
+                            Text(localizedSafetyTag(tagID))
+                                .font(.snootsChip())
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(SnootsPalette.primaryTint, in: Capsule())
+                        }
+                    }
+                }
+
+                profileSection("健康摘要") {
+                    Label(participant.healthSummary, systemImage: "checkmark.shield.fill")
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.navigationActive)
+                }
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle("狗狗檔案")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private func profileSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.snootsSection())
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+    }
+
+    private func localizedSafetyTag(_ id: String) -> String {
+        switch id {
+        case "slow-intro": "慢慢認識"
+        case "leash": "全程牽繩"
+        case "adult": "偏好成犬"
+        default: id
+        }
+    }
+}
+
+private struct MeetupRulesSheet: View {
+    let store: SnootsStore
+    let task: MeetupPreparationTask?
+    let language: SnootsLanguage
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                Label(language.text("Meetup rules", "聚會守則"), systemImage: "checkmark.shield.fill")
+                    .font(.snootsHeading(22))
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Label(language.text("Let dogs choose their own pace.", "不強迫狗狗互動，讓牠們自己決定靠近的步調。"), systemImage: "hand.raised.fill")
+                    Label(language.text("Please don’t feed another dog.", "未經飼主同意，請勿餵食其他狗狗。"), systemImage: "fork.knife")
+                    Label(language.text("Keep a leash on throughout the meetup.", "活動全程使用胸背帶與牽繩。"), systemImage: "link")
+                }
+                .font(.snootsBody())
+                .foregroundStyle(SnootsPalette.ink)
+
+                Spacer()
+
+                Button(language.text("I understand and agree", "我已閱讀並同意")) {
+                    if let task, !store.isUpcomingMeetupTaskCompleted(task) {
+                        store.toggleUpcomingMeetupTask(task)
+                    }
+                    dismiss()
+                }
+                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+            }
+            .padding(20)
+            .background(SnootsPalette.canvas)
+            .navigationTitle(language.text("Safety first", "安全第一"))
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+private struct MeetupBluetoothCheckInView: View {
+    let meetup: UpcomingMeetup
+    let language: SnootsLanguage
+    @State private var isSearchingForNearbyPhones = false
+    @State private var isExitConfirmationPresented = false
+    @State private var hasLeftMeetup = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(spacing: 16) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 42, weight: .semibold))
+                        .foregroundStyle(SnootsPalette.ink)
+                        .frame(width: 100, height: 100)
+                        .background(SnootsPalette.lime, in: Circle())
+
+                    Text(language.text("Phone tap check-in", "手機互碰簽到"))
+                        .font(.snootsHeading(24))
+
+                    Text(
+                        language.text(
+                            "At the meetup, bring your phone close to another participant’s phone to check in together.",
+                            "抵達狗聚後，將手機靠近其他參與者的手機，即可一起完成簽到。"
+                        )
+                    )
+                    .font(.snootsBody())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                    .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 34)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(meetup.localizedTitle(language), systemImage: "pawprint.fill")
+                    Label(meetup.localizedLocation(language), systemImage: "mappin")
+                }
+                .font(.snootsUI(15, weight: .medium))
+                .foregroundStyle(SnootsPalette.ink)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(
+                        isSearchingForNearbyPhones
+                            ? language.text("Looking for nearby phones", "正在尋找附近的手機")
+                            : language.text("Ready when you are", "準備好即可開始"),
+                        systemImage: isSearchingForNearbyPhones ? "wave.3.right.circle.fill" : "bluetooth"
+                    )
+                    .font(.snootsCardTitle())
+                    .foregroundStyle(SnootsPalette.ink)
+
+                    Text(
+                        language.text(
+                            "Bluetooth must be enabled at the venue before a tap check-in can begin.",
+                            "請在活動地點開啟藍牙，再開始進行手機互碰簽到。"
+                        )
+                    )
+                    .font(.snootsBody())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+
+                Button {
+                    isSearchingForNearbyPhones.toggle()
+                } label: {
+                    Label(
+                        isSearchingForNearbyPhones
+                            ? language.text("Stop check-in", "停止尋找")
+                            : language.text("Start nearby check-in", "開始附近簽到"),
+                        systemImage: isSearchingForNearbyPhones ? "stop.fill" : "dot.radiowaves.left.and.right"
+                    )
+                }
+                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(language.text("Nearby member status", "現場成員狀態"))
+                        .font(.snootsSection())
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(meetup.participants.prefix(5).enumerated()), id: \.element.id) { index, participant in
+                            HStack(spacing: 12) {
+                                Image(participant.imageName)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 40, height: 40)
+                                    .clipShape(Circle())
+
+                                Text(participant.localizedName(language))
+                                    .font(.snootsBody())
+                                    .foregroundStyle(SnootsPalette.ink)
+
+                                Spacer()
+
+                                Label(
+                                    index < 2 ? language.text("Checked in", "已簽到") : language.text("On the way", "前往中"),
+                                    systemImage: index < 2 ? "checkmark.circle.fill" : "clock"
+                                )
+                                .font(.snootsMetadata())
+                                .foregroundStyle(index < 2 ? SnootsPalette.navigationActive : SnootsPalette.secondaryText)
+                            }
+                            .padding(14)
+
+                            if index < meetup.participants.prefix(5).count - 1 {
+                                Divider().padding(.leading, 66)
+                            }
+                        }
+                    }
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                }
+
+                if hasLeftMeetup {
+                    Label(language.text("You have left the meetup. The host has been notified.", "你已離開活動，發起人已收到通知。"), systemImage: "checkmark.circle.fill")
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                } else {
+                    Button(language.text("Leave meetup safely", "安全離開活動"), role: .destructive) {
+                        isExitConfirmationPresented = true
+                    }
+                    .font(.snootsButton(16))
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous)
+                            .stroke(SnootsPalette.divider, lineWidth: 1)
+                    }
+                }
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle(language.text("Check-in dashboard", "現場簽到儀表板"))
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            language.text("Leave this meetup?", "要離開這場狗聚嗎？"),
+            isPresented: $isExitConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button(language.text("Leave meetup", "確認離開"), role: .destructive) {
+                hasLeftMeetup = true
+                isSearchingForNearbyPhones = false
+            }
+            Button(language.text("Stay", "繼續參加"), role: .cancel) {}
+        } message: {
+            Text(language.text("The host will be notified so the group can stay coordinated.", "系統會通知發起人，讓現場安排維持清楚。"))
+        }
+    }
+}
+
+private struct MeetupParticipantAvatarStack: View {
+    let participants: [MeetupParticipant]
+    let language: SnootsLanguage
+    var showsWhiteOutline = true
+    var avatarSize: CGFloat = 34
+
+    var body: some View {
+        HStack(spacing: avatarSize * -0.26) {
+            ForEach(Array(participants.prefix(4))) { participant in
+                Image(participant.imageName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: avatarSize, height: avatarSize)
+                    .clipShape(Circle())
+                    .overlay {
+                        if showsWhiteOutline {
+                            Circle().stroke(SnootsPalette.surface, lineWidth: 2)
+                        }
+                    }
+                    .accessibilityLabel(participant.localizedName(language))
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -860,250 +1584,337 @@ struct PlaydatesView: View {
     let store: SnootsStore
     let language: SnootsLanguage
     let onNavigate: (SnootsRoute) -> Void
-    @State private var isPassed = false
-    @State private var dragOffset: CGSize = .zero
+    @State private var selectedPhotoIndex = 0
+    @State private var didSkipCurrentCandidate = false
 
-    private let swipeThreshold: CGFloat = 110
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(language.text("Find Paws", "找狗朋友"))
-                    .font(.snootsScreenTitle())
-                Text(language.text("Swipe right to MATCH. Swipe left to SKIP.", "向右滑即可配對，向左滑即可略過。"))
-                    .font(.snootsBody())
-                    .foregroundStyle(SnootsPalette.secondaryText)
-            }
-
-            Group {
-                if store.isMatched {
-                    MatchedBanner(candidate: store.playdate, language: language)
-                } else if isPassed {
-                    ContentUnavailableView(
-                        language.text("More checked matches nearby", "附近暫時沒有更多合適的配對"),
-                        systemImage: "pawprint.fill",
-                        description: Text(language.text("Mochi is still available for a leashed hello.", "Mochi 仍在等候一場牽繩初次見面。"))
-                    )
-                    Button(language.text("Revisit Mochi", "再看看 Mochi")) { isPassed = false }
-                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
-                } else {
-                    SwipeableMatchCard(
-                        candidate: store.playdate,
-                        language: language,
-                        dragOffset: $dragOffset,
-                        swipeThreshold: swipeThreshold,
-                        onSwipe: completeSwipe
-                    )
-                }
-            }
-            .frame(maxWidth: 390)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 14)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(SnootsPalette.canvas)
-        .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private func completeSwipe(_ direction: MatchSwipeDirection) {
-        withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
-            dragOffset = CGSize(width: direction.horizontalOffset, height: dragOffset.height)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            dragOffset = .zero
-            switch direction {
-            case .skip:
-                isPassed = true
-            case .playdate:
-                onNavigate(.match)
-            }
-        }
-    }
-}
-
-private enum MatchSwipeDirection: Equatable {
-    case skip
-    case playdate
-
-    var horizontalOffset: CGFloat {
-        switch self {
-        case .skip: -900
-        case .playdate: 900
-        }
-    }
-}
-
-private struct SwipeableMatchCard: View {
-    let candidate: PlaydateCandidate
-    let language: SnootsLanguage
-    @Binding var dragOffset: CGSize
-    let swipeThreshold: CGFloat
-    let onSwipe: (MatchSwipeDirection) -> Void
-
-    private var swipeProgress: CGFloat { min(abs(dragOffset.width) / swipeThreshold, 1) }
-    private var isShowingPlaydate: Bool { dragOffset.width > 0 }
+    private let photoNames = ["ChaoChao1", "MatchGallery1", "MatchGallery2", "MatchGallery3"]
 
     var body: some View {
         GeometryReader { geometry in
-            VStack(alignment: .leading, spacing: 0) {
-                Image(candidate.imageName)
+            Group {
+                if !store.matchDetailsCompleted {
+                    ContentUnavailableView(
+                        "先完成配對資料",
+                        systemImage: "slider.horizontal.3",
+                        description: Text("填寫活動力、見面偏好、互動界線與健康摘要後，即可開始配對。")
+                    )
+                } else if store.isMatchBlocked {
+                    ContentUnavailableView(
+                        "已封鎖超超",
+                        systemImage: "hand.raised.fill",
+                        description: Text("可在「檔案 > 設定 > 封鎖名單」解除封鎖。")
+                    )
+                } else if store.isMatchCancelled {
+                    ContentUnavailableView(
+                        "配對已取消",
+                        systemImage: "person.2.slash",
+                        description: Text("聊天室已從配對列表中移除，對方不會收到通知。")
+                    )
+                } else if didSkipCurrentCandidate {
+                    VStack(spacing: 18) {
+                        ContentUnavailableView(
+                            "暫時沒有新的狗朋友",
+                            systemImage: "pawprint",
+                            description: Text("之後會再為豆花推薦合適的玩伴。")
+                        )
+
+                        Button("重新查看") {
+                            didSkipCurrentCandidate = false
+                        }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                    }
+                } else if store.isMatched {
+                    VStack(spacing: 12) {
+                        MatchedBanner(candidate: store.playdate, language: language)
+                        Button("查看聊天室") {
+                            store.createMatchChat()
+                            onNavigate(.chatList)
+                        }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                    }
+                } else {
+                    MatchPhotoGallery(
+                        photoNames: photoNames,
+                        selectedIndex: $selectedPhotoIndex,
+                        onSwipeLeft: {
+                            didSkipCurrentCandidate = true
+                        },
+                        onSwipeRight: {
+                            store.isMatched = true
+                        }
+                    )
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .clipped()
+        .background {
+            Image(photoNames[selectedPhotoIndex])
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+        }
+        .ignoresSafeArea()
+        .overlay(alignment: .top) {
+            if isShowingPhotoGallery {
+                matchHeader
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if isShowingPhotoGallery {
+                matchPhotoInfo
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 48)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .tabBar)
+    }
+
+    private var matchHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("超超")
+                    .font(.snootsScreenTitle())
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+                    .fixedSize()
+
+                Spacer(minLength: 0)
+
+                Button { onNavigate(.chatList) } label: {
+                    Image(systemName: "message")
+                }
+                .snootsMatchChatActionStyle()
+                .accessibilityLabel(language.text("Chats", "聊天室"))
+            }
+
+            HStack(spacing: 4) {
+                ForEach(photoNames.indices, id: \.self) { index in
+                    Capsule()
+                        .fill(index == selectedPhotoIndex ? SnootsPalette.lime : .white.opacity(0.38))
+                        .frame(width: index == selectedPhotoIndex ? 21 : 42, height: 3)
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 42)
+    }
+
+    private var matchPhotoInfo: some View {
+        let candidate = store.playdate
+
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                matchInfoChip(
+                    "pawprint.fill",
+                    "\(candidate.breed)・\(candidate.sex)（未絕育）",
+                    foreground: SnootsPalette.ink,
+                    background: .white
+                )
+                matchInfoChip(
+                    "location.fill",
+                    "1.2 公里",
+                    foreground: .white,
+                    background: .black.opacity(0.46)
+                )
+            }
+
+            matchTextInfoChip(
+                candidate.strangerDogReaction,
+                foreground: .white,
+                background: .black.opacity(0.46)
+            )
+
+            VStack(alignment: .leading, spacing: 8) {
+                matchInfoDetailRow("活動力", value: candidate.energyLevel, symbol: "figure.walk")
+                matchInfoDetailRow("見面環境", value: candidate.meetingEnvironments.first ?? "開放式公園", symbol: "leaf.fill")
+
+                HStack(spacing: 16) {
+                    matchHealthLabel("狂犬病疫苗")
+                    matchHealthLabel("定期驅蟲")
+                }
+            }
+            .padding(.top, 4)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("超超的配對資訊：博美、母、未絕育，距離 1.2 公里。對陌生狗害怕但會嘗試接近。活動力中等，偏好開放式公園，狂犬病疫苗與定期驅蟲已分享。")
+    }
+
+    private func matchInfoChip(
+        _ symbol: String,
+        _ title: String,
+        foreground: Color,
+        background: Color
+    ) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: symbol)
+            Text(title)
+        }
+            .font(.snootsUI(14, weight: .semibold))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(background, in: Capsule())
+            .shadow(color: .black.opacity(0.22), radius: 3, y: 1)
+    }
+
+    private func matchTextInfoChip(
+        _ title: String,
+        foreground: Color,
+        background: Color
+    ) -> some View {
+        Text(title)
+            .font(.snootsUI(14, weight: .semibold))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(background, in: Capsule())
+            .shadow(color: .black.opacity(0.22), radius: 3, y: 1)
+    }
+
+    private func matchInfoDetailRow(
+        _ label: String,
+        value: String,
+        symbol: String,
+        tint: Color = .white
+    ) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.snootsUI(14, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 17)
+            Text(label)
+                .font(.snootsUI(12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.76))
+            Text(value)
+                .font(.snootsUI(15, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .shadow(color: .black.opacity(0.60), radius: 3, y: 1)
+    }
+
+    private func matchHealthLabel(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.snootsUI(15, weight: .semibold))
+                .foregroundStyle(SnootsPalette.lime)
+            Text(title)
+                .font(.snootsUI(13, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .shadow(color: .black.opacity(0.60), radius: 3, y: 1)
+    }
+
+    private var isShowingPhotoGallery: Bool {
+        store.matchDetailsCompleted
+            && !store.isMatchBlocked
+            && !store.isMatchCancelled
+            && !didSkipCurrentCandidate
+            && !store.isMatched
+    }
+
+}
+
+private struct MatchPhotoGallery: View {
+    let photoNames: [String]
+    @Binding var selectedIndex: Int
+    let onSwipeLeft: () -> Void
+    let onSwipeRight: () -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Image(photoNames[selectedIndex])
                     .resizable()
                     .scaledToFill()
-                    .frame(width: geometry.size.width)
-                    .frame(maxHeight: .infinity)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
+                    .id(selectedIndex)
+                    .transition(.opacity)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("\(candidate.name), \(localizedAge)")
-                            .font(.snootsHeading(28))
-                        Text(language.text("with \(candidate.owner) · \(localizedDistance)", "飼主 \(candidate.owner) · 距離 \(localizedDistance)"))
-                            .font(.snootsMetadata())
-                            .foregroundStyle(SnootsPalette.secondaryText)
-                    }
-                    Text(localizedIntro)
-                        .font(.snootsUI(14))
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    MatchTraitChips(labels: localizedCompatibility)
-                    Label(localizedSafetyLine, systemImage: "checkmark.shield.fill")
-                        .font(.snootsMetadata())
-                        .foregroundStyle(SnootsPalette.lavender)
+                HStack(spacing: 0) {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { selectPreviousPhoto() }
+
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { selectNextPhoto() }
                 }
-                .padding(18)
-                .frame(width: geometry.size.width, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 230, alignment: .topLeading)
-                .layoutPriority(1)
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
-        }
-        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .overlay {
-            if dragOffset != .zero {
-                SwipeFeedbackOverlay(
-                    direction: isShowingPlaydate ? .playdate : .skip,
-                    opacity: swipeProgress
-                )
-                .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
             }
         }
-        .snootsCardShadow()
-        .rotationEffect(.degrees(Double(dragOffset.width / 20)))
-        .offset(x: dragOffset.width, y: dragOffset.height * 0.14)
-        .gesture(
-            DragGesture(minimumDistance: 8)
-                .onChanged { value in
-                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    dragOffset = value.translation
-                }
+        .ignoresSafeArea()
+        .animation(.easeInOut(duration: 0.2), value: selectedIndex)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24)
                 .onEnded { value in
-                    guard abs(value.translation.width) > abs(value.translation.height) else {
-                        withAnimation(.snappy) { dragOffset = .zero }
-                        return
-                    }
-                    if value.translation.width > swipeThreshold {
-                        onSwipe(.playdate)
-                    } else if value.translation.width < -swipeThreshold {
-                        onSwipe(.skip)
+                    guard abs(value.translation.width) > abs(value.translation.height),
+                          abs(value.translation.width) > 90 else { return }
+
+                    if value.translation.width > 0 {
+                        onSwipeRight()
                     } else {
-                        withAnimation(.snappy) { dragOffset = .zero }
+                        onSwipeLeft()
                     }
                 }
         )
-        .accessibilityElement(children: .contain)
-        .accessibilityHint(language.text("Swipe right to show interest or left to skip.", "向右滑表示有興趣，向左滑略過。"))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("配對狗狗照片第 \(selectedIndex + 1) 張，共 \(photoNames.count) 張")
+        .accessibilityHint("點擊右半邊查看下一張，點擊左半邊查看上一張。向右滑表示有興趣，向左滑略過。")
+        .accessibilityAction(named: "下一張") { selectNextPhoto() }
+        .accessibilityAction(named: "上一張") { selectPreviousPhoto() }
     }
 
-    private var localizedCompatibility: [String] {
-        language == .english
-            ? candidate.compatibility
-            : ["慢熟", "牽繩初識", "體型相近"]
+    private func selectNextPhoto() {
+        withAnimation {
+            selectedIndex = (selectedIndex + 1) % photoNames.count
+        }
     }
 
-    private var localizedAge: String {
-        language.text(candidate.age, "2 歲")
-    }
-
-    private var localizedDistance: String {
-        language.text(candidate.distance, "1.2 公里")
-    }
-
-    private var localizedSafetyLine: String {
-        language.text(
-            candidate.accountability,
-            "身分已驗證 · 已分享疫苗紀錄"
-        )
-    }
-
-    private var localizedIntro: String {
-        language.text(
-            candidate.intro,
-            "慢慢認識後很愛玩。偏好先一起散步 20 分鐘，再開始自由玩耍。"
-        )
-    }
-}
-
-private struct MatchTraitChips: View {
-    let labels: [String]
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(labels, id: \.self) { label in
-                Text(label)
-                    .font(.snootsChip())
-                    .foregroundStyle(SnootsPalette.ink)
-                    .lineLimit(1)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(SnootsPalette.primaryTint, in: Capsule())
-            }
+    private func selectPreviousPhoto() {
+        withAnimation {
+            selectedIndex = (selectedIndex - 1 + photoNames.count) % photoNames.count
         }
     }
 }
 
-private struct SwipeFeedbackOverlay: View {
-    let direction: MatchSwipeDirection
-    let opacity: CGFloat
+private struct MatchDetailSheet: View {
+    let candidate: PlaydateCandidate
+    let language: SnootsLanguage
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        let isPlaydate = direction == .playdate
-        let feedbackOpacity = min(opacity * 1.35, 1)
-
-        ZStack {
-            RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous)
-                .fill(
-                    (isPlaydate ? SnootsPalette.lime : SnootsPalette.primary)
-                        .opacity(0.62 * feedbackOpacity)
-                )
-
-            HStack {
-                if !isPlaydate {
-                    feedbackIcon(isPlaydate: isPlaydate)
-                    Spacer(minLength: 0)
-                } else {
-                    Spacer(minLength: 0)
-                    feedbackIcon(isPlaydate: isPlaydate)
+        NavigationStack {
+            List {
+                Section("基本資料") {
+                    LabeledContent("品種／體型", value: "\(candidate.breed)／\(candidate.size)")
+                    LabeledContent("性別／絕育", value: candidate.isNeutered ? "\(candidate.sex)／已結紮" : "\(candidate.sex)／未結紮")
+                    LabeledContent("陌生狗互動反應", value: candidate.strangerDogReaction)
+                }
+                Section(language.text("Activity level", "活動力")) {
+                    LabeledContent(language.text("Energy", "活動力"), value: language.text(candidate.energyLevel, "中"))
+                }
+                Section(language.text("Preferred meeting settings", "偏好見面環境")) {
+                    ForEach(candidate.meetingEnvironments, id: \.self) { environment in
+                        Label(environment, systemImage: "mappin.and.ellipse")
+                    }
+                }
+                Section(language.text("Vaccines and parasite prevention", "疫苗與驅蟲摘要")) {
+                    Label(language.text(candidate.healthSummary, "狂犬病、核心疫苗與驅蟲紀錄已分享"), systemImage: "checkmark.shield.fill")
+                        .foregroundStyle(SnootsPalette.navigationActive)
                 }
             }
-            .padding(24)
-            .opacity(feedbackOpacity)
+            .navigationTitle(language.text("\(candidate.name)’s details", "\(candidate.name) 的詳細資料"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(language.text("Done", "完成")) { dismiss() }
+                }
+            }
         }
-        .clipShape(RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
-        .allowsHitTesting(false)
-    }
-
-    private func feedbackIcon(isPlaydate: Bool) -> some View {
-        Image(systemName: isPlaydate ? "heart.fill" : "xmark")
-            .font(.system(size: 36, weight: .bold))
-            .foregroundStyle(SnootsPalette.ink)
-            .frame(width: 82, height: 82)
-            .background(isPlaydate ? SnootsPalette.lime : SnootsPalette.primary, in: Circle())
-            .overlay(Circle().stroke(SnootsPalette.ink, lineWidth: 2))
     }
 }
 
@@ -1347,15 +2158,11 @@ struct MapsView: View {
                         .font(.snootsScreenTitle())
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Button { onNavigate(.emergency) } label: {
-                        Image(systemName: "cross.case.fill")
-                            .font(.snootsUI(17, weight: .bold))
-                            .foregroundStyle(SnootsPalette.ink)
-                            .frame(width: 44, height: 44)
-                            .background(SnootsPalette.lime, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(language.text("Find emergency care", "尋找緊急醫療"))
+                    NativeTopActionButton(
+                        symbol: "cross.case.fill",
+                        accessibilityLabel: language.text("Find emergency care", "尋找緊急醫療"),
+                        action: { onNavigate(.emergency) }
+                    )
                 }
 
                 NearbyCategorySegmentedControl(selection: $selectedCategory, language: language)
@@ -2132,50 +2939,33 @@ struct ProfileView: View {
     let language: SnootsLanguage
     @Binding var displayLanguageRawValue: String
     let onNavigate: (SnootsRoute) -> Void
+    @State private var completionPhase: ProfileCompletionPhase?
+
+    private var completedProfileSteps: Int {
+        [store.matchDetailsCompleted, store.safetyDetailsCompleted].filter { $0 }.count
+    }
+
+    private var profileCompletionProgress: Double {
+        Double(completedProfileSteps) / 2.0
+    }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(language.text("\(store.pet.name)’s profile", "\(store.pet.name) 的檔案")).font(.snootsScreenTitle())
-                    }
-                    Spacer()
-                    HStack(spacing: 8) {
-                        NavigationLink {
-                            EditProfileView(store: store, language: language)
-                        } label: {
-                            Image(systemName: "square.and.pencil")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(SnootsPalette.ink)
-                                .frame(width: 44, height: 44)
-                                .background(SnootsPalette.surface, in: Circle())
-                        }
-                        .accessibilityLabel(language.text("Edit profile", "編輯檔案"))
-
-                        NavigationLink {
-                            LanguageSettingsView(selectedLanguageRawValue: $displayLanguageRawValue)
-                        } label: {
-                            Image(systemName: "gearshape")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(SnootsPalette.ink)
-                                .frame(width: 44, height: 44)
-                                .background(SnootsPalette.surface, in: Circle())
-                        }
-                        .accessibilityLabel(language.text("Settings", "設定"))
-                    }
-                }
-
                 HStack(spacing: 14) {
                     PhotoTile(
                         imageName: store.pet.imageName,
                         label: store.pet.name,
                         language: language,
+                        photoData: store.pet.photoData,
                         showsLabel: false
                     )
                         .frame(width: 104, height: 104)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(store.pet.name).font(.snootsScreenTitle())
+                        Text("\(store.pet.breed)・\(store.pet.age)・\((store.pet.sex == "Male" || store.pet.sex == "公") ? language.text("Male", "公") : language.text("Female", "母"))・\(store.pet.isNeutered ? language.text("Neutered", "已結紮") : language.text("Not neutered", "未結紮"))")
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.ink)
                         Text(language.text("Managed by \(store.profile.name)", "由 \(store.profile.name) 管理"))
                             .font(.snootsBody())
                             .foregroundStyle(SnootsPalette.secondaryText)
@@ -2188,7 +2978,40 @@ struct ProfileView: View {
                 .padding(14)
                 .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
-                FeedingInformationCard(monitor: store.feedingMonitor, language: language)
+                if SnootsFeatureVisibility.feedingInformation {
+                    FeedingInformationCard(monitor: store.feedingMonitor, language: language)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(language.text("Profile completion", "檔案完成進度"))
+                            .font(.snootsSection())
+                        Spacer()
+                        Text("\(completedProfileSteps)/2")
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                    }
+                    ProgressView(value: profileCompletionProgress)
+                        .tint(SnootsPalette.navigationActive)
+                        .scaleEffect(y: 1.5, anchor: .center)
+                        .padding(.vertical, 4)
+                    ProfilePhaseRow(
+                        phase: .matching,
+                        isComplete: store.matchDetailsCompleted,
+                        language: language
+                    ) {
+                        onNavigate(.matchSetup)
+                    }
+                    ProfilePhaseRow(
+                        phase: .safety,
+                        isComplete: store.safetyDetailsCompleted,
+                        language: language
+                    ) {
+                        completionPhase = .safety
+                    }
+                }
+                .padding(16)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(language.text("Interaction tags", "互動標籤")).font(.snootsSection())
@@ -2245,7 +3068,995 @@ struct ProfileView: View {
             .padding(18)
         }
         .background(SnootsPalette.canvas)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Text(language.text("\(store.pet.name)’s profile", "\(store.pet.name) 的檔案"))
+                    .font(.snootsScreenTitle())
+                    .fixedSize()
+            }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    EditProfileView(store: store, language: language)
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .snootsWhiteTopBarActionStyle()
+                .accessibilityLabel(language.text("Edit profile", "編輯檔案"))
+            }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    LanguageSettingsView(store: store, selectedLanguageRawValue: $displayLanguageRawValue)
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .snootsWhiteTopBarActionStyle()
+                .accessibilityLabel(language.text("Settings", "設定"))
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
+        .sheet(item: $completionPhase) { phase in
+            Group {
+                ProfileCompletionSheet(phase: phase, store: store, language: language)
+            }
+            .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+private enum ProfileCompletionPhase: String, Identifiable {
+    case matching
+    case safety
+    var id: String { rawValue }
+
+    func title(_ language: SnootsLanguage) -> String {
+        switch self {
+        case .matching: language.text("Before matching information", "配對前的資料填寫")
+        case .safety: language.text("Before-meeting safety reminders", "見面前的安全提醒")
+        }
+    }
+
+    func detail(_ language: SnootsLanguage) -> String {
+        switch self {
+        case .matching: language.text("Set expectations for a more comfortable match.", "補充相處界線，讓配對更準確。")
+        case .safety: language.text("Prepare key details for a safer first meeting.", "確認健康與聯絡資訊，讓首次見面更安心。")
+        }
+    }
+
+    var symbol: String { self == .matching ? "person.2.badge.gearshape" : "checkmark.shield" }
+}
+
+private struct ProfilePhaseRow: View {
+    let phase: ProfileCompletionPhase
+    let isComplete: Bool
+    let language: SnootsLanguage
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: phase.symbol)
+                    .foregroundStyle(SnootsPalette.ink)
+                    .frame(width: 40, height: 40)
+                    .background(isComplete ? SnootsPalette.lime : SnootsPalette.primaryTint, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(phase.title(language)).font(.snootsCardTitle())
+                    Text(phase.detail(language)).font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
+                }
+                Spacer()
+                Image(systemName: isComplete ? "checkmark.circle.fill" : "chevron.right")
+                    .foregroundStyle(isComplete ? SnootsPalette.navigationActive : SnootsPalette.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct BeforeMatchingView: View {
+    @Environment(SnootsAccountSession.self) private var account
+    let store: SnootsStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var details: DogMatchingProfile
+    @State private var birthDate: Date
+    @State private var currentStep = 0
+    @State private var isShowingBirthDatePicker = false
+    @State private var showBirthDateError = false
+    @State private var showActivityNeedsError = false
+    @State private var showActivityPreferencesError = false
+    @State private var showFirstMeetingPaceError = false
+    @State private var isSaving = false
+    @State private var saveError: String?
+    @State private var isShowingActivityRecommendation = false
+    @State private var isShowingMeetingEnvironmentInfo = false
+    @State private var advanceAfterRecommendation = false
+    @State private var activityDraft = ""
+    @FocusState private var isActivityDraftFocused: Bool
+
+    init(store: SnootsStore) {
+        self.store = store
+        var profile = store.pet.matchingProfile
+        let defaultActivities: Set<String> = ["散步", "嗅聞", "追逐", "拋接", "拔河"]
+        for option in profile.activityPreferences where !defaultActivities.contains(option) {
+            if !profile.activityKeywords.contains(option) { profile.activityKeywords.append(option) }
+        }
+        profile.activityPreferences.removeAll { !defaultActivities.contains($0) }
+        if profile.activityNeeds.contains("無") {
+            profile.activityNeeds = ["無特殊需求"]
+        }
+        _details = State(initialValue: profile)
+        _birthDate = State(initialValue: store.pet.matchingProfile.birthDate ?? .now)
+    }
+
+    private let activityNeedOptions = ["分段休息", "留意關節", "避免跳躍", "避免悶熱環境", "避免過度興奮", "避免集體追逐", "給予獨立空間", "無特殊需求"]
+    private let activityOptions = ["散步", "嗅聞", "追逐", "拋接", "拔河"]
+    private let environmentOptions = ["中立且寬敞的戶外空間", "寵物友善的室內空間", "備有基礎安全設施的寵物公園"]
+    private let paceOptions = ["先保持距離平行散步", "遠處觀察後逐步靠近", "雙方放鬆時短暫打招呼"]
+    private let protectionOptions = ["核心疫苗已完成", "狂犬病疫苗在有效期間", "已完成體內外驅蟲", "晶片與寵物登記"]
+
+    private var dogName: String { store.pet.name.isEmpty ? "狗狗" : store.pet.name }
+    private var activityRecommendation: DogActivityRecommendation {
+        DogActivityRecommendation.calculate(
+            breed: store.pet.breed,
+            size: store.pet.size,
+            birthDate: details.birthDate,
+            breedMappingPending: store.pet.breedMappingPending,
+            needs: details.activityNeeds
+        )
+    }
+    private var birthDateLabel: String {
+        guard let birthDate = details.birthDate else { return "請選擇出生日期" }
+        return birthDate.formatted(.dateTime.year().month().day().locale(Locale(identifier: "zh_TW")))
+    }
+    private var stepTitle: String {
+        switch currentStep {
+        case 0: "活動力判斷"
+        case 1: "活動喜好與見面環境"
+        case 2: "互動偏好"
+        default: "健康確認"
+        }
+    }
+
+    private var headerSubtitle: String? {
+        switch currentStep {
+        case 0: "根據基本資料、年齡、活動需求規劃\(dogName)的日常活動量"
+        case 1: "了解\(dogName)喜歡的活動與見面環境"
+        case 2: "選出最符合\(dogName)平常玩玩具時的互動情境"
+        default: "疫苗完整、驅蟲做好、身體健康，三個缺一不可"
+        }
+    }
+
+    private var ageInMonths: Int? {
+        guard let birthDate = details.birthDate else { return nil }
+        return Calendar.current.dateComponents([.month], from: birthDate, to: .now).month
+    }
+
+    private var ageStage: String {
+        guard let months = ageInMonths else { return "年紀區間" }
+        switch months {
+        case ..<5: return "未滿 5 個月"
+        case ..<12: return "5 個月–1 歲"
+        case ..<24: return "1–2 歲"
+        case ..<96: return "滿 2 歲至未滿 8 歲"
+        default: return "8 歲以上"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            progressHeader
+
+            GeometryReader { availableSpace in
+                ScrollViewReader { scrollProxy in
+                    ScrollView(showsIndicators: false) {
+                        if currentStep == 2 {
+                            VStack(spacing: 0) {
+                                Spacer(minLength: 16)
+                                observationPanel
+                                Spacer(minLength: 16)
+                            }
+                            .frame(height: max(availableSpace.size.height, 500))
+                            .id("matchFormTop")
+                        } else {
+                            VStack(alignment: .leading, spacing: 24) {
+                                if currentStep == 0 {
+                                    agePanel
+                                    activityNeedsPanel
+                                } else if currentStep == 1 {
+                                    activityPanel
+                                    environmentPanel
+                                } else {
+                                    protectionPanel
+                                }
+                            }
+                            .id("matchFormTop")
+                            .padding(.horizontal, 32)
+                            .padding(.top, 12)
+                            .padding(.bottom, 56)
+                        }
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollDismissesKeyboard(.interactively)
+                    .mask {
+                        if currentStep == 2 {
+                            Rectangle().fill(.black)
+                        } else {
+                            VStack(spacing: 0) {
+                                Rectangle().fill(.black)
+                                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                    .frame(height: 44)
+                            }
+                        }
+                    }
+                    .onChange(of: currentStep) { _, _ in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            scrollProxy.scrollTo("matchFormTop", anchor: .top)
+                        }
+                    }
+                }
+            }
+
+            bottomAction
+        }
+        .background(SnootsPalette.canvas)
+        .foregroundStyle(SnootsPalette.ink)
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+        .sheet(isPresented: $isShowingBirthDatePicker) {
+            NavigationStack {
+                DatePicker("出生日期", selection: $birthDate, in: ...Date.now, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .tint(SnootsPalette.navigationActive)
+                    .padding(20)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .background(SnootsPalette.canvas)
+                    .navigationTitle("選擇出生日期")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("取消") { isShowingBirthDatePicker = false }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("完成") {
+                                details.birthDate = birthDate
+                                showBirthDateError = false
+                                isShowingBirthDatePicker = false
+                            }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $isShowingActivityRecommendation, onDismiss: {
+            guard advanceAfterRecommendation else { return }
+            advanceAfterRecommendation = false
+            currentStep = 1
+        }) {
+            activityRecommendationCard
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingMeetingEnvironmentInfo) {
+            meetingEnvironmentInfoCard
+                .presentationDetents([.height(280)])
+                .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var progressHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(stepTitle)
+                    .font(.system(.title, design: .rounded).weight(.bold))
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Text("\(currentStep + 1)/4")
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+            }
+            if let headerSubtitle {
+                Text(headerSubtitle)
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            GeometryReader { proxy in
+                Capsule()
+                    .fill(SnootsPalette.divider)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(SnootsPalette.lime)
+                            .frame(width: proxy.size.width * CGFloat(currentStep + 1) / 4)
+                    }
+            }
+            .frame(height: 6)
+            .padding(.top, 12)
+            .accessibilityLabel("填寫進度，第 \(currentStep + 1) 步，共 4 步")
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 20)
+        .padding(.bottom, currentStep == 2 ? 0 : 24)
+        .background(SnootsPalette.canvas)
+    }
+
+    private var bottomAction: some View {
+        VStack(spacing: 10) {
+            if let saveError { matchingFieldError(saveError) }
+            if isSaving { ProgressView("正在儲存四區資料…") }
+            if currentStep > 0 {
+                Button("上一步") {
+                    currentStep -= 1
+                }
+                .font(.snootsButton(17))
+                .foregroundStyle(Color.black)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(SnootsPalette.divider, lineWidth: 1))
+                .buttonStyle(.plain)
+            }
+
+            Button(currentStep == 3 ? "開始配對找狗友！" : "下一步") {
+                if currentStep == 0 {
+                    showBirthDateError = details.birthDate == nil
+                    showActivityNeedsError = details.activityNeeds.isEmpty
+                    guard !showBirthDateError && !showActivityNeedsError else { return }
+                    isShowingActivityRecommendation = true
+                } else if currentStep == 3 {
+                    saveMatchDetails()
+                } else if currentStep == 1 {
+                    addActivityFromDraft()
+                    showActivityPreferencesError = details.activityPreferences.isEmpty
+                    showFirstMeetingPaceError = details.firstMeetingPace == nil
+                    guard !showActivityPreferencesError && !showFirstMeetingPaceError else { return }
+                    currentStep += 1
+                } else {
+                    currentStep += 1
+                }
+            }
+            .buttonStyle(OnboardingPrimaryButtonStyle(fill: SnootsPalette.primary, cornerRadius: 28))
+            .disabled(isSaving)
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, currentStep == 2 ? 0 : 8)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var activityRecommendationCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Beta 初步個人化建議")
+                    .font(.snootsSection())
+                Text("\(dogName)的日常活動建議")
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+            }
+
+            VStack(spacing: 0) {
+                recommendationRow("建議活動量", value: activityRecommendation.title)
+                if let dailyRange = activityRecommendation.dailyRange {
+                    Divider()
+                    recommendationRow("每日活動時間", value: dailyRange)
+                }
+            }
+            .padding(.horizontal, 14)
+            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 16))
+
+            Text(activityRecommendation.guidance)
+                .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            if let sourceURL = activityRecommendation.sourceURL {
+                Link("查看犬種活動資料來源", destination: sourceURL)
+                    .font(.footnote)
+                    .frame(minHeight: 44)
+            }
+            Text("此為測試版參考，不是獸醫診斷；若有健康問題，請優先遵循獸醫建議。")
+                .font(.footnote)
+                .foregroundStyle(SnootsPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+            Button("填寫活動喜好與見面環境") {
+                advanceAfterRecommendation = true
+                isShowingActivityRecommendation = false
+            }
+            .buttonStyle(OnboardingPrimaryButtonStyle(fill: SnootsPalette.primary, cornerRadius: 28))
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(SnootsPalette.canvas)
+    }
+
+    private func recommendationRow(_ title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.snootsUI(14, weight: .medium))
+            Spacer()
+            Text(value)
+                .font(.snootsUI(14, weight: .semibold))
+                .foregroundStyle(SnootsPalette.secondaryText)
+        }
+        .frame(minHeight: 46)
+    }
+
+    private var agePanel: some View {
+        formSection(title: "出生日期", showsRequiredMark: showBirthDateError && details.birthDate == nil) {
+            Button {
+                birthDate = details.birthDate ?? .now
+                isShowingBirthDatePicker = true
+            } label: {
+                HStack(spacing: 12) {
+                    Text(birthDateLabel)
+                        .font(details.birthDate == nil ? .system(.subheadline, design: .rounded) : .snootsBody())
+                        .foregroundStyle(details.birthDate == nil ? SnootsPalette.secondaryText : SnootsPalette.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 4)
+                    Text(ageStage)
+                        .font(.system(.footnote, design: .rounded).weight(.medium))
+                        .foregroundStyle(details.birthDate == nil ? SnootsPalette.secondaryText : SnootsPalette.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 48)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(showBirthDateError ? Color(.systemRed) : SnootsPalette.divider, lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("出生日期")
+            .accessibilityValue(details.birthDate == nil ? "尚未選擇" : "\(birthDateLabel)，年紀區間\(ageStage)")
+            if showBirthDateError && details.birthDate == nil {
+                matchingFieldError("請先選擇出生日期。")
+            }
+        }
+    }
+
+    private var activityNeedsPanel: some View {
+        formSection(title: "活動需求", showsRequiredMark: showActivityNeedsError && details.activityNeeds.isEmpty) {
+            choiceList(activityNeedOptions, selected: details.activityNeeds) { option in
+                if option == "無特殊需求" {
+                    details.activityNeeds = details.activityNeeds == [option] ? [] : [option]
+                } else {
+                    details.activityNeeds = toggled(option, in: details.activityNeeds.filter { $0 != "無特殊需求" })
+                }
+                if !details.activityNeeds.isEmpty { showActivityNeedsError = false }
+            }
+            if showActivityNeedsError && details.activityNeeds.isEmpty {
+                matchingFieldError("請選擇活動需求，若無需調整請選「無特殊需求」。")
+            }
+        }
+    }
+
+    private var activityPanel: some View {
+        formSection(title: "\(dogName)喜歡做什麼活動？", showsRequiredMark: showActivityPreferencesError) {
+            ActivityChipFlowLayout(spacing: 8) {
+                ForEach(activityOptions, id: \.self) { option in
+                    activityChip(option, isSelected: details.activityPreferences.contains(option)) {
+                        details.activityPreferences = toggled(option, in: details.activityPreferences.filter { $0 != "沒有特別偏好" })
+                        showActivityPreferencesError = false
+                    }
+                }
+                activityChip("沒有特別偏好", isSelected: details.activityPreferences.contains("沒有特別偏好")) {
+                    details.activityPreferences = details.activityPreferences == ["沒有特別偏好"] ? [] : ["沒有特別偏好"]
+                    showActivityPreferencesError = false
+                }
+                ForEach(details.activityKeywords, id: \.self) { tag in
+                    activityChip(tag, isSelected: true) {
+                        details.activityKeywords.removeAll { $0 == tag }
+                    }
+                    .accessibilityHint("再點一下可移除標籤")
+                }
+            }
+            if showActivityPreferencesError && details.activityPreferences.isEmpty {
+                matchingFieldError("請選擇喜歡的活動；若沒有特定偏好請選「沒有特別偏好」。")
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                OnboardingFieldLabel(title: "自行選填")
+                HStack(spacing: 4) {
+                    TextField(
+                        "",
+                        text: $activityDraft,
+                        prompt: Text("例如：草地嗅聞")
+                            .font(.system(.subheadline, design: .rounded))
+                            .foregroundColor(SnootsPalette.placeholder)
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.snootsBody())
+                    .focused($isActivityDraftFocused)
+                    .submitLabel(.done)
+                    .onSubmit(addActivityFromDraft)
+                    .padding(.leading, 14)
+                    Button(action: addActivityFromDraft) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(SnootsPalette.navigationActive)
+                            .frame(width: 44, height: 44)
+                    }
+                    .disabled(activityDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel("新增活動標籤")
+                }
+                .frame(minHeight: 48)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(SnootsPalette.divider, lineWidth: 1))
+            }
+        }
+    }
+
+    private var environmentPanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                OnboardingFieldLabel(title: "初次見面，想選哪裡？")
+                Button {
+                    isShowingMeetingEnvironmentInfo = true
+                } label: {
+                    Image(systemName: "exclamationmark.circle")
+                        .font(.system(.footnote, design: .rounded).weight(.medium))
+                        .foregroundStyle(SnootsPalette.navigationActive)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("查看初次見面環境提醒")
+                Spacer(minLength: 0)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(environmentOptions, id: \.self) { option in
+                    let isSelected = details.meetingEnvironments.contains(option)
+                    Button {
+                        details.meetingEnvironments = toggled(option, in: details.meetingEnvironments)
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 17))
+                                .foregroundStyle(isSelected ? SnootsPalette.navigationActive : SnootsPalette.inactive)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(option)
+                                    .font(.system(.subheadline, design: .rounded).weight(.medium))
+                                    .foregroundStyle(SnootsPalette.ink)
+                                if isSelected {
+                                    Text(environmentTip(for: option))
+                                        .font(.system(.subheadline, design: .rounded))
+                                        .foregroundStyle(SnootsPalette.secondaryText)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(isSelected ? SnootsPalette.primaryTint : SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(isSelected ? SnootsPalette.navigationActive : SnootsPalette.divider, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+            }
+            formSection(title: "第一次見面，希望怎麼開始？", showsRequiredMark: showFirstMeetingPaceError) {
+                choiceList(paceOptions, selected: details.firstMeetingPace.map { [$0] } ?? []) { option in
+                    details.firstMeetingPace = details.firstMeetingPace == option ? nil : option
+                    showFirstMeetingPaceError = false
+                }
+                if showFirstMeetingPaceError && details.firstMeetingPace == nil {
+                    matchingFieldError("請選擇第一次見面的相處步調。")
+                }
+            }
+            .padding(.top, 20)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var meetingEnvironmentInfoCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("初次見面的小提醒")
+                .font(.snootsSection())
+            Text("初次見面優先選室外、中立且安靜的場地，並保留讓狗狗觀察與退開的距離。")
+                .font(.snootsBody())
+                .foregroundStyle(SnootsPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button("知道了") { isShowingMeetingEnvironmentInfo = false }
+                .buttonStyle(OnboardingPrimaryButtonStyle(fill: SnootsPalette.primary, cornerRadius: 28))
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(SnootsPalette.canvas)
+    }
+
+    private var observationPanel: some View {
+        MatchingInteractionCarousel(selection: $details.interactionScenario, dogName: dogName)
+    }
+
+    private var protectionPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("確認資料正確時再選「有」；不願提供可選「不願透露」。")
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
+                .foregroundStyle(SnootsPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(protectionOptions.filter { $0 != "核心疫苗已完成" || (ageInMonths ?? 999) < 5 }, id: \.self) { option in
+                HStack(alignment: .center, spacing: 12) {
+                    Text(option)
+                        .font(.system(.subheadline, design: .rounded).weight(.medium))
+                        .foregroundStyle(SnootsPalette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 4) {
+                        ForEach(["有", "不願透露"], id: \.self) { answer in
+                            let isSelected = details.protectionAnswers[option] == answer
+                            Button {
+                                details.protectionAnswers[option] = details.protectionAnswers[option] == answer ? nil : answer
+                            } label: {
+                                Text(answer)
+                                    .font(.system(.subheadline, design: .rounded).weight(isSelected ? .semibold : .regular))
+                                    .foregroundStyle(SnootsPalette.ink)
+                                    .frame(maxWidth: .infinity, minHeight: 40)
+                                    .background(isSelected ? SnootsPalette.surface : Color.clear, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(option)：\(answer)")
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
+                        }
+                    }
+                    .frame(width: 156)
+                    .padding(4)
+                    .background(SnootsPalette.divider.opacity(0.55), in: Capsule())
+                }
+                .frame(minHeight: 56)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func choiceList(_ options: [String], selected: [String], action: @escaping (String) -> Void) -> some View {
+        VStack(spacing: 8) {
+            ForEach(options, id: \.self) { option in
+                choiceButton(option, isSelected: selected.contains(option)) { action(option) }
+            }
+        }
+    }
+
+    private func activityChip(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                Text(title)
+                    .font(.snootsUI(14, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(isSelected ? Color(light: 0x43296F, dark: 0xF3EBFF) : SnootsPalette.ink)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 40)
+            .background(isSelected ? Color(light: 0xD8C6FF, dark: 0x513B70) : SnootsPalette.surface, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func toggled(_ option: String, in selected: [String]) -> [String] {
+        if selected.contains(option) { return selected.filter { $0 != option } }
+        return selected + [option]
+    }
+
+    private func addActivityFromDraft() {
+        let input = activityDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return }
+        if !details.activityKeywords.contains(input) {
+            details.activityKeywords.append(input)
+        }
+        details.activityDescription = [details.activityDescription, input]
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+        activityDraft = ""
+        isActivityDraftFocused = false
+    }
+
+    private func environmentTip(for option: String) -> String {
+        switch option {
+        case "中立且寬敞的戶外空間": "初次見面保留足夠距離，讓狗狗可以觀察、靠近或自行退開。"
+        case "寵物友善的室內空間": "選擇寬敞、座位距離足夠，且能讓狗狗分開休息的場所。"
+        default: "確認場地不過度擁擠，並具備安全設施與可自由離開的動線。"
+        }
+    }
+
+    private func formSection<Content: View>(title: String, showsRequiredMark: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            OnboardingFieldLabel(title: title, showsRequiredMark: showsRequiredMark)
+            VStack(alignment: .leading, spacing: 12) {
+                content()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func matchingFieldError(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.circle.fill")
+            .font(.system(.footnote, design: .rounded))
+            .foregroundStyle(Color(.systemRed))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func choiceButton(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(isSelected ? SnootsPalette.navigationActive : SnootsPalette.inactive)
+                Text(title)
+                    .font(.system(.subheadline, design: .rounded).weight(.medium))
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(SnootsPalette.ink)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .background(isSelected ? SnootsPalette.primaryTint : SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(isSelected ? SnootsPalette.navigationActive : SnootsPalette.divider, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    private func saveMatchDetails() {
+        guard !isSaving else { return }
+        isSaving = true
+        saveError = nil
+        Task {
+            do {
+                try await account.saveMatchingProfile(details)
+                store.saveMatchDetails(details)
+                dismiss()
+            } catch {
+                saveError = error.localizedDescription
+                isSaving = false
+            }
+        }
+    }
+}
+
+private enum MatchingInteractionScenario: String, CaseIterable, Identifiable {
+    case observesAtDistance
+    case leavesAfterRejection
+    case tugsTogether
+    case followsAfterReleasing
+
+    var id: String { rawValue }
+
+    func caption(for dogName: String) -> String {
+        switch self {
+        case .observesAtDistance: "對方玩玩具時\n\(dogName)能放鬆地在旁觀察"
+        case .leavesAfterRejection: "\(dogName)會繞圈留出空間邀玩\n對方沒回應也願意退開"
+        case .tugsTogether: "一起拉扯玩具時可能低吼\n尾巴仍自然擺動"
+        case .followsAfterReleasing: "對方放開玩具後\n\(dogName)會跟上互動不爭搶"
+        }
+    }
+
+    var imageName: String {
+        switch self {
+        case .observesAtDistance: "MatchInteractionObservesCutout"
+        case .tugsTogether: "MatchInteractionTugsCutout"
+        case .leavesAfterRejection: "MatchInteractionLeavesCutout"
+        case .followsAfterReleasing: "MatchInteractionReleasesCutout"
+        }
+    }
+}
+
+private struct MatchingInteractionCarousel: View {
+    @Binding var selection: String?
+    let dogName: String
+    @State private var centeredScenario: String? = MatchingInteractionScenario.observesAtDistance.rawValue
+    @State private var didSwipe = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            let cardWidth = min(geometry.size.width - 64, 272)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 16) {
+                    ForEach(MatchingInteractionScenario.allCases) { option in
+                        let isSelected = selection == option.rawValue
+                        Button {
+                            selection = isSelected ? nil : option.rawValue
+                            if !isSelected {
+                                withAnimation(.snappy) { centeredScenario = option.rawValue }
+                            }
+                        } label: {
+                            VStack(spacing: 0) {
+                                Image(option.imageName)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: cardWidth, height: cardWidth * 1.5)
+                                    .background(SnootsPalette.primaryTint)
+                                    .accessibilityHidden(true)
+
+                                Text(option.caption(for: dogName))
+                                    .font(.snootsUI(16, weight: .bold))
+                                    .foregroundStyle(SnootsPalette.ink)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(3)
+                                    .minimumScaleFactor(0.85)
+                                    .frame(width: cardWidth, height: 54)
+                            }
+                            .frame(width: cardWidth)
+                            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .overlay(alignment: .topTrailing) {
+                                if isSelected {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 28))
+                                        .foregroundStyle(SnootsPalette.navigationActive)
+                                        .background(.white, in: Circle())
+                                        .padding(12)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(isSelected ? SnootsPalette.navigationActive : SnootsPalette.divider, lineWidth: isSelected ? 3 : 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(option.caption(for: dogName))
+                        .accessibilityValue(isSelected ? "已選取" : "未選取")
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .contentMargins(.horizontal, (geometry.size.width - cardWidth) / 2, for: .scrollContent)
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $centeredScenario)
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting { didSwipe = true }
+                if phase == .idle && didSwipe {
+                    if let centeredScenario { selection = centeredScenario }
+                    didSwipe = false
+                }
+            }
+        }
+        .frame(height: 468)
+        .onAppear { centeredScenario = selection ?? MatchingInteractionScenario.observesAtDistance.rawValue }
+        .onChange(of: selection) { _, selected in
+            let message = selected.flatMap(MatchingInteractionScenario.init(rawValue:))
+                .map { "已選擇：\($0.caption(for: dogName))" } ?? "已取消選取"
+            UIAccessibility.post(notification: .announcement, argument: message)
+        }
+    }
+}
+
+private enum ActivityTagExtractor {
+    private static let known = ["散步", "嗅聞", "追逐", "拋接", "拔河", "跑步", "游泳", "益智", "陪伴", "草地", "公園", "飛盤", "慢走", "玩水", "追球", "玩球", "爬山", "打滾", "跳躍", "丟球"]
+    private static let ignored: Set<String> = ["喜歡", "很愛", "最愛", "一起", "慢慢", "平常", "通常", "偶爾", "經常", "狗狗", "主人", "朋友", "其他", "每天", "活動", "可以", "時候"]
+
+    static func tags(from input: String, dogName: String) -> [String] {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return [] }
+        if text.count <= 4 { return [text] }
+        var tags: [String] = []
+        func append(_ candidate: String) {
+            let tag = String(candidate.trimmingCharacters(in: .whitespacesAndNewlines).prefix(4))
+            guard tag.count >= 2, !ignored.contains(tag), tag != dogName,
+                  !tags.contains(where: { $0 == tag || $0.contains(tag) || tag.contains($0) }) else { return }
+            tags.append(tag)
+        }
+
+        for keyword in known.filter({ text.contains($0) }).sorted(by: {
+            text.range(of: $0)!.lowerBound < text.range(of: $1)!.lowerBound
+        }) { append(keyword) }
+
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = text
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let word = String(text[range])
+            if word.count >= 2, word.count <= 4 { append(word) }
+            return tags.count < 5
+        }
+
+        if tags.isEmpty {
+            var fallback = text.replacingOccurrences(of: dogName, with: "")
+            for prefix in ["喜歡在", "喜歡玩", "喜歡", "最愛", "很愛", "愛玩", "一起", "在", "去", "玩"] where fallback.hasPrefix(prefix) {
+                fallback.removeFirst(prefix.count)
+            }
+            let candidate = String(fallback.trimmingCharacters(in: .whitespacesAndNewlines).prefix(4))
+            if !candidate.isEmpty { tags.append(candidate) }
+        }
+        return Array(tags.prefix(5))
+    }
+}
+
+private struct ActivityChipFlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let availableWidth = proposal.width ?? 320
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if rowWidth > 0 && rowWidth + spacing + size.width > availableWidth {
+                totalHeight += rowHeight + spacing
+                rowWidth = 0
+                rowHeight = 0
+            }
+            rowWidth += (rowWidth > 0 ? spacing : 0) + size.width
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: availableWidth, height: totalHeight + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + spacing + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            if x > bounds.minX { x += spacing }
+            subview.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: .unspecified)
+            x += size.width
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+private struct ProfileCompletionSheet: View {
+    let phase: ProfileCompletionPhase
+    let store: SnootsStore
+    let language: SnootsLanguage
+    @Environment(\.dismiss) private var dismiss
+    @State private var vaccineSummary = "狂犬病、核心疫苗、驅蟲皆已完成"
+    @State private var emergencyPhone = "0912-345-678"
+    @State private var leashHabit = "外出全程使用胸背帶與牽繩"
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(phase.detail(language)) {
+                    TextField(language.text("Vaccine and parasite prevention", "疫苗／驅蟲紀錄摘要"), text: $vaccineSummary, axis: .vertical)
+                    TextField(language.text("Emergency phone", "緊急聯絡電話"), text: $emergencyPhone)
+                        .keyboardType(.phonePad)
+                    TextField(language.text("Leash protection", "牽繩防護習慣"), text: $leashHabit, axis: .vertical)
+                }
+            }
+            .navigationTitle(phase.title(language))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(language.text("Cancel", "取消")) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(language.text("Save", "儲存")) {
+                        store.saveSafetyDetails(
+                            vaccineSummary: vaccineSummary,
+                            emergencyPhone: emergencyPhone,
+                            leashHabit: leashHabit
+                        )
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2316,25 +4127,46 @@ private struct RabiesRecordView: View {
 }
 
 private struct LanguageSettingsView: View {
+    @Environment(SnootsAccountSession.self) private var account
+    let store: SnootsStore
     @Binding var selectedLanguageRawValue: String
-
-    private var language: SnootsLanguage {
-        SnootsLanguage(rawValue: selectedLanguageRawValue) ?? .traditionalChinese
-    }
+    @State private var showingSignOutConfirmation = false
 
     var body: some View {
         Form {
-            Section(language.text("Display language", "顯示語言")) {
-                Picker(language.text("App language", "App 語言"), selection: $selectedLanguageRawValue) {
-                    ForEach(SnootsLanguage.allCases) { option in
-                        Text(option.label).tag(option.rawValue)
+            Section("顯示語言") {
+                Label("依系統設定顯示繁體中文", systemImage: "globe")
+                Text("目前所有介面內容皆使用繁體中文。")
+                    .foregroundStyle(SnootsPalette.secondaryText)
+            }
+            Section("封鎖名單") {
+                if store.isMatchBlocked {
+                    HStack {
+                        Label("超超（飼主 David）", systemImage: "hand.raised.fill")
+                        Spacer()
+                        Button("解除封鎖") {
+                            store.unblockMatch()
+                        }
                     }
+                } else {
+                    Label("目前沒有封鎖的使用者", systemImage: "checkmark.shield.fill")
+                        .foregroundStyle(SnootsPalette.secondaryText)
                 }
-                .pickerStyle(.inline)
+            }
+            Section("帳號") {
+                Button("登出", role: .destructive) {
+                    showingSignOutConfirmation = true
+                }
             }
         }
-        .navigationTitle(language.text("Settings", "設定"))
+        .navigationTitle("設定")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { selectedLanguageRawValue = SnootsLanguage.traditionalChinese.rawValue }
+        .confirmationDialog("確定要登出嗎？", isPresented: $showingSignOutConfirmation) {
+            Button("登出", role: .destructive) { Task { await account.signOut() } }
+        } message: {
+            Text("登出後會清除此裝置的登入狀態；已提交的資料仍保留在帳號中。")
+        }
     }
 }
 
@@ -2414,7 +4246,7 @@ private struct EditProfileView: View {
     @State private var city: String
     @State private var district: String
     @State private var petName: String
-    @State private var socialSummary: String
+    @State private var ownerMessage: String
 
     init(store: SnootsStore, language: SnootsLanguage) {
         self.store = store
@@ -2423,20 +4255,7 @@ private struct EditProfileView: View {
         _city = State(initialValue: store.profile.neighborhood.contains("New Taipei") ? "New Taipei City" : "Taipei City")
         _district = State(initialValue: store.profile.neighborhood.contains("Xinyi") ? "Xinyi District" : "Da’an District")
         _petName = State(initialValue: store.pet.name)
-        _socialSummary = State(initialValue: language == .traditionalChinese ? "Nori 需要一些時間熟悉彼此，之後喜歡平靜散步與熟悉的夥伴。" : store.pet.summary)
-    }
-
-    private var suggestedTraits: [String] {
-        let text = socialSummary.lowercased()
-        var tags: [String] = []
-
-        if text.contains("slow") || text.contains("慢") { tags.append("Slow introductions") }
-        if text.contains("adult") || text.contains("成犬") { tags.append("Adult dogs") }
-        if text.contains("long lead") || text.contains("長牽繩") { tags.append("Long lead") }
-        if text.contains("calm") || text.contains("quiet") || text.contains("平靜") || text.contains("安靜") { tags.append("Calm walks") }
-        if text.contains("space") || text.contains("距離") || text.contains("空間") { tags.append("Needs space") }
-
-        return tags.isEmpty ? ["Slow introductions"] : tags
+        _ownerMessage = State(initialValue: store.profile.ownerMessage)
     }
 
     private var cities: [String] { ["Taipei City", "New Taipei City"] }
@@ -2467,15 +4286,39 @@ private struct EditProfileView: View {
                 TextField(language.text("Dog’s name", "狗狗名字"), text: $petName)
             }
 
-            Section(language.text("Social preferences", "互動偏好")) {
-                TextField(language.text("Describe how \(petName) likes to meet and play", "描述 \(petName) 喜歡如何認識與互動"), text: $socialSummary, axis: .vertical)
-                    .lineLimit(3...5)
+            Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(language.text("Suggested tags", "建議標籤"))
+                    HStack {
+                        Text(language.text("Write a short introduction for the other owner.", "寫一段給對方飼主看的簡短介紹。"))
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                        Spacer()
+                        Text(language.text("Shown on match cards", "顯示於配對卡片"))
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                    }
+
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("“")
+                            .font(.system(size: 28, weight: .bold, design: .serif))
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                            .padding(.top, 1)
+                        TextEditor(text: $ownerMessage)
+                            .font(.snootsUI(15))
+                            .frame(minHeight: 82, maxHeight: 128)
+                            .scrollContentBackground(.hidden)
+                            .scrollIndicators(.hidden)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    Text(language.text("Share a warm introduction so other owners know what kind of first meeting feels comfortable for you.", "用一句溫暖的介紹，讓對方先知道什麼樣的初次見面對你們最舒服。"))
                         .font(.snootsMetadata())
                         .foregroundStyle(SnootsPalette.secondaryText)
-                    DeclarationChips(labels: suggestedTraits.map { localizedTrait($0, language: language) }, tint: SnootsPalette.butter)
                 }
+            } header: {
+                Text(language.text("Owner’s note", "飼主寄語"))
             }
 
             Section {
@@ -2514,12 +4357,10 @@ private struct EditProfileView: View {
                         ownerName: ownerName,
                         neighborhood: "\(district), \(city)",
                         petName: petName,
-                        summary: socialSummary,
-                        traits: suggestedTraits
+                        ownerMessage: ownerMessage.trimmingCharacters(in: .whitespacesAndNewlines)
                     )
                     dismiss()
                 }
-                .font(.snootsUI(15, weight: .semibold))
             }
         }
     }
@@ -2530,30 +4371,29 @@ struct MatchConfirmationView: View {
     let store: SnootsStore
     let language: SnootsLanguage
     let onNavigate: (SnootsRoute) -> Void
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 18) {
             Spacer()
-            Image(systemName: "heart.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(SnootsPalette.pink)
-                .frame(width: 112, height: 112)
-                .background(SnootsPalette.softPink, in: Circle())
-            Text(language.text("\(candidate.name) is interested too!", "\(candidate.name) 也有興趣！")).font(.snootsScreenTitle())
-            Text(language.text("Review your verified behavior cards and confirm a safe first hello.", "查看彼此已驗證的互動資料卡，再確認一場安全的初次見面。"))
+            HStack(spacing: 10) {
+                MatchSuccessAvatar(imageName: candidate.imageName, name: candidate.name)
+                MatchSuccessAvatar(imageName: store.pet.imageName, name: store.pet.name)
+            }
+            Text("與 \(candidate.name) 配對成功！")
+                .font(.snootsScreenTitle())
+            Text("先完成一個小任務，或直接開始聊天。")
                 .font(.snootsBody())
                 .multilineTextAlignment(.center)
                 .foregroundStyle(SnootsPalette.secondaryText)
                 .padding(.horizontal, 26)
-            Button(language.text("Confirm match", "確認配對")) {
-                store.isMatched = true
+            Button("開啟破冰小任務") { onNavigate(.icebreaker) }
+                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+            Button("直接發送第一條訊息") {
                 store.createMatchChat()
+                store.sendMatchChatMessage("嗨 \(candidate.owner)！\(candidate.name)看起來很可愛，要不要先一起散步？")
                 onNavigate(.chat)
             }
-            .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
-            Button(language.text("Not yet", "暫時不要")) { dismiss() }
-                .buttonStyle(SecondaryButtonStyle())
+            .buttonStyle(SecondaryButtonStyle())
             Spacer()
         }
         .padding(22)
@@ -2563,58 +4403,565 @@ struct MatchConfirmationView: View {
     }
 }
 
-private struct MatchChatRoom: View {
+private struct MatchSuccessAvatar: View {
+    let imageName: String
+    let name: String
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Image(imageName)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 82, height: 82)
+                .clipShape(Circle())
+                .overlay { Circle().stroke(SnootsPalette.primaryTint, lineWidth: 4) }
+            Text(name)
+                .font(.snootsUI(14, weight: .semibold))
+        }
+    }
+}
+
+private enum ChatListTab: String, CaseIterable, Identifiable {
+    case direct
+    case meetups
+
+    var id: String { rawValue }
+}
+
+private struct MatchChatListView: View {
     let candidate: PlaydateCandidate
     let store: SnootsStore
     let language: SnootsLanguage
-    @FocusState private var isComposerFocused: Bool
-    @State private var draft = ""
+    let onNavigate: (SnootsRoute) -> Void
+    @State private var selectedTab: ChatListTab
 
-    private var openingGreetings: [String] {
-        [
-            language.text(
-                "Hi Elena! Mochi seems lovely. Would you like to start with a walk together?",
-                "嗨 Elena！Mochi 看起來很可愛，要不要先一起散步？"
-            ),
-            language.text(
-                "Would a 20-minute parallel walk feel good for Mochi?",
-                "先安排 20 分鐘的平行散步，Mochi 會覺得舒服嗎？"
-            ),
-            language.text(
-                "What time works well for a calm first hello this week?",
-                "這週什麼時間適合來一場安靜的初次見面？"
-            )
-        ]
+    init(
+        candidate: PlaydateCandidate,
+        store: SnootsStore,
+        language: SnootsLanguage,
+        initiallySelectedTab: ChatListTab = .direct,
+        onNavigate: @escaping (SnootsRoute) -> Void
+    ) {
+        self.candidate = candidate
+        self.store = store
+        self.language = language
+        self.onNavigate = onNavigate
+        _selectedTab = State(initialValue: initiallySelectedTab)
+    }
+
+    private var latestMessage: String {
+        store.matchChatMessages.last?.text ?? language.text("It's a match", "配對成功")
     }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 10) {
-                    Image(candidate.imageName)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 44, height: 44)
-                        .clipShape(Circle())
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(language.text("You matched with \(candidate.name)", "你和 \(candidate.name) 配對成功"))
-                            .font(.snootsCardTitle())
-                        Label(
-                            language.text("Elena · Identity verified", "Elena · 身分已驗證"),
-                            systemImage: "checkmark.seal.fill"
-                        )
-                        .font(.snootsMetadata())
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(language.text("Chats", "聊天室"))
+                        .font(.snootsScreenTitle())
+                    Text(language.text("Get to know matched dog friends at an easy pace, and stay coordinated for meetups.", "慢慢認識配對成功的狗朋友，也和狗聚夥伴保持聯繫。"))
+                        .font(.snootsBody())
                         .foregroundStyle(SnootsPalette.secondaryText)
+                }
+
+                Picker(language.text("Chat type", "聊天類型"), selection: $selectedTab) {
+                    Text(language.text("Personal", "個人")).tag(ChatListTab.direct)
+                    Text(language.text("Groups", "群組")).tag(ChatListTab.meetups)
+                }
+                .pickerStyle(.segmented)
+
+                if selectedTab == .direct {
+                    EventFriendChatLinks()
+                    directChats
+                } else {
+                    meetupChats
+                }
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle(language.text("Chats", "聊天室"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var directChats: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(language.text("New matches", "新配對"))
+                .font(.snootsSection())
+
+            Button {
+                store.createMatchChat()
+                onNavigate(.chat)
+            } label: {
+                HStack(spacing: 13) {
+                    ZStack(alignment: .bottomTrailing) {
+                        Image(candidate.imageName)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 62, height: 62)
+                            .clipShape(Circle())
+                            .overlay { Circle().stroke(SnootsPalette.primaryTint, lineWidth: 3) }
+                        Image(systemName: "heart.fill")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(SnootsPalette.ink)
+                            .frame(width: 23, height: 23)
+                            .background(SnootsPalette.lime, in: Circle())
+                            .overlay { Circle().stroke(SnootsPalette.surface, lineWidth: 2) }
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 7) {
+                            Text(candidate.name)
+                                .font(.snootsCardTitle())
+                            Text(language.text("New match", "新配對"))
+                                .font(.snootsMetadata())
+                                .foregroundStyle(SnootsPalette.ink)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(SnootsPalette.lime, in: Capsule())
+                        }
+                        Text(latestMessage)
+                            .font(.snootsUI(14))
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+                    VStack(alignment: .trailing, spacing: 9) {
+                        Text(language.text("Now", "剛剛"))
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                        Circle()
+                            .fill(SnootsPalette.navigationActive)
+                            .frame(width: 9, height: 9)
                     }
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                .snootsCardShadow()
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(language.text("Open chat with \(candidate.name)", "開啟和\(candidate.name)的聊天室"))
 
-                if !store.matchChatMessages.isEmpty {
-                    Text(language.text("Messages", "訊息"))
-                        .font(.snootsSection())
-                        .padding(.top, 4)
+            Label(language.text("Only share information that is appropriate for your matched dog friend to see.", "請只在聊天室內分享適合公開給配對對象的資訊。"), systemImage: "lock.fill")
+                .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.secondaryText)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    private var meetupChats: some View { MeetupGroupListSection() }
+
+    private var legacyMeetupChats: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(language.text("Your meetup groups", "你的狗聚群組"))
+                .font(.snootsSection())
+
+            Button {
+                onNavigate(.meetupChat)
+            } label: {
+                HStack(spacing: 13) {
+                    MeetupParticipantAvatarStack(participants: store.upcomingMeetup.participants, language: language)
+                        .frame(width: 112, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 7) {
+                            Text(store.upcomingMeetup.localizedTitle(language))
+                                .font(.snootsCardTitle())
+                                .lineLimit(1)
+                            Text(language.text("Group", "群組"))
+                                .font(.snootsMetadata())
+                                .foregroundStyle(SnootsPalette.ink)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(SnootsPalette.lime, in: Capsule())
+                        }
+                        Text(store.meetupGroupMessages.last?.text ?? store.upcomingMeetup.localizedHostNote(language))
+                            .font(.snootsUI(14))
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                .snootsCardShadow()
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(language.text("Open meetup group chat", "開啟狗聚群組聊天室"))
+
+            Label(language.text("Use this space to coordinate with everyone before the meetup.", "在活動前，使用群組聊天室和所有夥伴一起確認細節。"), systemImage: "person.3.fill")
+                .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.secondaryText)
+                .padding(.horizontal, 4)
+        }
+    }
+}
+
+private struct MeetupGroupChatRoom: View {
+    let meetup: UpcomingMeetup
+    let store: SnootsStore
+    let language: SnootsLanguage
+    let onOpenDashboard: () -> Void
+    let onOpenSettings: () -> Void
+    @FocusState private var isComposerFocused: Bool
+    @State private var draft = ""
+    @State private var selectedPhoto: PhotosPickerItem?
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Label("釘選公告", systemImage: "pin.fill")
+                            .font(.snootsUI(13, weight: .bold))
+                            .foregroundStyle(SnootsPalette.navigationActive)
+                        Text(store.meetupGroupAnnouncement)
+                            .font(.snootsUI(14, weight: .semibold))
+                            .foregroundStyle(SnootsPalette.ink)
+                        Text("首次見面請保持牽繩，並依各自的社交界線慢慢認識。")
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                        Button("抵達狗聚後，進入現場儀表板", systemImage: "checkmark.shield.fill", action: onOpenDashboard)
+                            .font(.snootsUI(14, weight: .semibold))
+                            .buttonStyle(.borderedProminent)
+                            .tint(SnootsPalette.lime)
+                        }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+
+                    ForEach(store.meetupGroupMessages) { message in
+                        HStack(alignment: .bottom, spacing: 8) {
+                            if message.isOutgoing {
+                                Spacer(minLength: 52)
+                            } else {
+                                Image(avatarImageName(for: message))
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 30, height: 30)
+                                    .clipShape(Circle())
+                                    .overlay { Circle().stroke(SnootsPalette.primaryTint, lineWidth: 2) }
+                            }
+
+                            VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 4) {
+                                if !message.isOutgoing {
+                                    Text(message.senderName)
+                                        .font(.snootsMetadata())
+                                        .foregroundStyle(SnootsPalette.secondaryText)
+                                }
+                                Text(message.text)
+                                    .font(.snootsBody())
+                                    .foregroundStyle(SnootsPalette.ink)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 11)
+                                    .background(
+                                        message.isOutgoing ? SnootsPalette.lime : SnootsPalette.surface,
+                                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    )
+                            }
+
+                            if !message.isOutgoing {
+                                Spacer(minLength: 52)
+                            }
+                        }
+                        .id(message.id)
+                    }
+                }
+                .padding(18)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: store.meetupGroupMessages.count) { _, _ in
+                guard let lastMessageID = store.meetupGroupMessages.last?.id else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(lastMessageID, anchor: .bottom)
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Image(systemName: "photo")
+                            .font(.title3)
+                            .foregroundStyle(SnootsPalette.ink)
+                            .frame(width: 40, height: 40)
+                            .background(SnootsPalette.primaryTint, in: Circle())
+                    }
+                    .disabled(!store.meetupGroupAllowsPhotoSharing)
+                    .accessibilityLabel("傳送照片")
+
+                    TextField(language.text("Message the group", "傳送訊息給群組"), text: $draft, axis: .vertical)
+                        .font(.snootsBody())
+                        .lineLimit(1...4)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+                        .focused($isComposerFocused)
+                        .submitLabel(.send)
+                        .onSubmit { send(draft) }
+                        .disabled(!store.meetupGroupAllowsMemberMessages)
+
+                    Button { send(draft) } label: {
+                        Image(systemName: "arrow.up")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(SnootsPalette.ink)
+                            .frame(width: 44, height: 44)
+                            .background(SnootsPalette.lime, in: Circle())
+                    }
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!store.meetupGroupAllowsMemberMessages)
+                    .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.meetupGroupAllowsMemberMessages ? 0.45 : 1)
+                    .accessibilityLabel(language.text("Send message", "傳送訊息"))
+
+                    Image(systemName: "mic.fill")
+                        .font(.headline)
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                        .frame(width: 36, height: 44)
+                        .accessibilityLabel("語音訊息")
+                }
+            }
+            .padding(14)
+            .background(SnootsPalette.canvas)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle(meetup.localizedTitle(language))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: onOpenSettings) {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("群組管理")
+            }
+        }
+    }
+
+    private func avatarImageName(for message: MeetupGroupMessage) -> String {
+        meetup.participants.first {
+            $0.name == message.senderName || $0.traditionalChineseName == message.senderName
+        }?.imageName
+            ?? meetup.participants.first?.imageName
+            ?? "Tofu"
+    }
+
+    private func send(_ text: String) {
+        guard store.meetupGroupAllowsMemberMessages else { return }
+        store.sendMeetupGroupMessage(text)
+        draft = ""
+        isComposerFocused = false
+    }
+}
+
+private struct MeetupGroupSettingsView: View {
+    let meetup: UpcomingMeetup
+    let store: SnootsStore
+    let language: SnootsLanguage
+    let onOpenParticipants: () -> Void
+    let onLeaveGroup: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var announcement: String
+    @State private var allowsMemberMessages: Bool
+    @State private var allowsPhotoSharing: Bool
+    @State private var isMuted = false
+    @State private var isShowingLeaveConfirmation = false
+
+    init(
+        meetup: UpcomingMeetup,
+        store: SnootsStore,
+        language: SnootsLanguage,
+        onOpenParticipants: @escaping () -> Void,
+        onLeaveGroup: @escaping () -> Void
+    ) {
+        self.meetup = meetup
+        self.store = store
+        self.language = language
+        self.onOpenParticipants = onOpenParticipants
+        self.onLeaveGroup = onLeaveGroup
+        _announcement = State(initialValue: store.meetupGroupAnnouncement)
+        _allowsMemberMessages = State(initialValue: store.meetupGroupAllowsMemberMessages)
+        _allowsPhotoSharing = State(initialValue: store.meetupGroupAllowsPhotoSharing)
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 8) {
+                    groupActionButton(
+                        title: isMuted ? "取消禁音" : "靜音",
+                        systemImage: isMuted ? "bell.slash.fill" : "bell.fill"
+                    ) {
+                        isMuted.toggle()
+                    }
+                    groupActionButton(title: "成員", systemImage: "person.3.fill", action: onOpenParticipants)
+                    ShareLink(
+                        item: meetupInvitationText,
+                        subject: Text(meetup.localizedTitle(language))
+                    ) {
+                        groupActionLabel(title: "邀請", systemImage: "person.badge.plus")
+                    }
+                    .buttonStyle(MeetupGroupActionButtonStyle(isDestructive: false))
+                    .accessibilityLabel("邀請")
+                    groupActionButton(
+                        title: "離開群組",
+                        systemImage: "rectangle.portrait.and.arrow.right",
+                        isDestructive: true
+                    ) {
+                        isShowingLeaveConfirmation = true
+                    }
+                }
+                .padding(.vertical, 2)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+
+            Section {
+                Text("釘選公告編輯")
+                    .font(.snootsUI(16, weight: .semibold))
+                    .foregroundStyle(SnootsPalette.ink)
+                TextEditor(text: $announcement)
+                    .font(.snootsBody())
+                    .frame(minHeight: 96)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(SnootsPalette.canvas)
+        .navigationTitle(meetup.localizedTitle(language))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("儲存", action: save)
+            }
+        }
+        .alert("要離開此群組嗎？", isPresented: $isShowingLeaveConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("離開群組", role: .destructive, action: onLeaveGroup)
+        } message: {
+            Text("離開後將不再收到此活動群組的訊息。")
+        }
+    }
+
+    private func groupActionButton(
+        title: String,
+        systemImage: String,
+        isDestructive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) { groupActionLabel(title: title, systemImage: systemImage) }
+        .buttonStyle(MeetupGroupActionButtonStyle(isDestructive: isDestructive))
+        .accessibilityLabel(title)
+    }
+
+    private func groupActionLabel(title: String, systemImage: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.snootsUI(17, weight: .semibold))
+            Text(title)
+                .font(.snootsUI(12, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, minHeight: 70)
+        .contentShape(RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+    }
+
+    private var meetupInvitationText: String {
+        let dateTime = meetup.startDate.formatted(
+            Date.FormatStyle(date: .long, time: .shortened).locale(language.locale)
+        )
+        return language.text(
+            "Join me at \(meetup.localizedTitle(language)) on \(dateTime), \(meetup.localizedLocation(language)).",
+            "邀請你一起參加「\(meetup.localizedTitle(language))」，時間：\(dateTime)；地點：\(meetup.localizedLocation(language))。"
+        )
+    }
+
+    private func save() {
+        store.updateMeetupGroupSettings(
+            announcement: announcement,
+            allowsMemberMessages: allowsMemberMessages,
+            allowsPhotoSharing: allowsPhotoSharing
+        )
+        dismiss()
+    }
+}
+
+private struct MeetupGroupActionButtonStyle: ButtonStyle {
+    let isDestructive: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(
+                isDestructive
+                    ? SnootsPalette.alert
+                    : (configuration.isPressed ? SnootsPalette.navigationActive : SnootsPalette.ink)
+            )
+            .background(
+                configuration.isPressed ? SnootsPalette.primaryTint : Color.clear,
+                in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+            )
+            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
+    }
+}
+
+private struct MatchChatRoom: View {
+    let candidate: PlaydateCandidate
+    let store: SnootsStore
+    let language: SnootsLanguage
+    let onNavigate: (SnootsRoute) -> Void
+    let onBackToChatList: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var isComposerFocused: Bool
+    @State private var draft = ""
+    @State private var isGuideExpanded = false
+    @State private var isShowingMeetupInvitationPrompt = false
+    @State private var isShowingProfile = false
+    @State private var isShowingCancelConfirmation = false
+    @State private var isShowingBlockConfirmation = false
+    @State private var selectedPhoto: PhotosPickerItem?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
+                IcebreakerGuideCard(
+                    candidate: candidate,
+                    store: store,
+                    isExpanded: $isGuideExpanded,
+                    onUsePrompt: {
+                        let reminder = "\(store.pet.name) 第一次見面需要保持 2 公尺距離，且對食物較敏感喔！"
+                        draft = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? reminder
+                            : "\(draft)\n\(reminder)"
+                        isComposerFocused = true
+                    },
+                    onPrepareMeetupInvite: {
+                        isShowingMeetupInvitationPrompt = true
+                    },
+                    onOpenIcebreaker: { onNavigate(.icebreaker) }
+                )
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+            .background(.ultraThinMaterial)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    if store.matchChatMessages.isEmpty {
+                        ContentUnavailableView(
+                            "開始和 \(candidate.name) 聊天",
+                            systemImage: "bubble.left.and.bubble.right",
+                            description: Text("從下方輸入訊息開始聊天。")
+                        )
+                    }
 
                     ForEach(store.matchChatMessages) { message in
                         HStack {
@@ -2632,36 +4979,21 @@ private struct MatchChatRoom: View {
                         }
                     }
                 }
+                .padding(18)
             }
-            .padding(18)
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(language.text("Start with a friendly hello", "從一句友善的問候開始"))
-                    .font(.snootsSection())
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(openingGreetings, id: \.self) { greeting in
-                            Button {
-                                send(greeting)
-                            } label: {
-                                Text(greeting)
-                                    .font(.snootsUI(14, weight: .medium))
-                                    .multilineTextAlignment(.leading)
-                                    .foregroundStyle(SnootsPalette.ink)
-                                    .frame(width: 230, alignment: .leading)
-                                    .padding(14)
-                                    .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 1)
-                }
-
+            VStack(spacing: 10) {
                 HStack(spacing: 10) {
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Image(systemName: "photo")
+                            .font(.title3)
+                            .foregroundStyle(SnootsPalette.ink)
+                            .frame(width: 40, height: 40)
+                            .background(SnootsPalette.primaryTint, in: Circle())
+                    }
+                    .accessibilityLabel("傳送照片")
                     TextField(language.text("Write a message", "輸入訊息"), text: $draft, axis: .vertical)
                         .font(.snootsBody())
                         .lineLimit(1...4)
@@ -2682,15 +5014,114 @@ private struct MatchChatRoom: View {
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
                     .accessibilityLabel(language.text("Send message", "傳送訊息"))
+
+                    Image(systemName: "mic.fill")
+                        .font(.headline)
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                        .frame(width: 36, height: 44)
+                        .accessibilityLabel("語音訊息")
                 }
             }
             .padding(14)
             .background(SnootsPalette.canvas)
         }
         .background(SnootsPalette.canvas)
-        .navigationTitle(language.text("Chat with Elena", "與 Elena 聊天"))
+        .overlay {
+            if isShowingMeetupInvitationPrompt {
+                ZStack {
+                    Color.black.opacity(0.24)
+                        .ignoresSafeArea()
+
+                    MeetupInvitationPromptCard(
+                        candidate: candidate,
+                        onPrepareInvitation: {
+                            isShowingMeetupInvitationPrompt = false
+                            prepareMeetupInvitationDraft()
+                        },
+                        onDismiss: {
+                            isShowingMeetupInvitationPrompt = false
+                        }
+                    )
+                    .padding(.horizontal, 24)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
+        .onAppear {
+            presentMeetupInvitationIfNeeded()
+        }
+        .onChange(of: store.sparkPoints) { _, _ in
+            presentMeetupInvitationIfNeeded()
+        }
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: onBackToChatList) {
+                    Image(systemName: "chevron.left")
+                }
+                .accessibilityLabel("返回聊天室")
+            }
+            ToolbarItem(placement: .principal) {
+                Button { isShowingProfile = true } label: {
+                    HStack(spacing: 7) {
+                        Image(candidate.imageName)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 38, height: 38)
+                            .clipShape(Circle())
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(candidate.name)
+                            HStack(spacing: 3) {
+                                Text("飼主 \(candidate.owner)")
+                                    .foregroundStyle(SnootsPalette.secondaryText)
+                                Image(systemName: "checkmark.seal.fill")
+                                    .foregroundStyle(SnootsPalette.navigationActive)
+                            }
+                            .font(.snootsMetadata())
+                        }
+                    }
+                    .font(.snootsUI(15, weight: .semibold))
+                    .lineLimit(1)
+                }
+                .buttonStyle(.glass)
+                .accessibilityLabel("\(candidate.name)，飼主 \(candidate.owner)，已驗證")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("取消配對", role: .destructive) { isShowingCancelConfirmation = true }
+                    Button("封鎖", role: .destructive) { isShowingBlockConfirmation = true }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("聊天室選單")
+            }
+        }
+        .sheet(isPresented: $isShowingProfile) {
+            MatchDetailSheet(candidate: candidate, language: language)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog("要取消和超超的配對嗎？", isPresented: $isShowingCancelConfirmation, titleVisibility: .visible) {
+            Button("取消配對", role: .destructive) {
+                store.cancelMatch()
+                dismiss()
+            }
+        } message: {
+            Text("雙方會解除好友關係，聊天室將從列表中消失。對方不會收到通知。")
+        }
+        .confirmationDialog("要封鎖超超嗎？", isPresented: $isShowingBlockConfirmation, titleVisibility: .visible) {
+            Button("封鎖", role: .destructive) {
+                store.blockMatch()
+                dismiss()
+            }
+        } message: {
+            Text("雙方會解除好友關係，聊天室將消失。對方無法搜尋你與豆花，也不會在多人活動的狗狗辨識牆看到你；之後可在設定解除封鎖。")
+        }
     }
 
     private func send(_ text: String) {
@@ -2698,22 +5129,1335 @@ private struct MatchChatRoom: View {
         draft = ""
         isComposerFocused = false
     }
+
+    private func presentMeetupInvitationIfNeeded() {
+        guard store.sparkPoints >= 100, !store.hasSentMeetupInvite else { return }
+        isGuideExpanded = true
+
+        guard !store.hasPreparedMeetupInvitation, !store.hasSeenMeetupInvitationPrompt else { return }
+        store.hasSeenMeetupInvitationPrompt = true
+        isShowingMeetupInvitationPrompt = true
+    }
+
+    private func prepareMeetupInvitationDraft() {
+        store.prepareMeetupInvitation()
+        draft = "想邀請\(candidate.name)一起來一場 20 分鐘的平行散步，你們這週有適合的時間嗎？"
+        isComposerFocused = true
+    }
+}
+
+private struct MeetupInvitationPromptCard: View {
+    let candidate: PlaydateCandidate
+    let onPrepareInvitation: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "calendar.badge.plus")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(SnootsPalette.ink)
+                .frame(width: 62, height: 62)
+                .background(SnootsPalette.primaryTint, in: Circle())
+
+            VStack(spacing: 7) {
+                Text("想和\(candidate.name)見面嗎？")
+                    .font(.snootsCardTitle())
+                Text("邀請會先帶入輸入框，確認後再發送。")
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+            }
+            .multilineTextAlignment(.center)
+
+            VStack(spacing: 12) {
+                Button(action: onPrepareInvitation) {
+                    Label("帶入見面邀請草稿", systemImage: "paperplane.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+
+                Button("暫時先不要", action: onDismiss)
+                    .font(.snootsUI(16, weight: .semibold))
+                    .foregroundStyle(SnootsPalette.secondaryText)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: 360)
+        .background(SnootsPalette.canvas, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: .black.opacity(0.16), radius: 28, y: 12)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+    }
+}
+
+private struct FeedbackRecipient: Identifiable {
+    let id: String
+    let name: String
+    let owner: String
+    let breed: String
+    let imageName: String
+}
+
+private struct PostEventFeedbackSheet: View {
+    let recipient: FeedbackRecipient
+    let store: SnootsStore
+    let language: SnootsLanguage
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedTags: Set<String> = []
+    @State private var wantsAnotherMeetup = true
+    @State private var note = ""
+    @State private var sharedPhoto: PhotosPickerItem?
+
+    private let tags = ["超有禮貌", "社交大師", "散步穩定", "脾氣好"]
+
+    init(candidate: PlaydateCandidate, store: SnootsStore, language: SnootsLanguage) {
+        recipient = FeedbackRecipient(
+            id: candidate.name,
+            name: candidate.name,
+            owner: candidate.owner,
+            breed: candidate.breed,
+            imageName: candidate.imageName
+        )
+        self.store = store
+        self.language = language
+    }
+
+    init(dog: MemoryDog, store: SnootsStore, language: SnootsLanguage) {
+        recipient = FeedbackRecipient(
+            id: dog.id,
+            name: dog.name,
+            owner: dog.owner,
+            breed: dog.breed,
+            imageName: dog.imageName
+        )
+        self.store = store
+        self.language = language
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 12) {
+                        Image(recipient.imageName)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 58, height: 58)
+                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("你成功認出了\(recipient.name)！")
+                                .font(.snootsCardTitle())
+                            Text("把今天感受到的好，送給 \(recipient.name) 與 \(recipient.owner)。")
+                                .font(.snootsMetadata())
+                                .foregroundStyle(SnootsPalette.secondaryText)
+                        }
+                    }
+                } header: {
+                    Text("共同回憶卡片 · 02")
+                }
+                Section("這次見面，你感受到…（可複選）") {
+                    ForEach(tags, id: \.self) { tag in
+                        Button {
+                            if selectedTags.contains(tag) { selectedTags.remove(tag) } else { selectedTags.insert(tag) }
+                        } label: {
+                            HStack {
+                                Text(tag)
+                                Spacer()
+                                Image(systemName: selectedTags.contains(tag) ? "checkmark.circle.fill" : "circle")
+                            }
+                        }
+                        .foregroundStyle(SnootsPalette.ink)
+                    }
+                }
+                Section(language.text("Future meetups", "是否想再約")) {
+                    Picker(language.text("Your preference", "你的選擇"), selection: $wantsAnotherMeetup) {
+                        Text(language.text("🐾 Hope to meet again", "🐾 希望下次再約")).tag(true)
+                        Text(language.text("Keep things as they are", "暫時保持現狀")).tag(false)
+                    }
+                    .pickerStyle(.inline)
+                    Text(language.text("This preference is kept private until both sides choose to reconnect.", "此選擇會匿名保留，直到雙方都願意再次聯絡。"))
+                        .font(.snootsMetadata())
+                }
+                Section("給\(recipient.name)與飼主的一句話") {
+                    TextEditor(text: $note)
+                        .frame(minHeight: 72)
+                        .overlay(alignment: .topLeading) {
+                            if note.isEmpty {
+                                Text("例如：謝謝\(recipient.name)今天來跟我們玩！你毛好澎、好可愛。")
+                                    .font(.snootsBody())
+                                    .foregroundStyle(SnootsPalette.placeholder)
+                                    .padding(.top, 8)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                    PhotosPicker(selection: $sharedPhoto, matching: .images) {
+                        Label(sharedPhoto == nil ? "上傳今天活動中的照片" : "照片已加入回饋卡", systemImage: sharedPhoto == nil ? "photo.badge.plus" : "checkmark.circle.fill")
+                    }
+                }
+                Section {
+                    Button {
+                        store.addInteractionRecord(
+                            partnerDogName: recipient.name,
+                            partnerBreed: recipient.breed,
+                            recipientOwner: recipient.owner,
+                            recipientImageName: recipient.imageName,
+                            positiveTags: Array(selectedTags).sorted(),
+                            wantsAnotherMeetup: wantsAnotherMeetup,
+                            note: note.trimmingCharacters(in: .whitespacesAndNewlines),
+                            hasSharedPhoto: sharedPhoto != nil
+                        )
+                        dismiss()
+                    } label: {
+                        Label("發送暖心回饋卡", systemImage: "paperplane.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                    .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
+                    .listRowBackground(Color.clear)
+                }
+            }
+            .navigationTitle(language.text("Post-meeting feedback", "見面後回饋"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(language.text("Cancel", "取消")) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(language.text("Save", "儲存")) { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+private struct IcebreakerGuideCard: View {
+    let candidate: PlaydateCandidate
+    let store: SnootsStore
+    @Binding var isExpanded: Bool
+    let onUsePrompt: () -> Void
+    let onPrepareMeetupInvite: () -> Void
+    let onOpenIcebreaker: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if store.hasSentMeetupInvite {
+                HStack {
+                    Label("正向回饋", systemImage: "heart.text.square.fill")
+                        .font(.snootsUI(15, weight: .bold))
+                    Spacer()
+                    Text("雙向互評")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                .foregroundStyle(SnootsPalette.ink)
+
+                Text("完成線下見面後，為超超留下正向標籤與暖心回饋。雙方評價會分開提交。")
+                    .font(.snootsUI(13, weight: .medium))
+                    .foregroundStyle(SnootsPalette.secondaryText)
+
+                Label("狗聚結束後，請從狗聚群組進入共同回憶卡片", systemImage: "person.3.fill")
+                    .font(.snootsMetadata())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+            } else {
+                Button { withAnimation(.snappy) { isExpanded.toggle() } } label: {
+                    HStack {
+                        Label(cardTitle, systemImage: cardSymbol)
+                            .font(.snootsUI(15, weight: .bold))
+                        Spacer()
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    }
+                    .foregroundStyle(SnootsPalette.ink)
+                }
+                .buttonStyle(.plain)
+
+                if isExpanded {
+                    Divider().overlay(SnootsPalette.divider)
+                    HStack {
+                        Text("目前熟絡度")
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                        Spacer()
+                        Text("\(store.sparkPoints)%")
+                            .font(.snootsUI(20, weight: .bold))
+                            .foregroundStyle(SnootsPalette.navigationActive)
+                    }
+
+                    if let result = store.dailyIcebreakerResult, store.hasCompletedTodayIcebreaker {
+                        Label("今日已完成：\(result.taskTitle)", systemImage: "checkmark.circle.fill")
+                            .font(.snootsUI(14, weight: .semibold))
+                            .foregroundStyle(SnootsPalette.navigationActive)
+                        Text("你和超超的回答相似度 \(result.similarityPercent)% · 熟絡度 +\(result.familiarityPoints)%")
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                    } else {
+                        Button(action: onOpenIcebreaker) {
+                            Label("抽今天的破冰小任務", systemImage: "rectangle.stack.badge.plus")
+                        }
+                        .font(.snootsUI(14, weight: .semibold))
+                        .foregroundStyle(SnootsPalette.navigationActive)
+                        .buttonStyle(.plain)
+                        .accessibilityHint("每天可完成一張；雙方回答越相近，熟絡度增加越多。")
+                    }
+
+                    Text("每天完成一張共同題目；每張 +20% 至 +25%，連續 5 天即可達到 100%。")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+
+                    if store.sparkPoints >= 100 {
+                        HStack(spacing: 8) {
+                            compactActionButton(
+                                "發起見面邀請",
+                                systemImage: "calendar.badge.plus",
+                                action: onPrepareMeetupInvite
+                            )
+                            compactActionButton(
+                                "帶入社交界線提醒",
+                                systemImage: "text.bubble.fill",
+                                action: onUsePrompt
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(SnootsPalette.surface.opacity(0.68), in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                .stroke(SnootsPalette.primary.opacity(0.32), lineWidth: 1)
+        }
+    }
+
+    private var cardTitle: String {
+        if store.hasPreparedMeetupInvitation {
+            return "\(store.pet.name) 已發起見面邀請"
+        }
+        if store.sparkPoints >= 100 {
+            return "發起見面邀請"
+        }
+        return store.hasCompletedTodayIcebreaker ? "今日破冰卡已完成" : "今日破冰卡"
+    }
+
+    private var cardSymbol: String {
+        store.hasPreparedMeetupInvitation ? "calendar.badge.checkmark" : "sparkles"
+    }
+
+    @ViewBuilder
+    private func compactActionButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.snootsUI(12, weight: .semibold))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .background(SnootsPalette.primaryTint, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+}
+
+private struct IcebreakerTask: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let photoPickerTitle: String
+    let photoPickerHint: String
+    let sentMessage: String
+    let replyMessage: String
+
+    static let all = [
+        IcebreakerTask(
+            id: "favorite-toy",
+            title: "分享豆花最愛的玩具照片",
+            detail: "用一張照片，讓超超與飼主更快認識豆花的日常與個性。",
+            photoPickerTitle: "選擇玩具照片",
+            photoPickerHint: "從相簿挑選一張照片",
+            sentMessage: "我先分享豆花最喜歡的玩具照片！",
+            replyMessage: "超超最喜歡的是會發出聲音的小球，期待看看豆花的玩具！"
+        ),
+        IcebreakerTask(
+            id: "favorite-walk",
+            title: "分享豆花最喜歡的散步角落",
+            detail: "用一張散步照片，讓超超與飼主認識豆花喜歡的步調。",
+            photoPickerTitle: "選擇散步照片",
+            photoPickerHint: "從相簿挑選一張散步照片",
+            sentMessage: "我想分享豆花最喜歡的散步角落！",
+            replyMessage: "這裡看起來很舒服，超超也喜歡安靜地散步。"
+        ),
+        IcebreakerTask(
+            id: "relaxed-moment",
+            title: "分享豆花放鬆時的照片",
+            detail: "讓超超與飼主看看豆花最自在、最像自己的模樣。",
+            photoPickerTitle: "選擇日常照片",
+            photoPickerHint: "從相簿挑選一張放鬆時的照片",
+            sentMessage: "這是豆花最放鬆的時候！",
+            replyMessage: "豆花看起來好自在，超超也喜歡安靜地窩著。"
+        )
+    ]
+
+    static var random: IcebreakerTask { all.randomElement() ?? all[0] }
+}
+
+private struct IcebreakerTaskView: View {
+    let candidate: PlaydateCandidate
+    let store: SnootsStore
+    let language: SnootsLanguage
+    let onNavigate: (SnootsRoute) -> Void
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var message = ""
+    @State private var task = IcebreakerTask.random
+
+    private func drawAnotherTask() {
+        let otherTasks = IcebreakerTask.all.filter { $0.id != task.id }
+        task = otherTasks.randomElement() ?? task
+        selectedPhoto = nil
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("隨機題庫")
+                            .font(.snootsUI(15, weight: .semibold))
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                        Spacer()
+                        Button("換一題", action: drawAnotherTask)
+                            .font(.snootsUI(14, weight: .semibold))
+                    }
+                    Text(task.title)
+                        .font(.snootsUI(28, weight: .bold))
+                    Text(task.detail)
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+
+                PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                    VStack(spacing: 12) {
+                        Image(systemName: selectedPhoto == nil ? "photo.badge.plus" : "checkmark.circle.fill")
+                            .font(.system(size: 36, weight: .semibold))
+                        Text(selectedPhoto == nil ? task.photoPickerTitle : "照片已選擇")
+                            .font(.snootsUI(28, weight: .bold))
+                        Text(selectedPhoto == nil ? task.photoPickerHint : "準備發送給超超")
+                            .font(.snootsBody())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 230)
+                    .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous)
+                            .stroke(SnootsPalette.primary.opacity(0.45), style: StrokeStyle(lineWidth: 2, dash: [8]))
+                    }
+                }
+                .buttonStyle(.plain)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("簡短地說句話吧（選填）")
+                        .font(.snootsUI(15, weight: .semibold))
+                    TextEditor(text: $message)
+                        .font(.snootsBody())
+                        .frame(minHeight: 82, maxHeight: 116)
+                        .scrollContentBackground(.hidden)
+                        .padding(8)
+                        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                                .stroke(SnootsPalette.primary.opacity(0.28), lineWidth: 1)
+                        }
+                }
+
+                Button("發送") {
+                    _ = store.completeDailyIcebreaker(answerID: store.dailyIcebreakerTask.options[0].id)
+                    store.createMatchChat()
+                    let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmedMessage.isEmpty {
+                        store.sendMatchChatMessage(trimmedMessage)
+                    }
+                    onNavigate(.chat)
+                }
+                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                .disabled(selectedPhoto == nil)
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle("破冰小任務")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct DailyIcebreakerTaskView: View {
+    let candidate: PlaydateCandidate
+    let store: SnootsStore
+    let language: SnootsLanguage
+    let onNavigate: (SnootsRoute) -> Void
+    @State private var selectedAnswerID: String?
+
+    private var task: DailyIcebreakerTask { store.dailyIcebreakerTask }
+    private var result: DailyIcebreakerResult? {
+        guard store.hasCompletedTodayIcebreaker,
+              let result = store.dailyIcebreakerResult,
+              result.taskID == task.id else { return nil }
+        return result
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Label("今日共同破冰卡", systemImage: "rectangle.stack.fill")
+                        .font(.snootsUI(15, weight: .semibold))
+                        .foregroundStyle(SnootsPalette.navigationActive)
+                    Text("一天一張，和\(candidate.name)回答同一題。")
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(SnootsPalette.ink)
+                        .frame(width: 58, height: 58)
+                        .background(SnootsPalette.primaryTint, in: Circle())
+
+                    Text(task.title)
+                        .font(.snootsCardTitle())
+                    Text(task.prompt)
+                        .font(.snootsUI(21, weight: .bold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("回答後會揭曉超超的選擇；答案越接近，熟絡度增加越多。")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+
+                if let result {
+                    DailyIcebreakerResultCard(result: result, candidate: candidate, petName: store.pet.name)
+
+                    Button("回到聊天室") {
+                        onNavigate(.chat)
+                    }
+                    .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("豆花的答案")
+                            .font(.snootsUI(16, weight: .bold))
+
+                        ForEach(task.options) { option in
+                            Button {
+                                selectedAnswerID = option.id
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: selectedAnswerID == option.id ? "checkmark.circle.fill" : "circle")
+                                        .font(.title3)
+                                        .foregroundStyle(selectedAnswerID == option.id ? SnootsPalette.navigationActive : SnootsPalette.secondaryText)
+                                    Text(option.title)
+                                        .font(.snootsUI(16, weight: .semibold))
+                                    Spacer()
+                                }
+                                .foregroundStyle(SnootsPalette.ink)
+                                .padding(14)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    selectedAnswerID == option.id ? SnootsPalette.primaryTint : SnootsPalette.surface,
+                                    in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                                )
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous)
+                                        .stroke(selectedAnswerID == option.id ? SnootsPalette.navigationActive : SnootsPalette.divider, lineWidth: selectedAnswerID == option.id ? 2 : 1)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    Button("送出答案並揭曉") {
+                        guard let selectedAnswerID else { return }
+                        _ = store.completeDailyIcebreaker(answerID: selectedAnswerID)
+                    }
+                    .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                    .disabled(selectedAnswerID == nil)
+                }
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle("每日破冰卡")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct DailyIcebreakerResultCard: View {
+    let result: DailyIcebreakerResult
+    let candidate: PlaydateCandidate
+    let petName: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("答案揭曉", systemImage: "party.popper.fill")
+                .font(.snootsUI(17, weight: .bold))
+                .foregroundStyle(SnootsPalette.navigationActive)
+
+            HStack(spacing: 10) {
+                answerColumn(name: petName, answer: result.tofuAnswer.title)
+                Image(systemName: "arrow.left.and.right")
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                answerColumn(name: candidate.name, answer: result.chaoChaoAnswer.title)
+            }
+
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("回答相似度")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    Text("\(result.similarityPercent)%")
+                        .font(.snootsUI(28, weight: .bold))
+                }
+                Spacer()
+                Text("熟絡度 +\(result.familiarityPoints)%")
+                    .font(.snootsUI(15, weight: .bold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(SnootsPalette.lime, in: Capsule())
+            }
+        }
+        .padding(18)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous)
+                .stroke(SnootsPalette.primary.opacity(0.35), lineWidth: 1)
+        }
+    }
+
+    private func answerColumn(name: String, answer: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(name)
+                .font(.snootsMetadata())
+                .foregroundStyle(SnootsPalette.secondaryText)
+            Text(answer)
+                .font(.snootsUI(14, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(SnootsPalette.primaryTint.opacity(0.52), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+private struct MeetupSafetyView: View {
+    let candidate: PlaydateCandidate
+    let store: SnootsStore
+    let language: SnootsLanguage
+    let onNavigate: (SnootsRoute) -> Void
+    @State private var hasReadBoundaries = false
+    @State private var completedChecks: Set<String> = []
+
+    private let checks = [
+        "狗狗今天仍然健康",
+        "天氣適合外出",
+        "牽繩、胸背與名牌齊全",
+        "飲水、水碗與拾便袋已備妥",
+        "手機有電，且已告知親友時間地點",
+        "已知道附近的獸醫院／緊急醫療位置"
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("出發前安全確認")
+                        .font(.snootsScreenTitle())
+                    Text("豆花與超超的社交界線卡")
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+
+                BoundaryComparisonCard(candidate: candidate, store: store)
+
+                Toggle("我已充分閱讀並尊重對方的界線 ☑", isOn: $hasReadBoundaries)
+                    .font(.snootsUI(15, weight: .semibold))
+                    .tint(SnootsPalette.lime)
+                    .padding(16)
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+
+                Text("見面前 1 分鐘裝備與狀態 Check-in")
+                    .font(.snootsSection())
+                ForEach(checks, id: \.self) { check in
+                    Button {
+                        if completedChecks.contains(check) { completedChecks.remove(check) } else { completedChecks.insert(check) }
+                    } label: {
+                        Label(check, systemImage: completedChecks.contains(check) ? "checkmark.circle.fill" : "circle")
+                            .font(.snootsUI(15, weight: .medium))
+                            .foregroundStyle(SnootsPalette.ink)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button("雙方皆完成 Check-in，出發！") {
+                    store.hasAcknowledgedBoundaries = hasReadBoundaries
+                    store.completeSafetyCheckIn()
+                    onNavigate(.dashboard)
+                }
+                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                .disabled(!hasReadBoundaries || completedChecks.count != checks.count)
+                .opacity(hasReadBoundaries && completedChecks.count == checks.count ? 1 : 0.45)
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle("見面安全確認")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct BoundaryComparisonCard: View {
+    let candidate: PlaydateCandidate
+    let store: SnootsStore
+
+    private let rows = ["牽繩與外出注意", "身體觸碰與護物", "必要的健康驗證", "緊急聯絡資訊"]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("雙方互動界線")
+                .font(.snootsSection())
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
+                GridRow {
+                    Text("項目").font(.snootsMetadata())
+                    Text("豆花").font(.snootsMetadata())
+                    Text("超超").font(.snootsMetadata())
+                }
+                ForEach(rows, id: \.self) { row in
+                    GridRow {
+                        Text(row).font(.snootsMetadata()).foregroundStyle(SnootsPalette.secondaryText)
+                        Text(value(for: row, dog: .current)).font(.snootsUI(13, weight: .medium))
+                        Text(value(for: row, dog: .candidate)).font(.snootsUI(13, weight: .medium))
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+    }
+
+    private enum Dog { case current, candidate }
+
+    private func value(for row: String, dog: Dog) -> String {
+        switch (row, dog) {
+        case ("牽繩與外出注意", .current): store.pet.leashHabit == "尚未填寫" ? "全程牽繩" : store.pet.leashHabit
+        case ("牽繩與外出注意", .candidate): "全程牽繩、慢慢靠近"
+        case ("身體觸碰與護物", .current): store.pet.touchBoundary == "尚未填寫" ? "避免突然觸碰" : store.pet.touchBoundary
+        case ("身體觸碰與護物", .candidate): "不摸頭；食物分開"
+        case ("必要的健康驗證", .current): store.pet.vaccineSummary == "尚未填寫" ? "疫苗已驗證" : store.pet.vaccineSummary
+        case ("必要的健康驗證", .candidate): candidate.healthSummary
+        case ("緊急聯絡資訊", .current): store.pet.emergencyPhone == "尚未填寫" ? "已提供給配對對象" : store.pet.emergencyPhone
+        case ("緊急聯絡資訊", .candidate): "已提供給配對對象"
+        default: ""
+        }
+    }
+}
+
+private struct OfflineMeetupDashboard: View {
+    let candidate: PlaydateCandidate
+    let store: SnootsStore
+    let language: SnootsLanguage
+    @State private var isShowingExitHelper = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("一對一見面進行中")
+                    .font(.snootsScreenTitle())
+                Text("用 3 秒確認彼此狗狗目前的狀態。")
+                    .font(.snootsBody())
+                    .foregroundStyle(SnootsPalette.secondaryText)
+                BehaviorLightCard(color: .green, title: "綠燈：可以繼續觀察", details: ["身體放鬆、動作自然", "願意探索環境", "互相忽略也能自在走路"])
+                BehaviorLightCard(color: .yellow, title: "黃燈：請暫停並增加距離", details: ["一直打哈欠、舔嘴唇或甩身體", "躲避、尾巴夾緊、身體僵硬", "持續嗅地或吃草來迴避互動"])
+                BehaviorLightCard(color: .red, title: "紅燈：立即停止互動並離開", details: ["持續吠叫、衝撞、露齒或低吼", "追逐不願互動的狗", "任一方感到害怕或不安全"])
+                Button("優雅退場助手") { isShowingExitHelper = true }
+                    .buttonStyle(SecondaryButtonStyle())
+                Button("結束一對一見面") { isShowingExitHelper = true }
+                    .buttonStyle(SecondaryButtonStyle())
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle("狗聚儀表板")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $isShowingExitHelper) {
+            ExitHelperSheet()
+                .presentationDetents([.height(300)])
+        }
+    }
+}
+
+private struct GroupMeetupDashboard: View {
+    let meetup: UpcomingMeetup
+    let store: SnootsStore
+    let language: SnootsLanguage
+    @State private var isSearchingForNearbyPhones = false
+    @State private var isShowingExitConfirmation = false
+    @State private var isShowingFinishConfirmation = false
+    @State private var isShowingMemories = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Label("狗聚進行中", systemImage: "pawprint.fill")
+                            .font(.snootsChip())
+                            .foregroundStyle(SnootsPalette.navigationActive)
+                        Spacer()
+                        Text(store.hasTemporarilyLeftGroupMeetup ? "已暫離" : "活動範圍內")
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.ink)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(store.hasTemporarilyLeftGroupMeetup ? SnootsPalette.surface : SnootsPalette.lime, in: Capsule())
+                    }
+                    Text("現場儀表板")
+                        .font(.snootsScreenTitle())
+                    Text("一眼掌握狗聚成員狀態，需要時隨時暫離或結束活動。")
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(meetup.localizedTitle(language), systemImage: "calendar")
+                    Label(meetup.localizedLocation(language), systemImage: "mappin.and.ellipse")
+                }
+                .font(.snootsUI(15, weight: .semibold))
+                .foregroundStyle(SnootsPalette.ink)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "dot.radiowaves.left.and.right")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(SnootsPalette.ink)
+                            .frame(width: 46, height: 46)
+                            .background(SnootsPalette.lime, in: Circle())
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(store.hasCompletedGroupMeetupCheckIn ? "手機互碰完成" : "手機互碰簽到")
+                                .font(.snootsCardTitle())
+                            Text(store.hasCompletedGroupMeetupCheckIn ? "你已加入本次狗聚的現場狀態同步。" : "靠近其他參與者的手機，快速加入現場狀態同步。")
+                                .font(.snootsMetadata())
+                                .foregroundStyle(SnootsPalette.secondaryText)
+                        }
+                    }
+                    Button {
+                        isSearchingForNearbyPhones.toggle()
+                        if isSearchingForNearbyPhones {
+                            store.completeGroupMeetupCheckIn()
+                        }
+                    } label: {
+                        Label(
+                            store.hasCompletedGroupMeetupCheckIn ? "已完成簽到，再次同步" : (isSearchingForNearbyPhones ? "正在尋找附近手機" : "開始手機互碰"),
+                            systemImage: isSearchingForNearbyPhones ? "wave.3.right.circle.fill" : "checkmark.shield.fill"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                }
+                .padding(16)
+                .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("成員狀態")
+                            .font(.snootsSection())
+                        Spacer()
+                        Text("共同任務：安全相處")
+                            .font(.snootsMetadata())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                    }
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(meetup.participants.enumerated()), id: \.element.id) { index, participant in
+                            VStack(alignment: .leading, spacing: 9) {
+                                HStack(spacing: 12) {
+                                    Image(participant.imageName)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 44, height: 44)
+                                        .clipShape(Circle())
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(participant.localizedName(language))
+                                            .font(.snootsCardTitle())
+                                        Text(participant.breed)
+                                            .font(.snootsMetadata())
+                                            .foregroundStyle(SnootsPalette.secondaryText)
+                                    }
+                                    Spacer()
+                                    Label(
+                                        store.hasCompletedGroupMeetupCheckIn || index < 2 ? "已簽到" : "前往中",
+                                        systemImage: store.hasCompletedGroupMeetupCheckIn || index < 2 ? "checkmark.circle.fill" : "clock"
+                                    )
+                                    .font(.snootsMetadata())
+                                    .foregroundStyle(store.hasCompletedGroupMeetupCheckIn || index < 2 ? SnootsPalette.navigationActive : SnootsPalette.secondaryText)
+                                }
+
+                                if !participant.safetyTagIDs.isEmpty {
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 6) {
+                                            ForEach(participant.safetyTagIDs, id: \.self) { tagID in
+                                                Text(safetyTagTitle(tagID))
+                                                    .font(.snootsMetadata())
+                                                    .foregroundStyle(SnootsPalette.ink)
+                                                    .padding(.horizontal, 9)
+                                                    .padding(.vertical, 5)
+                                                    .background(SnootsPalette.butter, in: Capsule())
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(14)
+
+                            if index < meetup.participants.count - 1 {
+                                Divider().padding(.leading, 70)
+                            }
+                        }
+                    }
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                }
+
+                VStack(spacing: 10) {
+                    Button("暫離狗聚", role: .destructive) { isShowingExitConfirmation = true }
+                        .font(.snootsButton(16))
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: SnootsMetrics.buttonRadius, style: .continuous)
+                                .stroke(SnootsPalette.divider, lineWidth: 1)
+                        }
+
+                    Button("結束狗聚，建立共同回憶") { isShowingFinishConfirmation = true }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                }
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle("現場儀表板")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $isShowingMemories) {
+            SharedMemoriesView(candidate: store.playdate, store: store, language: language)
+        }
+        .confirmationDialog("要暫離這場狗聚嗎？", isPresented: $isShowingExitConfirmation, titleVisibility: .visible) {
+            Button("確認暫離", role: .destructive) {
+                store.temporarilyLeaveGroupMeetup()
+                isSearchingForNearbyPhones = false
+            }
+            Button("繼續參加", role: .cancel) {}
+        } message: {
+            Text("系統會通知發起人，讓其他成員知道你的狀態。")
+        }
+        .confirmationDialog("要結束這場狗聚嗎？", isPresented: $isShowingFinishConfirmation, titleVisibility: .visible) {
+            Button("結束狗聚並建立共同回憶") {
+                store.endGroupMeetup()
+                isShowingMemories = true
+            }
+            Button("繼續參加", role: .cancel) {}
+        } message: {
+            Text("結束後會進入成員狗狗辨識牆，完成認親才能送出暖心回饋。")
+        }
+    }
+
+    private func safetyTagTitle(_ tagID: String) -> String {
+        switch tagID {
+        case "slow-intro": return "保持 2 公尺距離"
+        case "leash": return "黃色牽繩"
+        case "adult": return "偏好成犬互動"
+        default: return "請先查看界線"
+        }
+    }
+}
+
+private struct BehaviorLightCard: View {
+    let color: Color
+    let title: String
+    let details: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.snootsCardTitle())
+            ForEach(details, id: \.self) { Label($0, systemImage: "circle.fill").font(.snootsUI(14)) }
+        }
+        .foregroundStyle(.black)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.72), in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+    }
+}
+
+private struct ExitHelperSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    private let message = "我家狗狗今天似乎有點累／緊張，我們今天先散步到這邊，下次再約喔！"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("優雅退場助手").font(.snootsScreenTitle())
+            Text(message).font(.snootsBody())
+                .padding(14)
+                .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.inputRadius, style: .continuous))
+            Button("複製訊息") { UIPasteboard.general.string = message }
+                .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+            Button("關閉") { dismiss() }
+                .buttonStyle(SecondaryButtonStyle())
+        }
+        .padding(22)
+    }
+}
+
+private struct MemoryDog: Identifiable {
+    let id: String
+    let name: String
+    let owner: String
+    let breed: String
+    let size: String
+    let imageName: String
+    let clue: String
+}
+
+private struct SharedMemoriesView: View {
+    let candidate: PlaydateCandidate
+    let store: SnootsStore
+    let language: SnootsLanguage
+    @State private var selectedDogID: String?
+    @State private var selectedAnswer = ""
+    @State private var recognizedDogIDs: Set<String> = []
+    @State private var quizStatus: QuizStatus = .idle
+    @State private var showHint = false
+    @State private var isShowingFeedback = false
+    @State private var isShowingReceivedCard = false
+
+    private enum QuizStatus {
+        case idle, wrong, correct
+    }
+
+    private var memoryDogs: [MemoryDog] {
+        [
+            MemoryDog(id: "chaochao", name: candidate.name, owner: candidate.owner, breed: candidate.breed, size: candidate.size, imageName: candidate.imageName, clue: "活潑、喜歡平行散步"),
+            MemoryDog(id: "mochi", name: "麻糬", owner: "Yuki", breed: "米克斯", size: "中型犬", imageName: "Mochi", clue: "白襪、很會打招呼"),
+            MemoryDog(id: "pudding", name: "布丁", owner: "Mina", breed: "貴賓犬", size: "小型犬", imageName: "Pudding", clue: "捲毛、散步很穩定"),
+            MemoryDog(id: "nori", name: "Nori", owner: "Emma", breed: "柯基", size: "中型犬", imageName: "Nori", clue: "短腿、喜歡嗅聞"),
+        ]
+    }
+
+    private var answerOptions: [String] { memoryDogs.map(\.name) }
+    private var selectedDog: MemoryDog? { memoryDogs.first { $0.id == selectedDogID } }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("狗聚共同回憶卡片 · 01")
+                        .font(.snootsChip())
+                        .foregroundStyle(SnootsPalette.navigationActive)
+                    Text("今天狗聚認識了哪些新朋友？試著認出牠們吧！")
+                        .font(.snootsScreenTitle())
+                    Text("狗聚結束後的小小記憶驗證。答對某一隻，就能解鎖給牠與飼主的暖心回饋。")
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+
+                HStack {
+                    Label("本次狗聚的成員狗狗", systemImage: "pawprint.fill")
+                        .font(.snootsCardTitle())
+                    Spacer()
+                    Text("\(recognizedDogIDs.count) / \(memoryDogs.count) 已認出")
+                        .font(.snootsMetadata())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                }
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    ForEach(memoryDogs) { dog in
+                        let isRecognized = recognizedDogIDs.contains(dog.id)
+                        Button {
+                            selectedDogID = dog.id
+                            selectedAnswer = ""
+                            showHint = false
+                            quizStatus = isRecognized ? .correct : .idle
+                        } label: {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ZStack(alignment: .bottomLeading) {
+                                    Image(dog.imageName)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 124)
+                                        .frame(maxWidth: .infinity)
+                                        .clipped()
+                                    LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .top, endPoint: .bottom)
+                                    HStack(alignment: .bottom) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(isRecognized ? dog.name : "名字待確認")
+                                                .font(.snootsUI(14, weight: .bold))
+                                                .foregroundStyle(.white)
+                                            Text("\(dog.breed) · \(dog.size)")
+                                                .font(.snootsMetadata())
+                                                .foregroundStyle(.white.opacity(0.86))
+                                        }
+                                        Spacer()
+                                        Image(systemName: isRecognized ? "checkmark.seal.fill" : "questionmark.circle.fill")
+                                            .foregroundStyle(isRecognized ? SnootsPalette.lime : .white)
+                                    }
+                                    .padding(10)
+                                }
+                                Text(isRecognized ? "認親成功！" : dog.clue)
+                                    .font(.snootsMetadata())
+                                    .foregroundStyle(isRecognized ? SnootsPalette.navigationActive : SnootsPalette.secondaryText)
+                                    .padding(.horizontal, 10)
+                                    .padding(.bottom, 10)
+                                    .lineLimit(1)
+                            }
+                            .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                    .stroke(isRecognized ? SnootsPalette.lime : SnootsPalette.divider, lineWidth: 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if let dog = selectedDog, !recognizedDogIDs.contains(dog.id) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("記憶小測驗", systemImage: "sparkles")
+                            .font(.snootsCardTitle())
+                        Text("這隻\(dog.clue)的\(dog.breed)叫什麼名字？")
+                            .font(.snootsBody())
+                        Picker("選擇名字", selection: $selectedAnswer) {
+                            Text("請選擇狗狗名字").tag("")
+                            ForEach(answerOptions, id: \.self) { Text($0).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        Button("確認答案") {
+                            if selectedAnswer == dog.name {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                    quizStatus = .correct
+                                    recognizedDogIDs.insert(dog.id)
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { isShowingFeedback = true }
+                            } else {
+                                withAnimation(.easeInOut) { quizStatus = .wrong }
+                            }
+                        }
+                        .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                        .disabled(selectedAnswer.isEmpty)
+                        if quizStatus == .wrong {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Label("再想一下，沒關係！", systemImage: "heart.fill")
+                                    .font(.snootsUI(14, weight: .bold))
+                                    .foregroundStyle(SnootsPalette.alert)
+                                if showHint {
+                                    Text("小提示：\(dog.clue)，牠的名字是今天狗聚簽到時聽到的名字。")
+                                        .font(.snootsMetadata())
+                                        .foregroundStyle(SnootsPalette.secondaryText)
+                                } else {
+                                    Button("查看小提示") { showHint = true }
+                                        .font(.snootsUI(13, weight: .semibold))
+                                        .foregroundStyle(SnootsPalette.navigationActive)
+                                }
+                                Button("先跳過") {
+                                    selectedDogID = nil
+                                    selectedAnswer = ""
+                                    quizStatus = .idle
+                                    showHint = false
+                                }
+                                .font(.snootsUI(13, weight: .semibold))
+                                .foregroundStyle(SnootsPalette.secondaryText)
+                            }
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
+                    .padding(16)
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                }
+
+                if let dog = selectedDog, recognizedDogIDs.contains(dog.id) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("認親成功！", systemImage: "party.popper.fill")
+                            .font(.snootsSection())
+                            .foregroundStyle(SnootsPalette.navigationActive)
+                        Text("你成功認出了\(dog.name)！現在可以把今天的好，送給\(dog.name)與飼主。")
+                            .font(.snootsBody())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                        Button("前往\(dog.name)的回饋頁面") { isShowingFeedback = true }
+                            .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                    }
+                    .padding(16)
+                    .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                }
+
+                if store.hasSentWarmFeedback {
+                    Button { isShowingReceivedCard = true } label: {
+                        Label("查看收到的暖心回饋卡片", systemImage: "bell.badge.fill")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
+            }
+            .padding(18)
+        }
+        .background(SnootsPalette.canvas)
+        .navigationTitle("共同回憶")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $isShowingFeedback) {
+            if let dog = selectedDog {
+                PostEventFeedbackSheet(dog: dog, store: store, language: language)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+        }
+        .onChange(of: isShowingFeedback) { _, isPresented in
+            if !isPresented && store.hasSentWarmFeedback { isShowingReceivedCard = true }
+        }
+        .sheet(isPresented: $isShowingReceivedCard) {
+            WarmFeedbackCardView(store: store)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+private struct WarmFeedbackCardView: View {
+    let store: SnootsStore
+    @Environment(\.dismiss) private var dismiss
+
+    private var shareText: String {
+        let tags = store.lastWarmFeedbackTags.isEmpty ? "今天的暖心回饋" : store.lastWarmFeedbackTags.joined(separator: "、")
+        return "\(store.lastWarmFeedbackRecipientName)有話想對你說！\n\n豆花與主人送來一張暖心回饋卡：\n\(store.lastWarmFeedbackNote.isEmpty ? "今天謝謝你來跟我們玩！" : store.lastWarmFeedbackNote)\n\n\(tags)"
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.title2)
+                            .foregroundStyle(SnootsPalette.alert)
+                            .frame(width: 48, height: 48)
+                            .background(SnootsPalette.primaryTint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("暖心回饋卡片通知")
+                                .font(.snootsChip())
+                                .foregroundStyle(SnootsPalette.alert)
+                            Text("\(store.lastWarmFeedbackRecipientName)有話想對你說！")
+                                .font(.snootsScreenTitle())
+                        }
+                    }
+                    Text("你在今天的相遇裡，收到了一份溫柔的回饋。")
+                        .font(.snootsBody())
+                        .foregroundStyle(SnootsPalette.secondaryText)
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 10) {
+                            Image("Tofu")
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 42, height: 42)
+                                .clipShape(Circle())
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("來自豆花與主人，寫給\(store.lastWarmFeedbackRecipientName)")
+                                    .font(.snootsCardTitle())
+                                Text("今天的相遇 · 只分享給你")
+                                    .font(.snootsMetadata())
+                                    .foregroundStyle(SnootsPalette.secondaryText)
+                            }
+                            Spacer()
+                            Image(systemName: "heart.fill")
+                                .foregroundStyle(SnootsPalette.alert)
+                        }
+                        HStack(spacing: 6) {
+                            Image(store.lastWarmFeedbackRecipientImageName)
+                                .resizable()
+                                .scaledToFill()
+                            Image("Tofu")
+                                .resizable()
+                                .scaledToFill()
+                        }
+                        .frame(height: 190)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        Text("給\(store.lastWarmFeedbackRecipientName)與飼主的一句話")
+                            .font(.snootsChip())
+                            .foregroundStyle(SnootsPalette.secondaryText)
+                        Text("「\(store.lastWarmFeedbackNote.isEmpty ? "今天謝謝你來跟我們玩！" : store.lastWarmFeedbackNote)」")
+                            .font(.snootsBody())
+                        if !store.lastWarmFeedbackTags.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack {
+                                    ForEach(store.lastWarmFeedbackTags, id: \.self) { tag in
+                                        Text(tag)
+                                            .font(.snootsChip())
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 7)
+                                            .background(SnootsPalette.primaryTint, in: Capsule())
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(18)
+                    .background(SnootsPalette.surface, in: RoundedRectangle(cornerRadius: SnootsMetrics.cardRadius, style: .continuous))
+                    ShareLink(item: shareText) {
+                        Label("分享至社群", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButtonStyle(color: SnootsPalette.lime))
+                }
+                .padding(18)
+            }
+            .background(SnootsPalette.canvas)
+            .navigationTitle("收到的卡片")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
 }
 
 private struct PhotoTile: View {
     let imageName: String
     let label: String
     let language: SnootsLanguage
+    var photoData: Data? = nil
     var showsLabel = true
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
-                Image(imageName)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .clipped()
+                Group {
+                    if let photoData, let image = UIImage(data: photoData) {
+                        Image(uiImage: image).resizable()
+                    } else {
+                        Image(imageName).resizable()
+                    }
+                }
+                .scaledToFill()
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .clipped()
                 if showsLabel {
                     HStack(spacing: 5) {
                         Image(systemName: "camera.fill")
@@ -2791,6 +6535,7 @@ enum SnootsPalette {
     static let primary = Color(hex: 0xB8A1FF)
     static let primaryTint = primary.opacity(0.32)
     static let lime = Color(hex: 0xC7F36B)
+    static let meetupCard = Color(light: 0xDEF17B, dark: 0x39412B)
     static let navigationActive = Color(light: 0x705A9D, dark: 0xCBB9FF)
 
     static let canvas = background
@@ -2805,6 +6550,7 @@ enum SnootsPalette {
     static let careBlue = primary
     static let careTint = primaryTint
     static let butter = primaryTint
+    static let safetyTint = Color(light: 0xFFF4C9, dark: 0x514A2B)
     static let alert = ink
 }
 
@@ -2831,14 +6577,14 @@ private extension UIColor {
     }
 }
 
-private enum SnootsMetrics {
+enum SnootsMetrics {
     static let buttonRadius: CGFloat = 20
     static let cardRadius: CGFloat = 28
     static let inputRadius: CGFloat = 18
     static let profileImageRadius: CGFloat = 24
 }
 
-private extension View {
+extension View {
     func snootsCardShadow() -> some View {
         shadow(color: .black.opacity(0.08), radius: 20, y: 6)
     }
