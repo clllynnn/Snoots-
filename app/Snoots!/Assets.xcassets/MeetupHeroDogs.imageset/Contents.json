@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "meetup-hero-dogs.jpg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -8,7 +8,7 @@ enum SnootsLanguage: String, CaseIterable, Identifiable {
     var label: String { self == .english ? "English" : "繁體中文" }
 
     var locale: Locale {
-        Locale(identifier: self == .traditionalChinese ? "zh-Hant" : "en")
+        Locale(identifier: self == .traditionalChinese ? "zh-Hant-TW" : "en")
     }
 
     static var systemDefault: SnootsLanguage {
